@@ -98,17 +98,24 @@ describe('tools/call input.undeclaredKeys', () => {
     return { isError: result['isError'] === true, texts, wire: JSON.stringify(message) };
   }
 
-  it('drops an undeclared argument without a word by default outside development', async () => {
-    process.env['NODE_ENV'] = 'production';
-    const server = await startServer();
+  it('refuses an undeclared argument by default, in development and outside it alike', async () => {
+    for (const nodeEnv of ['production', 'development']) {
+      process.env['NODE_ENV'] = nodeEnv;
+      const server = await startServer();
+
+      expect((await callWait(server, 'agent_wait')).wire).toContain("Unknown arguments: 'timeoutMs'");
+    }
+  });
+
+  it("drops an undeclared argument without a word under 'strip'", async () => {
+    const server = await startServer({ undeclaredKeys: 'strip' });
 
     expect(await callWait(server, 'agent_wait')).toMatchObject({ isError: false, texts: ['waited 45s'] });
     expect(inputWarnings).toEqual([]);
   });
 
-  it('tells the model and the log by default in development, naming the closest declared key', async () => {
-    process.env['NODE_ENV'] = 'development';
-    const server = await startServer();
+  it("tells the model and the log under 'warn', naming the closest declared key", async () => {
+    const server = await startServer({ undeclaredKeys: 'warn' });
 
     const first = await callWait(server, 'agent_wait');
     await callWait(server, 'agent_wait');
@@ -124,8 +131,7 @@ describe('tools/call input.undeclaredKeys', () => {
   });
 
   it('adds the line to a copy of a CallToolResult the tool returns, which may be cached and frozen', async () => {
-    process.env['NODE_ENV'] = 'development';
-    const server = await startServer();
+    const server = await startServer({ undeclaredKeys: 'warn' });
 
     const first = await callWait(server, 'cached_wait');
     const second = await callWait(server, 'cached_wait');
@@ -136,8 +142,8 @@ describe('tools/call input.undeclaredKeys', () => {
     expect(cachedAnswer.content).toHaveLength(1);
   });
 
-  it("refuses the call under a server-level 'fail', naming the key and the closest declared one", async () => {
-    const server = await startServer({ undeclaredKeys: 'fail' });
+  it('refuses the call by default, naming the key and the closest declared one', async () => {
+    const server = await startServer();
 
     const refused = await callWait(server, 'agent_wait');
 
@@ -147,8 +153,7 @@ describe('tools/call input.undeclaredKeys', () => {
   });
 
   it("does not compare the arguments under 'strip'", async () => {
-    process.env['NODE_ENV'] = 'production';
-    const server = await startServer();
+    const server = await startServer({ undeclaredKeys: 'strip' });
     jest.mocked(findUndeclaredArguments).mockClear();
 
     await callWait(server, 'agent_wait');

@@ -21,6 +21,8 @@ describe('hasTransform', () => {
       realZ.object({ _zod: realZ.string(), at: realZ.string().transform(Number) }),
     ],
     ['a real zod transform', realZ.object({ a: realZ.string() }).transform((value) => value.a)],
+    ['a standalone z.transform()', z.object({ window: z.transform(() => ({ start: 'monday' })) })],
+    ['a .catch() fallback', z.object({ filter: z.object({ status: z.string().optional() }).catch({}) })],
   ])('is true for %s', (_label, schema) => {
     expect(hasTransform(schema)).toBe(true);
   });

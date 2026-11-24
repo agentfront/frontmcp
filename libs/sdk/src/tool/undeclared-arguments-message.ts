@@ -22,21 +22,39 @@ export function undeclaredArgumentsWarning(toolName: string, newKeyPaths: readon
   );
 }
 
-/** Each undeclared argument, quoted, with the declared key it is closest to when one is close enough to be a slip. */
+/** How many undeclared arguments a message names; the rest are counted. */
+const MAX_NAMED_ARGUMENTS = 20;
+
+/** How long a key a message shows whole, and the longest key the closest-key search compares. */
+const MAX_KEY_LENGTH = 64;
+
+/** How many declared keys the closest-key search compares a key with. */
+const MAX_COMPARED_KEYS = 200;
+
+/**
+ * Each undeclared argument, quoted, with the declared key it is closest to when one is close enough to be a slip: the
+ * first {@link MAX_NAMED_ARGUMENTS}, each cut to {@link MAX_KEY_LENGTH} characters, then how many more there are.
+ */
 export function describeUndeclaredArguments(
   keyPaths: readonly ArgumentKeyPath[],
   declaredKeys: readonly string[],
 ): string {
-  return keyPaths
-    .map((keyPath) => {
-      const shown = formatKeyPath(keyPath);
-      const closest = keyPath.length === 1 ? closestKey(keyPath[0], declaredKeys) : undefined;
-      return closest ? `'${shown}' (did you mean '${closest}'?)` : `'${shown}'`;
-    })
-    .join(', ');
+  const named = keyPaths.slice(0, MAX_NAMED_ARGUMENTS).map((keyPath) => {
+    const shown = shortened(formatKeyPath(keyPath));
+    const closest = keyPath.length === 1 ? closestKey(keyPath[0], declaredKeys) : undefined;
+    return closest ? `'${shown}' (did you mean '${closest}'?)` : `'${shown}'`;
+  });
+  const unnamed = keyPaths.length - named.length;
+  return unnamed > 0 ? `${named.join(', ')} and ${unnamed} more` : named.join(', ');
 }
 
-function closestKey(key: string, candidates: readonly string[]): string | undefined {
+function shortened(text: string): string {
+  return text.length > MAX_KEY_LENGTH ? `${text.slice(0, MAX_KEY_LENGTH)}…` : text;
+}
+
+function closestKey(key: string, declaredKeys: readonly string[]): string | undefined {
+  if (key.length > MAX_KEY_LENGTH) return undefined;
+  const candidates = declaredKeys.slice(0, MAX_COMPARED_KEYS).filter((candidate) => candidate.length <= MAX_KEY_LENGTH);
   let closest: { candidate: string; distance: number } | undefined;
   for (const candidate of candidates) {
     const distance = editDistance(key.toLowerCase(), candidate.toLowerCase());

@@ -39,6 +39,16 @@ describe('findUndeclaredArguments', () => {
     expect(undeclared({ window: { from: 'monday', extra: true } })).toEqual([]);
   });
 
+  it('compares nothing below a field a standalone z.transform() or a .catch() fallback replaces', () => {
+    const replacingShape = {
+      window: z.transform(() => ({ start: 'monday' })),
+      filter: z.object({ status: z.string().optional() }).catch({}),
+    };
+    const sent = { window: { from: 'monday' }, filter: { status: 123 } };
+
+    expect(findUndeclaredArguments(replacingShape, sent, z.object(replacingShape).parse(sent))).toEqual([]);
+  });
+
   it('keeps a key whose name holds a dot or a bracket as one segment, not a path under a declared field', () => {
     expect(undeclared({ 'window.from': 'monday', 'lines[0]': 'x' })).toEqual([['lines[0]'], ['window.from']]);
   });
@@ -65,5 +75,20 @@ describe('describeUndeclaredArguments', () => {
 
   it('matches regardless of case', () => {
     expect(describeUndeclaredArguments([['UserId']], ['userId'])).toBe("'UserId' (did you mean 'userId'?)");
+  });
+
+  it('names the first 20 undeclared arguments and counts the rest', () => {
+    const keyPaths = Array.from({ length: 23 }, (_, index) => [`extra${String(index).padStart(2, '0')}`]);
+
+    const described = describeUndeclaredArguments(keyPaths, ['query']);
+
+    expect(described.split(', ')).toHaveLength(20);
+    expect(described.endsWith("'extra19' and 3 more")).toBe(true);
+  });
+
+  it('cuts a long key short and suggests nothing for it', () => {
+    const longKey = `timeoutSec${'x'.repeat(100)}`;
+
+    expect(describeUndeclaredArguments([[longKey]], ['timeoutSec'])).toBe(`'${longKey.slice(0, 64)}…'`);
   });
 });
