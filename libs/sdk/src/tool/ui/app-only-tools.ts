@@ -7,6 +7,11 @@ export function isAppOnlyTool(metadata: { _meta?: Record<string, unknown> }): bo
   return Array.isArray(visibility) && !visibility.includes('model');
 }
 
+/** The first platform known for the caller, in the order given: what it negotiated before a user-agent guess. */
+export function knownPlatformOf(...platforms: Array<string | undefined>): string | undefined {
+  return platforms.find((platform) => platform !== undefined && platform !== 'unknown');
+}
+
 /** Whether a client on this platform renders MCP Apps pages, so a tool for the page alone is listed and callable. */
 export function rendersAppPages(platformType: string | undefined): boolean {
   return platformType === 'ext-apps' || platformType === 'openai';

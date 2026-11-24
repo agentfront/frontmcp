@@ -88,6 +88,38 @@ describe("a tool for the MCP Apps page only (_meta.ui.visibility: ['app'])", () 
     expect(answer).toMatch(/not found/i);
   });
 
+  it("prefers the MCP Apps support a session negotiated over its user agent's guess", async () => {
+    const scope = server.instance.getScopes()[0];
+    const sessionId = 'session-mcp-apps-host';
+    scope.notifications.registerServer(sessionId, { notification: jest.fn(), request: jest.fn() } as never);
+    scope.notifications.setClientCapabilities(sessionId, { extensions: { 'io.modelcontextprotocol/ui': {} } });
+    scope.notifications.setClientInfo(sessionId, { name: 'claude-desktop', version: '1.0.0' });
+    const ctx = { authInfo: { sessionId, sessionIdPayload: { platformType: 'claude' } } };
+
+    const listed = await scope.runFlowForOutput('tools:list-tools', {
+      request: { method: 'tools/list', params: {} },
+      ctx,
+    });
+    const called = await scope.runFlowForOutput('tools:call-tool', {
+      request: { method: 'tools/call', params: { name: 'canvas_answer', arguments: { answer: 'blue' } } },
+      ctx,
+    });
+
+    expect(listed.tools.map(({ name }) => name)).toContain('canvas_answer');
+    expect(JSON.stringify(called)).toContain('recorded blue');
+  });
+
+  it('runs a task of a tool meant for the MCP Apps page, which the call that created it was checked for', async () => {
+    const scope = server.instance.getScopes()[0];
+
+    const answer = await scope.runFlowForOutput('tools:call-tool', {
+      request: { method: 'tools/call', params: { name: 'canvas_answer', arguments: { answer: 'blue' } } },
+      ctx: { taskId: 'task-canvas', authInfo: {} },
+    });
+
+    expect(JSON.stringify(answer)).toContain('recorded blue');
+  });
+
   it("keeps the _meta.ui fields a tool with a widget declares in its listing's _meta.ui", async () => {
     const showCanvas = (await listedTools(MCP_APPS_HOST)).find(({ name }) => name === 'show_canvas');
 
