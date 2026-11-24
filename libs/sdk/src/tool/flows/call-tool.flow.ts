@@ -99,7 +99,7 @@ import { linkedAbortController } from '../../utils/abort.utils';
 import { appOwnerIdOf, hookOwnerIdOf, isServerEntryOwner } from '../../utils/lineage.utils';
 import { resolveStructuredContentValidation, toolInputPolicies, toolOutputPolicies } from '../tool-output-policy';
 import { isCallToolResult } from '../tool.utils';
-import { isAppOnlyTool, rendersAppPages } from '../ui/app-only-tools';
+import { isAppOnlyTool, knownPlatformOf, rendersAppPages } from '../ui/app-only-tools';
 import { toolServingMode } from '../ui/serving-mode-default';
 import { hasUIConfig, WIDGET_CALL_META_KEY } from '../ui/ui-shared';
 import { findUndeclaredArguments, formatKeyPath } from '../undeclared-arguments';
@@ -501,8 +501,10 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       throw new ToolNotFoundError(name);
     }
 
-    // A tool for the MCP Apps page only answers a client that renders no page like an unknown tool
-    if (isAppOnlyTool(tool.metadata) && this.isClientCall() && !rendersAppPages(this.callerPlatformType())) {
+    // A tool for the MCP Apps page only answers a client that renders no page like an unknown tool; a task's run
+    // was checked as the call that created it
+    const isTaskRun = Boolean(ctxObj?.taskId);
+    if (isAppOnlyTool(tool.metadata) && this.isClientCall() && !isTaskRun && !rendersAppPages(this.appPagePlatform())) {
       this.logger.warn(`findTool: rejecting tools/call of "${name}", a tool for the MCP Apps page only`);
       throw new ToolNotFoundError(name);
     }
@@ -1935,6 +1937,17 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       this.tryGetContext()?.platformType ??
       (sessionId ? this.scope.notifications.getPlatformType(sessionId) : undefined) ??
       'unknown'
+    );
+  }
+
+  /** The caller's platform for a tool meant for the MCP Apps page: what it negotiated before a user-agent guess. */
+  private appPagePlatform(): string | undefined {
+    const { authInfo } = this.state;
+    const sessionId = authInfo?.sessionId;
+    return knownPlatformOf(
+      this.tryGetContext()?.platformType,
+      sessionId ? this.scope.notifications.getPlatformType(sessionId) : undefined,
+      authInfo?.sessionIdPayload?.platformType,
     );
   }
 

@@ -32,7 +32,7 @@ import { isSkillsOnlyRequest } from '../../skill/skill-mode.utils';
 import { enabledItems, SURFACE_META_KEY, surfaceHash } from '../../surface';
 import { isListedByAuthorities } from '../../surface/entry-authorized';
 import { toolOutputPolicies } from '../tool-output-policy';
-import { isAppOnlyTool, rendersAppPages } from '../ui/app-only-tools';
+import { isAppOnlyTool, knownPlatformOf, rendersAppPages } from '../ui/app-only-tools';
 import { buildStaticWidgetUri, hasUIConfig } from '../ui/ui-shared';
 
 const inputSchema = z.object({
@@ -385,9 +385,13 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
   /** A tool for the MCP Apps page only (`_meta.ui.visibility: ['app']`) is listed only to a client that renders it. */
   @Stage('filterByAppVisibility')
   async filterByAppVisibility() {
-    const { authInfo, platformType } = this.state;
-    const callerPlatform =
-      authInfo?.sessionIdPayload?.platformType ?? this.tryGetContext()?.platformType ?? platformType;
+    const { authInfo } = this.state;
+    const sessionId = authInfo?.sessionId;
+    const callerPlatform = knownPlatformOf(
+      this.tryGetContext()?.platformType,
+      sessionId ? this.scope.notifications?.getPlatformType(sessionId) : undefined,
+      authInfo?.sessionIdPayload?.platformType,
+    );
     if (rendersAppPages(callerPlatform)) return;
     this.state.set(
       'tools',
