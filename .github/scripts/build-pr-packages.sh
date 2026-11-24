@@ -2,6 +2,8 @@
 # Runs inside the container of pr-testing-registry.yml: installs, versions, builds and packs the PR in /work into /packages.
 set -euo pipefail
 
+# The runner owns the mounted checkout; Git refuses a repository of another owner unless it's marked safe.
+git config --global --add safe.directory /work
 corepack enable
 yarn install --immutable
 npx nx release version "$VERSION" --git-tag=false --git-commit=false

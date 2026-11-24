@@ -113,11 +113,29 @@ jobs:
             "node:$NODE_VERSION" \
             bash /trusted/build-pr-packages.sh
 
+      # Only regular tarballs leave the container's output folder; a symlink or anything else is refused.
+      - name: Check the packages
+        run: |
+          mkdir -p "$RUNNER_TEMP/pr-packages-checked"
+          find "$RUNNER_TEMP/pr-packages" -mindepth 1 -maxdepth 1 \( ! -type f -o ! -name '*.tgz' \) -print > "$RUNNER_TEMP/rejected.txt"
+          if [ -s "$RUNNER_TEMP/rejected.txt" ]; then
+            echo "::error::The build left entries that are not regular .tgz files:"
+            cat "$RUNNER_TEMP/rejected.txt"
+            exit 1
+          fi
+          for package in "$RUNNER_TEMP"/pr-packages/*.tgz; do
+            if [ "$(head -c 2 "$package" | od -An -tx1 | tr -d ' ')" != "1f8b" ]; then
+              echo "::error::$(basename "$package") is not a gzip file"
+              exit 1
+            fi
+            cp "$package" "$RUNNER_TEMP/pr-packages-checked/"
+          done
+
       - name: Upload packages
         uses: actions/upload-artifact@v7
         with:
           name: pr-packages
-          path: ${{ runner.temp }}/pr-packages/*.tgz
+          path: ${{ runner.temp }}/pr-packages-checked/*.tgz
           if-no-files-found: error
           retention-days: 1
 
