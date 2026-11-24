@@ -7,6 +7,7 @@ import SessionVerifyFlow from '../flows/session.verify.flow';
 import WellKnownJwksFlow from '../flows/well-known.jwks.flow';
 import WellKnownAsFlow from '../flows/well-known.oauth-authorization-server.flow';
 import WellKnownPrmFlow from '../flows/well-known.prm.flow';
+import { acceptsLoopbackAudience, checkedAllowedHosts } from '../transparent-audience';
 
 export class RemotePrimaryAuth extends FrontMcpAuth<TransparentAuthOptions> {
   override ready: Promise<void>;
@@ -50,20 +51,26 @@ export class RemotePrimaryAuth extends FrontMcpAuth<TransparentAuthOptions> {
     return Promise.resolve();
   }
 
-  /** Warn once at startup when nothing configures the token audience, so the request host decides it. */
+  /** Warn once at startup when nothing configures the token audience: say what this server accepts, and what to set. */
   private warnWithoutConfiguredAudience(scope: ScopeEntry): void {
-    // Only the configured list: the Web fetch handler, unlike the Express host, doesn't check FRONTMCP_ALLOWED_HOSTS.
-    const protection = scope.metadata.http?.security?.dnsRebindingProtection;
-    const checkedHosts = protection?.enabled === false ? undefined : protection?.allowedHosts;
-    if (this.options.expectedAudience || isPublicUrlPinned() || checkedHosts?.length) {
+    if (this.options.expectedAudience || isPublicUrlPinned() || checkedAllowedHosts(scope)?.length) {
       return;
     }
     scope.logger.warn(
-      'Transparent auth has no configured token audience, so each token is checked against the host the request ' +
-        'names. Set auth.expectedAudience to the audience your identity provider puts in tokens (or set ' +
-        'FRONTMCP_PUBLIC_URL, or list the server host in security.dnsRebindingProtection.allowedHosts with that ' +
-        'protection on). FrontMCP 1.13 will refuse tokens that carry an aud claim when none of these is set.',
+      `Transparent auth has no configured token audience, so ${this.unconfiguredAudienceBehaviour()}. Set ` +
+        'auth.expectedAudience to the audience your identity provider puts in tokens (or set FRONTMCP_PUBLIC_URL, ' +
+        'or list the server host in security.dnsRebindingProtection.allowedHosts or FRONTMCP_ALLOWED_HOSTS).',
     );
+  }
+
+  private unconfiguredAudienceBehaviour(): string {
+    if (this.options.audienceFromRequestHost) {
+      return 'each token is checked against the host the request names, which the client chooses (audienceFromRequestHost)';
+    }
+    if (acceptsLoopbackAudience()) {
+      return "tokens that carry an aud claim are accepted only for this server's loopback address (NODE_ENV is development or test)";
+    }
+    return 'tokens that carry an aud claim are refused (NODE_ENV is not development or test)';
   }
 
   private async registerAuthFlows(scope: ScopeEntry) {

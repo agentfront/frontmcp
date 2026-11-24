@@ -8,7 +8,14 @@ import 'reflect-metadata';
 
 import { RemotePrimaryAuth } from '../instance.remote-primary-auth';
 
-function startServer(options: { expectedAudience?: string; allowedHosts?: string[]; protectionOff?: boolean } = {}) {
+function startServer(
+  options: {
+    expectedAudience?: string;
+    allowedHosts?: string[];
+    protectionOff?: boolean;
+    audienceFromRequestHost?: boolean;
+  } = {},
+) {
   const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), verbose: jest.fn() };
   const dnsRebindingProtection = {
     ...(options.allowedHosts && { allowedHosts: options.allowedHosts }),
@@ -27,6 +34,9 @@ function startServer(options: { expectedAudience?: string; allowedHosts?: string
       mode: 'transparent',
       provider: 'https://idp.example.com',
       ...(options.expectedAudience !== undefined && { expectedAudience: options.expectedAudience }),
+      ...(options.audienceFromRequestHost !== undefined && {
+        audienceFromRequestHost: options.audienceFromRequestHost,
+      }),
     } as never,
   );
   return { auth, warn: logger.warn };
@@ -53,13 +63,34 @@ describe('RemotePrimaryAuth — warning for a token audience that is not configu
     }
   });
 
-  it('warns once at startup, naming the setting to add and what 1.13 will refuse', async () => {
-    const { auth, warn } = startServer();
+  it.each([
+    ['test', "accepted only for this server's loopback address (NODE_ENV is development or test)"],
+    ['development', "accepted only for this server's loopback address (NODE_ENV is development or test)"],
+    ['production', 'refused (NODE_ENV is not development or test)'],
+    [undefined, 'refused (NODE_ENV is not development or test)'],
+  ])('warns once at startup with NODE_ENV %s that tokens with an aud are %s', async (nodeEnv, accepted) => {
+    const original = process.env['NODE_ENV'];
+    if (nodeEnv === undefined) delete process.env['NODE_ENV'];
+    else process.env['NODE_ENV'] = nodeEnv;
+    try {
+      const { auth, warn } = startServer();
+      await auth.ready;
+
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0][0]).toContain(`tokens that carry an aud claim are ${accepted}`);
+      expect(warn.mock.calls[0][0]).toContain('auth.expectedAudience');
+    } finally {
+      process.env['NODE_ENV'] = original;
+    }
+  });
+
+  it('warns once at startup that the request host decides the audience with audienceFromRequestHost', async () => {
+    const { auth, warn } = startServer({ audienceFromRequestHost: true });
     await auth.ready;
 
     expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain('host the request names, which the client chooses');
     expect(warn.mock.calls[0][0]).toContain('auth.expectedAudience');
-    expect(warn.mock.calls[0][0]).toContain('FrontMCP 1.13 will refuse tokens that carry an aud claim');
   });
 
   it('does not warn with auth.expectedAudience', async () => {
@@ -106,11 +137,11 @@ describe('RemotePrimaryAuth — warning for a token audience that is not configu
     expect(warn).toHaveBeenCalledTimes(1);
   });
 
-  it('warns with FRONTMCP_ALLOWED_HOSTS alone, which the Web fetch handler does not check', async () => {
+  it('does not warn with FRONTMCP_ALLOWED_HOSTS', async () => {
     process.env['FRONTMCP_ALLOWED_HOSTS'] = 'mcp.example.com';
     const { auth, warn } = startServer();
     await auth.ready;
 
-    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).not.toHaveBeenCalled();
   });
 });

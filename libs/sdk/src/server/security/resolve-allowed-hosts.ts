@@ -13,7 +13,7 @@ import type { CorsOptions } from '../../common/types/options/http/interfaces';
 const IPV4_LOOPBACK = /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
 
 /** Loopback spellings a local client may use, in `Host`-header form. */
-const LOOPBACK_NAMES = ['localhost', '127.0.0.1', '[::1]'];
+export const LOOPBACK_NAMES = ['localhost', '127.0.0.1', '[::1]'];
 
 export interface DeriveAllowedHostsInput {
   /** Resolved bind address (e.g. '127.0.0.1', '0.0.0.0', '::'). */
@@ -219,9 +219,11 @@ export function shouldEnforceDerivedHosts(input: DeriveAllowedHostsInput): boole
   return !isRoutableBind(input.bindAddress);
 }
 
-/** Parse the `FRONTMCP_ALLOWED_HOSTS` escape hatch (comma-separated). */
-export function allowedHostsFromEnv(env: NodeJS.ProcessEnv = process.env): string[] | undefined {
-  const raw = env['FRONTMCP_ALLOWED_HOSTS']?.trim();
+/** Parse the `FRONTMCP_ALLOWED_HOSTS` escape hatch (comma-separated); none where the runtime has no `process`. */
+export function allowedHostsFromEnv(
+  env: NodeJS.ProcessEnv | undefined = typeof process !== 'undefined' ? process.env : undefined,
+): string[] | undefined {
+  const raw = env?.['FRONTMCP_ALLOWED_HOSTS']?.trim();
   if (!raw) return undefined;
   const hosts = raw
     .split(',')
