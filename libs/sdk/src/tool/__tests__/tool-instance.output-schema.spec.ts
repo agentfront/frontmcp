@@ -341,7 +341,21 @@ describe('ToolInstance.parseOutput of a CallToolResult the tool returns', () => 
     expect(() => tool.parseOutput(quoteResult, { validateStructuredContent: 'enforce' })).toThrow(InvalidOutputError);
   });
 
+  it('rewrites a text block that repeats structuredContent as other JSON, keeping its other fields', () => {
+    const { tool } = toolWithOutput({ price: z.number() });
+    const spacedEcho = {
+      type: 'text',
+      text: '{\n  "costCenter": "CC-7",\n  "price": 10\n}',
+      annotations: { priority: 1 },
+    };
+
+    const result = tool.parseOutput({ content: [spacedEcho], structuredContent: quote });
+
+    expect(result.content).toEqual([{ type: 'text', text: '{"price":10}', annotations: { priority: 1 } }]);
+  });
+
   it.each([
+    ['an array outputSchema', z.array(z.string()), { content: [], structuredContent: { value: ['a', 'b'] } }],
     ['an error result', { price: z.number() }, { ...quoteResult, isError: true }],
     ["a remote tool's result (outputSchema 'json')", 'json', quoteResult],
     ['a scalar outputSchema', z.string(), quoteResult],
