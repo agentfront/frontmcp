@@ -8,7 +8,6 @@ import {
   httpRequestInputSchema,
   isOrchestratedMode,
   isPublicMode,
-  isPublicUrlPinned,
   isStaticMode,
   isTransparentMode,
   normalizeEntryPrefix,
@@ -121,13 +120,6 @@ declare global {
 
 const name = 'session:verify' as const;
 const Stage = StageHookOf(name);
-
-/**
- * Emit the "audience is not pinned" warning at most once per process, so a
- * misconfigured transparent deployment is surfaced without spamming the log on
- * every request.
- */
-let warnedUnpinnedAudience = false;
 
 /**
  * Compare two secrets without leaking their contents or lengths by timing.
@@ -662,21 +654,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       // the same JWT_SECRET signs with the same key.
       if (isTransparentMode(authOptions)) {
         const configuredAudience = (authOptions as TransparentAuthOptions).expectedAudience;
-        // SECURITY: when `expectedAudience` is not configured we derive it from
-        // `baseUrl`. `baseUrl` comes from `getRequestBaseUrl`, which now ignores
-        // `X-Forwarded-*` unless a trusted proxy / `FRONTMCP_PUBLIC_URL` is set —
-        // so an attacker can no longer set `X-Forwarded-Host` to make the
-        // expected audience match a token minted for another service. For the
-        // strongest binding, operators should pin `FRONTMCP_PUBLIC_URL` or set
-        // `expectedAudience`; warn once when neither is present.
-        if (!configuredAudience && !isPublicUrlPinned() && !warnedUnpinnedAudience) {
-          warnedUnpinnedAudience = true;
-          this.logger.warn(
-            'transparent audience validation is deriving the expected audience from the request Host: ' +
-              'set auth.expectedAudience or FRONTMCP_PUBLIC_URL to bind tokens to a fixed resource. ' +
-              'X-Forwarded-Host is ignored unless FRONTMCP_TRUST_PROXY is enabled.',
-          );
-        }
+        // Without `expectedAudience`: the pinned `FRONTMCP_PUBLIC_URL`, else the request host (`RemotePrimaryAuth` warns).
         const expectedAudiences = configuredAudience
           ? Array.isArray(configuredAudience)
             ? configuredAudience
