@@ -822,7 +822,7 @@ export class NotificationService {
     let checkedCaller = registered.caller;
     // The check is async: a request meanwhile may replace the caller, which is then checked in its turn
     for (let attempt = 0; attempt < MAX_CALLER_RECHECKS; attempt++) {
-      const mayRead = await callerMayStillRead(this.scope, checkedCaller, uri);
+      const mayRead = await callerMayStillRead(this.scope, sessionId, checkedCaller, uri);
       const current = this.servers.get(sessionId);
       if (current !== registered || !this.isSubscribed(sessionId, uri) || hasExpiredCaller(current)) return;
       if (isSameCaller(current.caller, checkedCaller)) {

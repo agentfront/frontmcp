@@ -13,6 +13,23 @@
 import { ResourceEmitter } from '../../resource/resource.events';
 import { NotificationService } from '../notification.service';
 
+const mockRequestTurn = { held: false };
+
+jest.mock('@frontmcp/utils', () => {
+  const actual = jest.requireActual('@frontmcp/utils');
+  return {
+    ...actual,
+    runRequestExclusive: jest.fn(async (fn: () => unknown) => {
+      mockRequestTurn.held = true;
+      try {
+        return await fn();
+      } finally {
+        mockRequestTurn.held = false;
+      }
+    }),
+  };
+});
+
 const createMockServer = () =>
   ({
     notification: jest.fn(),
@@ -132,9 +149,27 @@ describe('NotificationService - resource subscription notifications', () => {
 
       expect(mockScope.runFlow).toHaveBeenCalledWith('resources:subscribe', {
         request: { method: 'resources/subscribe', params: { uri: 'file://notes.txt' } },
-        ctx: expect.objectContaining({ authInfo: expect.objectContaining({ clientId: 'client-1' }), ownRequest: true }),
+        ctx: expect.objectContaining({
+          authInfo: expect.objectContaining({ clientId: 'client-1', sessionId: 'session-1' }),
+          ownRequest: true,
+          checkOnly: true,
+        }),
       });
       expect(server.notification).toHaveBeenCalledTimes(1);
+    });
+
+    it('runs each check in a request turn of its own', async () => {
+      const turnsHeld: boolean[] = [];
+      mockScope.runFlow.mockImplementation(async () => {
+        turnsHeld.push(mockRequestTurn.held);
+        return {};
+      });
+      subscribedSession({ clientId: 'client-1' });
+
+      service.notifyResourceUpdated('file://notes.txt');
+      await flushChecks();
+
+      expect(turnsHeld).toEqual([true]);
     });
 
     it('sends nothing once the check refuses the caller', async () => {
@@ -171,7 +206,7 @@ describe('NotificationService - resource subscription notifications', () => {
       await flushChecks();
 
       expect(mockScope.runFlow).toHaveBeenCalledTimes(2);
-      expect(mockScope.runFlow.mock.calls[1][1].ctx.authInfo).toEqual({ clientId: 'client-2' });
+      expect(mockScope.runFlow.mock.calls[1][1].ctx.authInfo).toEqual({ clientId: 'client-2', sessionId: 'session-1' });
       expect(server.notification).toHaveBeenCalledTimes(1);
     });
 
