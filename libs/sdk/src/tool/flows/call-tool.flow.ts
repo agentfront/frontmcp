@@ -1273,16 +1273,12 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     if (keyPaths.length === 0) return;
     const policy = resolveInputUndeclaredKeysPolicy(...toolInputPolicies(tool, this.scope));
     if (policy === 'strip') return;
-    const { describeUndeclaredArguments } = await import('../undeclared-arguments-message.js');
-    const described = describeUndeclaredArguments(keyPaths, Object.keys(tool.inputSchema ?? {}));
-    if (policy === 'fail') throw new InvalidInputError(`Unknown arguments: ${described}`);
-    this.state.set('undeclaredArgumentsNote', `These arguments are not declared and were ignored: ${described}.`);
+    const messages = await import('../undeclared-arguments-message.js');
+    const declaredKeys = Object.keys(tool.inputSchema ?? {});
+    if (policy === 'fail') throw new InvalidInputError(messages.undeclaredArgumentsRefusal(keyPaths, declaredKeys));
+    this.state.set('undeclaredArgumentsNote', messages.undeclaredArgumentsNote(keyPaths, declaredKeys));
     const newKeyPaths = unreportedKeyPaths(reportedUndeclaredArguments, tool, keyPaths);
-    if (newKeyPaths.length === 0) return;
-    this.logger.warn(
-      `Tool "${tool.metadata.name}" was called with arguments its inputSchema does not declare, so they were ignored: ` +
-        `${newKeyPaths.join(', ')}. Declare them, or set input.undeclaredKeys to 'strip' or 'fail'.`,
-    );
+    if (newKeyPaths.length > 0) this.logger.warn(messages.undeclaredArgumentsWarning(tool.metadata.name, newKeyPaths));
   }
 
   @Stage('execute')
