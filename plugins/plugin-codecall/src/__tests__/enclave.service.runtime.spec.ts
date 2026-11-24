@@ -4,6 +4,8 @@
 // is reported, what the service hands a runtime, and that nothing of a script reaches the host once
 // its run has returned.
 
+import type { ToolHandler } from '@enclave-vm/core/worker';
+
 import type { CodeCallVmEnvironment } from '../codecall.symbol';
 import type { CodeCallPluginOptions } from '../codecall.types';
 import CodeCallConfig from '../providers/code-call.config';
@@ -18,6 +20,12 @@ import {
 } from '../services/runtime';
 import { ExecutionEndedError } from '../services/runtime/execution-gate';
 import { createInterpreterRuntime } from '../services/runtime/interpreter.runtime';
+
+/** Calls a tool handler as the sandbox does: Enclave 2.21 adds the call's position, which 2.20 ignores. */
+function callToolHandler(handler: ToolHandler, toolName: string, args: Record<string, unknown>): Promise<unknown> {
+  const params = [toolName, args, { callIndex: 0 }] as unknown as Parameters<ToolHandler>;
+  return handler(...params);
+}
 
 /**
  * A configuration whose resolved `vm` options carry the runtime fields, as the configuration
@@ -294,7 +302,7 @@ describe('EnclaveService host functions and tool calls', () => {
     });
     const runtime = fakeRuntime('interpreter', async (spec) => {
       try {
-        await spec.toolHandler('users.get', {});
+        await callToolHandler(spec.toolHandler, 'users.get', {});
       } catch (error) {
         const { name, message } = error as Error;
         return { success: false, error: { name, message }, stats: okResult(null, 1).stats };
@@ -350,7 +358,7 @@ describe('EnclaveService host functions and tool calls', () => {
     await service.execute('return 1;', env);
     if (!captured) throw new Error('the runtime received no spec');
 
-    await expect(captured.toolHandler('users.get', {})).rejects.toBeInstanceOf(ExecutionEndedError);
+    await expect(callToolHandler(captured.toolHandler, 'users.get', {})).rejects.toBeInstanceOf(ExecutionEndedError);
     expect(() => captured?.hostFunctions['getTool']?.('a')).toThrow(ExecutionEndedError);
     expect(() => captured?.hostFunctions['mcpLog']?.('info', 'late')).toThrow(ExecutionEndedError);
     expect(() => captured?.hostFunctions['mcpNotify']?.('late', {})).toThrow(ExecutionEndedError);
@@ -384,7 +392,7 @@ describe('EnclaveService host functions and tool calls', () => {
       ) as CodeCallVmEnvironment['callTool'],
     });
     const runtime = fakeRuntime('interpreter', async (spec) => {
-      void spec.toolHandler('reports.build', {}).catch(() => undefined);
+      void callToolHandler(spec.toolHandler, 'reports.build', {}).catch(() => undefined);
       return {
         success: false,
         error: { name: 'TimeoutError', message: 'Execution timed out after 10ms', code: 'EXECUTION_TIMEOUT' },
@@ -404,7 +412,7 @@ describe('EnclaveService host functions and tool calls', () => {
 
   it('reports no pending tool calls when every call settled', async () => {
     const runtime = fakeRuntime('interpreter', async (spec) => {
-      await spec.toolHandler('a', {});
+      await callToolHandler(spec.toolHandler, 'a', {});
       return okResult('ok', 1);
     });
     const service = new EnclaveService(configWith({ runtime: 'interpreter' }), undefined, {
