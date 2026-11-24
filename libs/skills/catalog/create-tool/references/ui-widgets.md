@@ -247,10 +247,11 @@ class CanvasAnswerTool extends ToolContext {
 }
 ```
 
-- A visibility without `'model'` makes it a tool for the page alone. It is listed to and callable by clients that render pages: those that declare the MCP Apps extension (`'ext-apps'`) and ChatGPT (`'openai'`), whose hosts keep it from the model.
+- A visibility without `'model'` makes it a tool for the page alone. It is listed to and callable by clients that render pages: those that declare the MCP Apps extension (`'ext-apps'`, whether or not they send `clientInfo`) and ChatGPT (`'openai'`), whose hosts keep it from the model.
 - Any other client (Claude Code, Codex, an MCP inspector) has no page to call it, so `tools/list` leaves it out and `tools/call` answers it like an unknown tool. A call in process (`this.callTool()`, an agent, a job) still reaches it, and so does the run of a task, which was checked as the call that created it. The MCP Apps support a client declares (on the request, or at `initialize`) wins over what its user agent suggests. Up to 1.12.2 it was listed to and callable by every client, whose model could then call it.
 - To list it to another client, map that client to `'ext-apps'` in `transport.platformDetection.mappings`, or hook the `filterByAppVisibility` stage of `tools:list-tools`.
 - A tool with a widget keeps the `_meta.ui` fields it declares (`visibility` included) next to the `resourceUri` `tools/list` adds.
+- A remote app's tool keeps the `_meta` its server lists, so a remote tool for the page alone stays one.
 
 ## CSP origins
 

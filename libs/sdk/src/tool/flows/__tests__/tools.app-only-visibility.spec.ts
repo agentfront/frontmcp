@@ -12,6 +12,10 @@ import {
 import { App, Tool, ToolContext } from '../../../common';
 
 const MCP_APPS_HOST: Rpc20260728Options = { capabilities: { extensions: { 'io.modelcontextprotocol/ui': {} } } };
+const MCP_APPS_HOST_WITHOUT_CLIENT_INFO: Rpc20260728Options = {
+  ...MCP_APPS_HOST,
+  meta: { [MCP_20260728_META.clientInfo]: undefined },
+};
 const CHATGPT: Rpc20260728Options = { meta: { [MCP_20260728_META.clientInfo]: { name: 'chatgpt', version: '1.0.0' } } };
 const CODING_AGENT: Rpc20260728Options = {
   meta: { [MCP_20260728_META.clientInfo]: { name: 'coding-agent', version: '1.0.0' } },
@@ -68,6 +72,7 @@ describe("a tool for the MCP Apps page only (_meta.ui.visibility: ['app'])", () 
 
   it.each([
     ['an MCP Apps host', MCP_APPS_HOST],
+    ['an MCP Apps host that sends no clientInfo', MCP_APPS_HOST_WITHOUT_CLIENT_INFO],
     ['ChatGPT', CHATGPT],
   ])('is listed to and callable by %s', async (_label, client) => {
     expect((await listedTools(client)).map(({ name }) => name)).toContain('canvas_answer');
@@ -95,6 +100,26 @@ describe("a tool for the MCP Apps page only (_meta.ui.visibility: ['app'])", () 
     scope.notifications.setClientCapabilities(sessionId, { extensions: { 'io.modelcontextprotocol/ui': {} } });
     scope.notifications.setClientInfo(sessionId, { name: 'claude-desktop', version: '1.0.0' });
     const ctx = { authInfo: { sessionId, sessionIdPayload: { platformType: 'claude' } } };
+
+    const listed = await scope.runFlowForOutput('tools:list-tools', {
+      request: { method: 'tools/list', params: {} },
+      ctx,
+    });
+    const called = await scope.runFlowForOutput('tools:call-tool', {
+      request: { method: 'tools/call', params: { name: 'canvas_answer', arguments: { answer: 'blue' } } },
+      ctx,
+    });
+
+    expect(listed.tools.map(({ name }) => name)).toContain('canvas_answer');
+    expect(JSON.stringify(called)).toContain('recorded blue');
+  });
+
+  it('is listed to and callable by a session that declared MCP Apps support without clientInfo', async () => {
+    const scope = server.instance.getScopes()[0];
+    const sessionId = 'session-mcp-apps-host-without-client-info';
+    scope.notifications.registerServer(sessionId, { notification: jest.fn(), request: jest.fn() } as never);
+    scope.notifications.setClientCapabilities(sessionId, { extensions: { 'io.modelcontextprotocol/ui': {} } });
+    const ctx = { authInfo: { sessionId } };
 
     const listed = await scope.runFlowForOutput('tools:list-tools', {
       request: { method: 'tools/list', params: {} },
