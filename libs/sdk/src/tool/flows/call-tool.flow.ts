@@ -1312,6 +1312,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       return;
     }
     toolContext.mark('execute');
+    await this.input.ctx.beforeExecute?.();
 
     const { tool } = this.state.required;
     const timeoutMs =
