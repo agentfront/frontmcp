@@ -242,8 +242,9 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
       FrontMcpToolTokens.description,
       buildExecuteToolDescription(
         config.resolvedVm,
-        config.review !== undefined || config.budgets !== undefined,
+        config.review !== undefined,
         config.keep.enabled ? config.keep.ttlSeconds : undefined,
+        config.budgets !== undefined,
       ),
       ConfiguredExecuteTool,
     );

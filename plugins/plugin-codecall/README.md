@@ -152,7 +152,8 @@ CodeCallPlugin.init({
 
 Each `codecall:execute` that has an owner (a session, or a signed-in caller) leaves a run record, and its result
 carries `runId`. The record holds the owner, the script's SHA-256, the status, the start and end times,
-`reviewDecision` (the [review](#review)'s status, `'allow'` when it let the script run, `null` with `review` off), the return value's size, and a journal with one entry per tool
+`reviewDecision` (the [review](#review)'s or a [budget](#budgets)'s status, `'allow'` when they let the script run,
+`null` with `review` and `budgets` off), the return value's size, and a journal with one entry per tool
 call: its position (in the order the host's tool handler was entered, on either runtime), the tool, a SHA-256 of the
 arguments, the outcome (`success`, `failure` or `unfinished`), the phase of a failure (`access`, `input`, `limit` or
 `execute`), the duration and the result's size. Results are kept only with `runs.resume: true`. A `keep` or `recall` is journaled
@@ -250,7 +251,7 @@ calls ran before a script failed:
 
 With observability on, each run is also a `codecall run` span with a `codecall call <tool>` child span per tool call,
 carrying the same position, outcome, phase, duration and size, and values only with `trace.values: true`. With
-`review` on, the run span also carries `codecall.review.decision` and the findings (`codecall.review.findings.count`,
+`review` or `budgets` on, the run span also carries `codecall.review.decision` and the findings (`codecall.review.findings.count`,
 `codecall.review.findings.rules`, and `codecall.review.findings` as JSON without suggestions, cut to 2,000
 characters). With observability off, CodeCall sends no spans.
 
@@ -299,7 +300,8 @@ the review's.
 | `review.timeoutMs`             | `30000` | How long one review may take; a review that takes longer fails.                                                |
 | `review.approvalMaxAgeSeconds` | `3600`  | How long an approval counts after it was granted.                                                              |
 
-With `review` on, `codecall:execute` has four more statuses, and its description lists them:
+With `review` on, `codecall:execute` has four more statuses, and its description lists them (with only
+[`budgets`](#budgets) on, it has `needs_approval` and `denied`, and its description says what a budget stop means):
 
 | `status`         | Payload                                                             | What the agent does                                                                                                                                                                                                   |
 | ---------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -395,8 +397,16 @@ async execute({ ids }: { ids: string[] }) {
   gets the budget's answer at that call, as a review decision there would be, with or without `review` (with it, the
   budgets answer first): `needs_approval` stops the run after the calls before it, and `denied` throws in the script,
   which may catch it, and ends the run with `denied` when it doesn't. The finding (`budget-exceeded`) names the budget
-  and when it resets. A budget's `needs_approval` has no `approval` id yet: the window resets it. Budgets count per
-  caller, not per run, so they carry across runs that resume.
+  and when its window resets. Budgets count per caller, not per run, so they carry across runs that resume.
+- **Approving a call over a budget.** A budget's `needs_approval` carries an `approval` whose `id` covers this script,
+  this call's tool and arguments, and that budget; it has no `anyArgumentsId`. A person grants it as a review approval
+  ([Approvals](#approvals)): through the Approval plugin, or through elicitation, which asks in the same call. The
+  approved call then runs and is counted, once per run while the grant lasts, and the next call over the limit asks
+  again; a call over two budgets needs both. A budget approval and a review approval never stand for each other, so
+  approving a destructive call never lifts a budget. A refused approval gives `denied`. Without the Approval plugin or
+  a client that can elicit, the answer is still `needs_approval`. Until a run resumes from its journal (#1335), an
+  approved script runs again from the start, so the calls before the approved one run and count again, and each that
+  is over the limit asks for its own approval.
 - **The call that crosses the limit runs.** A call's records changed are known only once it ran, so the call that
   takes a caller past a `recordsChanged` limit runs, and the next one is stopped. Calls that start together, in a
   `parallel()` or in two scripts at once, are each checked before any of them is counted, and can go past a limit by

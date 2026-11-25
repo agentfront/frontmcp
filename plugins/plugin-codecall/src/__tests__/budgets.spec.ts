@@ -13,6 +13,7 @@ import {
 } from '../budgets/budget-meter';
 import { CodeCallBudgetStore } from '../budgets/budget-store';
 import { codeCallBudgetsOptionsSchema, type CodeCallBudget } from '../codecall.types';
+import { ReviewApprovals, type ApprovalRecordView } from '../review/review-approvals';
 
 const HOUR = 3600;
 const RECORDS_PER_HOUR: CodeCallBudget = {
@@ -41,6 +42,27 @@ function callerContext(subject: string | undefined, session?: string) {
     auth: { isAnonymous: subject === undefined, user: { sub: subject ?? '' } },
     tryGetContext: () => (session ? { verifiedSessionId: session } : undefined),
   };
+}
+
+const ARCHIVE = { toolName: 'users.archive', args: { ids: ['t1'] } };
+
+/** The approvals of one script, with the states a person gave approval ids in the Approval plugin. */
+function approvalsWith(states: Record<string, ApprovalRecordView['state']> = {}, granted = new Set<string>()) {
+  const queryApprovals = async ({ toolId }: { toolId: string }): Promise<ApprovalRecordView[]> => {
+    const state = states[toolId];
+    return state ? [{ state, scope: 'session', grantedAt: Date.now(), metadata: { maxCalls: 10 } }] : [];
+  };
+  return new ReviewApprovals({
+    scriptHash: 'script-hash',
+    policyVersion: 'policy',
+    maxAgeMs: 3_600_000,
+    service: { queryApprovals },
+    granted,
+  });
+}
+
+function meterFor(store: CodeCallBudgetStore, caller: string, approvals = approvalsWith()): BudgetMeter {
+  return new BudgetMeter(store, caller, approvals);
 }
 
 async function useCalls(meter: BudgetMeter, records: number, calls = 1): Promise<void> {
@@ -101,64 +123,64 @@ describe('budget counts', () => {
 
   it('stops the call after the one that crossed a recordsChanged limit, for that caller only', async () => {
     const store = new CodeCallBudgetStore(storage, [RECORDS_PER_HOUR], clock);
-    const ada = new BudgetMeter(store, 'subject:ada');
+    const ada = meterFor(store, 'subject:ada');
 
     await useCalls(ada, 150);
-    expect(await ada.check('users.archive')).toEqual({ decision: 'allow' });
+    expect(await ada.check(ARCHIVE.toolName, ARCHIVE.args)).toEqual({ decision: 'allow' });
     await useCalls(ada, 80);
 
-    const decision = await ada.check('users.archive');
+    const decision = await ada.check(ARCHIVE.toolName, ARCHIVE.args);
     expect(decision).toMatchObject({ decision: 'needs_approval', reason: expect.stringContaining('records-per-hour') });
     expect(decision.findings).toEqual([
       expect.objectContaining({ rule: BUDGET_EXCEEDED_RULE, toolName: 'users.archive' }),
     ]);
-    expect(await new BudgetMeter(store, 'subject:bob').check('users.archive')).toEqual({ decision: 'allow' });
+    expect(await meterFor(store, 'subject:bob').check(ARCHIVE.toolName, ARCHIVE.args)).toEqual({ decision: 'allow' });
   });
 
   it('holds the counts across two instances sharing one storage adapter', async () => {
-    const first = new BudgetMeter(new CodeCallBudgetStore(storage, [CALLS_PER_MINUTE], clock), 'subject:ada');
-    const second = new BudgetMeter(new CodeCallBudgetStore(storage, [CALLS_PER_MINUTE], clock), 'subject:ada');
+    const first = meterFor(new CodeCallBudgetStore(storage, [CALLS_PER_MINUTE], clock), 'subject:ada');
+    const second = meterFor(new CodeCallBudgetStore(storage, [CALLS_PER_MINUTE], clock), 'subject:ada');
 
     await useCalls(first, 0);
     await useCalls(second, 0);
 
-    expect(await first.check('users.get')).toMatchObject({ decision: 'denied' });
-    expect(await second.check('users.get')).toMatchObject({ decision: 'denied' });
+    expect(await first.check('users.get', {})).toMatchObject({ decision: 'denied' });
+    expect(await second.check('users.get', {})).toMatchObject({ decision: 'denied' });
   });
 
   it('starts again in the next window, and keeps a count for at least its window', async () => {
     const store = new CodeCallBudgetStore(storage, [CALLS_PER_MINUTE], clock);
-    const ada = new BudgetMeter(store, 'subject:ada');
+    const ada = meterFor(store, 'subject:ada');
     await useCalls(ada, 0, 2);
     now += 30_000;
 
-    expect(await ada.check('users.get')).toMatchObject({
+    expect(await ada.check('users.get', {})).toMatchObject({
       decision: 'denied',
-      findings: [expect.objectContaining({ suggestion: 'The budget resets in 30 seconds' })],
+      findings: [expect.objectContaining({ message: expect.stringContaining('resets in 30 seconds') })],
     });
     const [key] = await storage.keys('*');
     expect(await storage.ttl(key)).toBeGreaterThan(55);
 
     now += 30_000;
-    expect(await ada.check('users.get')).toEqual({ decision: 'allow' });
+    expect(await ada.check('users.get', {})).toEqual({ decision: 'allow' });
   });
 
   it('does not count a call the flow refused before its tool ran as a tool call', async () => {
     const store = new CodeCallBudgetStore(storage, [CALLS_PER_MINUTE], clock);
-    const ada = new BudgetMeter(store, 'subject:ada');
+    const ada = meterFor(store, 'subject:ada');
 
     await ada.startCall().end(new InvalidInputError('bad input'));
     await ada.startCall().end(new InvalidInputError('bad input'));
-    expect(await ada.check('users.get')).toEqual({ decision: 'allow' });
+    expect(await ada.check('users.get', {})).toEqual({ decision: 'allow' });
 
     await ada.startCall().end(new ToolExecutionError('users.get', new Error('boom')));
     await ada.startCall().end();
-    expect(await ada.check('users.get')).toMatchObject({ decision: 'denied' });
+    expect(await ada.check('users.get', {})).toMatchObject({ decision: 'denied' });
   });
 
   it('counts a call once, and no report after it ended', async () => {
     const store = new CodeCallBudgetStore(storage, [RECORDS_PER_HOUR], clock);
-    const ada = new BudgetMeter(store, 'subject:ada');
+    const ada = meterFor(store, 'subject:ada');
     const call = ada.startCall();
     call.onRecordsChanged(150);
     await call.end();
@@ -166,45 +188,122 @@ describe('budget counts', () => {
     call.onRecordsChanged(150);
     await ada.startCall().end();
 
-    expect(await ada.check('users.archive')).toEqual({ decision: 'allow' });
+    expect(await ada.check(ARCHIVE.toolName, ARCHIVE.args)).toEqual({ decision: 'allow' });
   });
 
   it("never stops CodeCall's reserved names, such as keep and recall", async () => {
     const store = new CodeCallBudgetStore(storage, [CALLS_PER_MINUTE], clock);
-    const ada = new BudgetMeter(store, 'subject:ada');
+    const ada = meterFor(store, 'subject:ada');
     await useCalls(ada, 0, 2);
 
-    expect(await ada.check('codecall:recall')).toEqual({ decision: 'allow' });
-    expect(await ada.check('codecall:keep')).toEqual({ decision: 'allow' });
+    expect(await ada.check('codecall:recall', {})).toEqual({ decision: 'allow' });
+    expect(await ada.check('codecall:keep', {})).toEqual({ decision: 'allow' });
   });
 
   it('treats a stored count that is not a number as reached', async () => {
     const store = new CodeCallBudgetStore(storage, [CALLS_PER_MINUTE], clock);
-    const ada = new BudgetMeter(store, 'subject:ada');
+    const ada = meterFor(store, 'subject:ada');
     await useCalls(ada, 0);
     const [key] = await storage.keys('*');
     await storage.set(key, 'not-a-count');
 
-    expect(await ada.check('users.get')).toMatchObject({ decision: 'denied' });
+    expect(await ada.check('users.get', {})).toMatchObject({ decision: 'denied' });
   });
 
   it('denies the call when the counts cannot be read', async () => {
     const store = new CodeCallBudgetStore(storage, [RECORDS_PER_HOUR], clock);
     jest.spyOn(storage, 'mget').mockRejectedValueOnce(new Error('connection refused'));
 
-    const decision = await new BudgetMeter(store, 'subject:ada').check('users.archive');
+    const decision = await meterFor(store, 'subject:ada').check(ARCHIVE.toolName, ARCHIVE.args);
 
     expect(decision).toMatchObject({ decision: 'denied', findings: [{ rule: BUDGET_UNAVAILABLE_RULE }] });
   });
 
   it('denies the rest of the run once a count could not be kept', async () => {
     const store = new CodeCallBudgetStore(storage, [RECORDS_PER_HOUR], clock);
-    const ada = new BudgetMeter(store, 'subject:ada');
+    const ada = meterFor(store, 'subject:ada');
     jest.spyOn(storage, 'incrBy').mockRejectedValueOnce(new Error('connection refused'));
 
     await useCalls(ada, 10);
 
-    expect(await ada.check('users.archive')).toMatchObject({ decision: 'denied' });
+    expect(await ada.check(ARCHIVE.toolName, ARCHIVE.args)).toMatchObject({ decision: 'denied' });
+  });
+});
+
+describe('budget approvals', () => {
+  let store: CodeCallBudgetStore;
+
+  beforeEach(async () => {
+    store = new CodeCallBudgetStore(await sharedStorage(), [RECORDS_PER_HOUR]);
+    await useCalls(meterFor(store, 'subject:ada'), 200);
+  });
+
+  it('asks for the call over the budget with a reference shaped as a review approval, for that call only', async () => {
+    const approvals = approvalsWith();
+    const ada = meterFor(store, 'subject:ada', approvals);
+
+    expect(await ada.check(ARCHIVE.toolName, ARCHIVE.args)).toMatchObject({ decision: 'needs_approval' });
+    const reference = ada.pendingApproval?.reference;
+    expect(reference).toEqual({
+      id: expect.stringMatching(/^codecall:approval:[0-9a-f]{64}$/),
+      toolName: ARCHIVE.toolName,
+      argumentsHash: approvals.referenceFor(ARCHIVE).argumentsHash,
+    });
+    expect(ada.pendingApproval?.call).toEqual(ARCHIVE);
+    expect(reference?.id).not.toBe(approvals.referenceFor(ARCHIVE).id);
+    expect(reference?.id).not.toBe(
+      approvals.budgetReferenceFor({ ...ARCHIVE, args: { ids: ['t2'] } }, 'records-per-hour').id,
+    );
+  });
+
+  it('lets the approved call run once a run, and asks again for the next call over the limit', async () => {
+    const granted = new Set([approvalsWith().budgetReferenceFor(ARCHIVE, 'records-per-hour').id]);
+    const ada = meterFor(store, 'subject:ada', approvalsWith({}, granted));
+
+    expect(await ada.check(ARCHIVE.toolName, ARCHIVE.args)).toEqual({ decision: 'allow' });
+    expect(await ada.check(ARCHIVE.toolName, ARCHIVE.args)).toMatchObject({ decision: 'needs_approval' });
+    expect(await ada.check(ARCHIVE.toolName, { ids: ['t2'] })).toMatchObject({ decision: 'needs_approval' });
+  });
+
+  it('never lifts a budget with a destructive-call approval, nor approves a destructive call with a budget one', async () => {
+    const reviewReference = approvalsWith().referenceFor(ARCHIVE);
+    const budgetReference = approvalsWith().budgetReferenceFor(ARCHIVE, 'records-per-hour');
+    const approvals = approvalsWith({
+      [reviewReference.id]: 'approved',
+      [reviewReference.anyArgumentsId as string]: 'approved',
+    });
+
+    expect(await meterFor(store, 'subject:ada', approvals).check(ARCHIVE.toolName, ARCHIVE.args)).toMatchObject({
+      decision: 'needs_approval',
+    });
+    expect(await approvalsWith({ [budgetReference.id]: 'approved' }).stateOf(reviewReference, false)).toBe('missing');
+  });
+
+  it('denies a call a person refused to approve over the budget', async () => {
+    const budgetReference = approvalsWith().budgetReferenceFor(ARCHIVE, 'records-per-hour');
+    const ada = meterFor(store, 'subject:ada', approvalsWith({ [budgetReference.id]: 'denied' }));
+
+    expect(await ada.check(ARCHIVE.toolName, ARCHIVE.args)).toMatchObject({
+      decision: 'denied',
+      reason: expect.stringContaining('a person refused to approve it'),
+    });
+  });
+
+  it('needs an approval for each budget the call is over', async () => {
+    const callsPerHour: CodeCallBudget = { ...CALLS_PER_MINUTE, name: 'calls-per-hour', onExceeded: 'needs_approval' };
+    const both = new CodeCallBudgetStore(await sharedStorage(), [RECORDS_PER_HOUR, callsPerHour]);
+    await useCalls(meterFor(both, 'subject:ada'), 200, 2);
+    const recordsId = approvalsWith().budgetReferenceFor(ARCHIVE, 'records-per-hour').id;
+    const callsId = approvalsWith().budgetReferenceFor(ARCHIVE, 'calls-per-hour').id;
+
+    const halfApproved = meterFor(both, 'subject:ada', approvalsWith({}, new Set([recordsId])));
+    expect(await halfApproved.check(ARCHIVE.toolName, ARCHIVE.args)).toMatchObject({
+      decision: 'needs_approval',
+      reason: expect.stringContaining('calls-per-hour'),
+    });
+    expect(halfApproved.pendingApproval?.reference.id).toBe(callsId);
+    const approved = meterFor(both, 'subject:ada', approvalsWith({}, new Set([recordsId, callsId])));
+    expect(await approved.check(ARCHIVE.toolName, ARCHIVE.args)).toEqual({ decision: 'allow' });
   });
 });
 
@@ -212,7 +311,7 @@ describe('withBudgets', () => {
   it('asks the budgets before the review at each call, and only the review for the script', async () => {
     const storage = await sharedStorage();
     const store = new CodeCallBudgetStore(storage, [{ ...CALLS_PER_MINUTE, limit: 1 }]);
-    const ada = new BudgetMeter(store, 'subject:ada');
+    const ada = meterFor(store, 'subject:ada');
     const reviewPre = jest.fn(async (): Promise<ReviewDecision> => ({ decision: 'allow' }));
     const hooks = withBudgets({ pre: reviewPre, timeoutMs: 5000 }, ada);
 
@@ -225,7 +324,7 @@ describe('withBudgets', () => {
 
   it('is the budgets alone without review, and the review alone without budgets', async () => {
     const review = { pre: async (): Promise<ReviewDecision> => ({ decision: 'allow' }) };
-    const ada = new BudgetMeter(new CodeCallBudgetStore(await sharedStorage(), [CALLS_PER_MINUTE]), 'subject:ada');
+    const ada = meterFor(new CodeCallBudgetStore(await sharedStorage(), [CALLS_PER_MINUTE]), 'subject:ada');
 
     expect(await withBudgets(undefined, ada)?.pre?.(callInput('users.get'))).toEqual({ decision: 'allow' });
     expect(withBudgets(review, undefined)).toBe(review);

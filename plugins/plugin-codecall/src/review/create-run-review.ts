@@ -2,6 +2,7 @@ import type { ReviewContext, ReviewerTool } from '@enclave-vm/core/worker';
 
 import type { ToolEntry } from '@frontmcp/sdk';
 
+import { DEFAULT_APPROVAL_MAX_AGE_SECONDS } from '../codecall.types';
 import type CodeCallConfig from '../providers/code-call.config';
 import type { RunJournal } from '../runs/run-journal';
 import type { CodeCallJournalEntry } from '../runs/run-record.types';
@@ -72,13 +73,29 @@ function reviewerToolsOf(caller: RunReviewCaller): ReviewerTool[] {
     .map((tool) => ({ name: tool.name, description: tool.metadata.description ?? '' }));
 }
 
+/** The approvals people granted this caller for this script, which the review and the budgets read. */
+export function approvalsOf(
+  caller: Pick<RunReviewCaller, 'authInfo' | 'approvalService' | 'granted'>,
+  scriptHash: string,
+  service?: CodeCallReviewService,
+): ReviewApprovals {
+  return new ReviewApprovals({
+    scriptHash,
+    policyVersion: service?.policyVersion ?? '',
+    maxAgeMs: (service?.options.approvalMaxAgeSeconds ?? DEFAULT_APPROVAL_MAX_AGE_SECONDS) * 1000,
+    service: caller.approvalService,
+    approvalContext: approvalContextOf(caller.authInfo),
+    granted: caller.granted,
+  });
+}
+
 /** The review of one script for this caller: its rules, the server's reviewers and the approvals people granted. */
 export async function createRunReview(
   service: CodeCallReviewService,
   caller: RunReviewCaller,
   scriptHash: string,
 ): Promise<RunReview> {
-  const { options, policyVersion } = service;
+  const { options } = service;
   const withheld = await toolsWithheldByAuthorities(caller.scope, caller.authInfo);
   const toolOf = (name: string): ReviewedTool | undefined => {
     const access = checkCodeCallToolAccess<ToolEntry>(caller.scope, caller.config, name, {
@@ -93,14 +110,7 @@ export async function createRunReview(
   const hasApprovalChannel = caller.approvalService !== undefined || caller.canElicit;
   const rules =
     options.rules === false ? undefined : new ReviewRules({ rules: options.rules, toolOf, hasApprovalChannel });
-  const approvals = new ReviewApprovals({
-    scriptHash,
-    policyVersion,
-    maxAgeMs: options.approvalMaxAgeSeconds * 1000,
-    service: caller.approvalService,
-    approvalContext: approvalContextOf(caller.authInfo),
-    granted: caller.granted,
-  });
+  const approvals = approvalsOf(caller, scriptHash, service);
   const effectsSoFar = (): string[] => {
     const ranTools = (caller.journal?.entriesSoFar() ?? []).filter(reachedTool).map((entry) => entry.tool);
     return [...new Set(ranTools)].filter((name) => toolOf(name)?.annotations?.readOnlyHint !== true);

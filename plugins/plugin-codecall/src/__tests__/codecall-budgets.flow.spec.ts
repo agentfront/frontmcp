@@ -4,12 +4,24 @@ import 'reflect-metadata';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { App, connect, LogLevel, Tool, ToolContext, z, type CallToolResult, type DirectClient } from '@frontmcp/sdk';
+import { ApprovalPlugin } from '@frontmcp/plugin-approval';
+import {
+  App,
+  connect,
+  LogLevel,
+  Tool,
+  ToolContext,
+  z,
+  type CallToolResult,
+  type ConnectOptions,
+  type DirectClient,
+} from '@frontmcp/sdk';
 import { mkdtemp, rm } from '@frontmcp/utils';
 
 import { BUDGET_EXCEEDED_RULE } from '../budgets/budget-meter';
 import CodeCallPlugin from '../codecall.plugin';
 import type { CodeCallPluginOptionsInput, CodeCallVmRuntime } from '../codecall.types';
+import { CodeCallRunStoreToken, type CodeCallRunRecord } from '../runs/run-record.types';
 
 jest.setTimeout(30000);
 
@@ -50,23 +62,71 @@ class EchoTool extends ToolContext {
   }
 }
 
+@Tool({
+  name: 'tickets.delete',
+  description: 'Deletes a ticket for good',
+  inputSchema: { id: z.number() },
+  annotations: { destructiveHint: true },
+})
+class DeleteTicketTool extends ToolContext {
+  async execute({ id }: { id: number }) {
+    executed.push(`tickets.delete:${id}`);
+    return { deleted: id };
+  }
+}
+
+@Tool({
+  name: 'approvals.grant',
+  description: 'Grants a CodeCall approval for this session, as a person would through the server',
+  inputSchema: { id: z.string() },
+  codecall: { visibleInListTools: true, enabledInCodeCall: false },
+})
+class GrantApprovalTool extends ToolContext {
+  async execute({ id }: { id: string }) {
+    await this.approval.grantSessionApproval(id);
+    return { granted: id };
+  }
+}
+
+@Tool({
+  name: 'runs.read',
+  description: 'Reads a run record',
+  inputSchema: { runId: z.string() },
+  codecall: { visibleInListTools: true, enabledInCodeCall: false },
+})
+class ReadRunTool extends ToolContext {
+  async execute({ runId }: { runId: string }) {
+    return { record: (await this.get(CodeCallRunStoreToken).read(runId, this)) ?? null };
+  }
+}
+
 interface ExecuteOutcome {
   status: string;
+  runId?: string;
   result?: unknown;
   reason?: string;
+  approval?: { id: string; toolName?: string; argumentsHash?: string; anyArgumentsId?: string };
   findings?: Array<{ rule: string; message: string; toolName?: string }>;
 }
 
-function serverConfig(options: CodeCallPluginOptionsInput) {
+function serverConfig(options: CodeCallPluginOptionsInput, { approvalPlugin = false, elicitation = false } = {}) {
   @App({
     id: 'desk',
     name: 'Desk',
-    tools: [GetTicketTool, ArchiveTicketsTool, EchoTool],
-    plugins: [CodeCallPlugin.init({ mode: 'codecall_only', ...options })],
+    tools: [GetTicketTool, ArchiveTicketsTool, EchoTool, DeleteTicketTool, GrantApprovalTool, ReadRunTool],
+    plugins: [
+      CodeCallPlugin.init({ mode: 'codecall_only', ...options }),
+      ...(approvalPlugin ? [ApprovalPlugin.init({ storage: { type: 'memory' } })] : []),
+    ],
   })
   class DeskApp {}
 
-  return { info: { name: 'codecall-budgets', version: '1.0.0' }, apps: [DeskApp], logging: { level: LogLevel.Off } };
+  return {
+    info: { name: 'codecall-budgets', version: '1.0.0' },
+    apps: [DeskApp],
+    logging: { level: LogLevel.Off },
+    ...(elicitation && { elicitation: { enabled: true } }),
+  };
 }
 
 function structuredOf<T>(result: CallToolResult): T {
@@ -78,8 +138,13 @@ function structuredOf<T>(result: CallToolResult): T {
 
 const clients: DirectClient[] = [];
 
-async function open(config: ReturnType<typeof serverConfig>, subject: string): Promise<DirectClient> {
-  const client = await connect(config, { session: { id: `${subject}-${clients.length}`, user: { sub: subject } } });
+async function open(
+  config: ReturnType<typeof serverConfig>,
+  subject: string,
+  options: ConnectOptions = {},
+): Promise<DirectClient> {
+  const session = { id: `${subject}-${clients.length}`, user: { sub: subject } };
+  const client = await connect(config, { session, ...options });
   clients.push(client);
   return client;
 }
@@ -87,6 +152,20 @@ async function open(config: ReturnType<typeof serverConfig>, subject: string): P
 async function execute(client: DirectClient, script: string): Promise<ExecuteOutcome> {
   return structuredOf<ExecuteOutcome>((await client.callTool('codecall:execute', { script })) as CallToolResult);
 }
+
+async function readRun(client: DirectClient, runId: string): Promise<CodeCallRunRecord | null> {
+  return structuredOf<{ record: CodeCallRunRecord | null }>(
+    (await client.callTool('runs.read', { runId })) as CallToolResult,
+  ).record;
+}
+
+async function executeDescriptionOf(client: DirectClient): Promise<string> {
+  const tools = (await client.listTools()) as Array<{ name: string; description?: string }>;
+  return tools.find((tool) => tool.name === 'codecall:execute')?.description ?? '';
+}
+
+const accept: ConnectOptions['onElicitation'] = async () => ({ action: 'accept', content: { approve: true } });
+const THREE_GETS = "for (const id of [1, 2, 3]) {\n  await callTool('tickets.get', { id });\n}";
 
 const threeCallsPerHour = (onExceeded?: 'needs_approval' | 'denied') => ({
   limits: [{ name: 'calls-per-hour', counts: 'toolCalls' as const, limit: 3, windowSeconds: 3600, onExceeded }],
@@ -164,7 +243,7 @@ describe('CodeCall budgets', () => {
 
   it('answers denied when the budget says so, which a script may catch', async () => {
     const ada = await open(serverConfig({ budgets: threeCallsPerHour('denied') }), 'ada');
-    await execute(ada, "for (const id of [1, 2, 3]) {\n  await callTool('tickets.get', { id });\n}");
+    await execute(ada, THREE_GETS);
 
     const uncaught = await execute(ada, "return await callTool('tickets.get', { id: 4 });");
     const caught = await execute(
@@ -233,5 +312,92 @@ describe('CodeCall budgets', () => {
 
     expect(await execute(ada, "return await callTool('tickets.get', { id: 1 });")).toMatchObject({ status: 'ok' });
     expect(executed).toEqual(['tickets.get:1']);
+  });
+
+  it('records the decision of a budget with review off, and says in the description what a budget stop means', async () => {
+    const ada = await open(serverConfig({ budgets: threeCallsPerHour() }), 'ada');
+
+    const ran = await execute(ada, THREE_GETS);
+    const stopped = await execute(ada, "return await callTool('tickets.get', { id: 4 });");
+
+    expect((await readRun(ada, ran.runId as string))?.reviewDecision).toBe('allow');
+    expect((await readRun(ada, stopped.runId as string))?.reviewDecision).toBe('needs_approval');
+    const description = await executeDescriptionOf(ada);
+    expect(description).toContain('| timeout | needs_approval | denied\n');
+    expect(description).toContain('BUDGETS: ');
+    expect(description).toContain('it resets with its window');
+  });
+});
+
+describe('approving a call over a budget', () => {
+  it('runs the call once a person granted its approval, and asks again for the next call over the limit', async () => {
+    const ada = await open(serverConfig({ budgets: threeCallsPerHour() }, { approvalPlugin: true }), 'ada');
+    await execute(ada, THREE_GETS);
+    const fourth = "return await callTool('tickets.get', { id: 4 });";
+
+    const asked = await execute(ada, fourth);
+    expect(asked).toMatchObject({ status: 'needs_approval', approval: { toolName: 'tickets.get' } });
+    expect(asked.approval).not.toHaveProperty('anyArgumentsId');
+    await ada.callTool('approvals.grant', { id: asked.approval?.id as string });
+
+    expect(await execute(ada, fourth)).toMatchObject({ status: 'ok', result: { id: 4 } });
+    const next = await execute(ada, "return await callTool('tickets.get', { id: 5 });");
+    expect(next).toMatchObject({ status: 'needs_approval' });
+    expect(next.approval?.id).not.toBe(asked.approval?.id);
+    expect(executed).toEqual(['tickets.get:1', 'tickets.get:2', 'tickets.get:3', 'tickets.get:4']);
+  });
+
+  it('asks for a destructive-call approval and a budget approval apart, and runs the call only with both', async () => {
+    const config = serverConfig({ review: {}, budgets: threeCallsPerHour() }, { approvalPlugin: true });
+    const ada = await open(config, 'ada');
+    await execute(ada, THREE_GETS);
+    const deleteOne = "return await callTool('tickets.delete', { id: 7 });";
+
+    const destructive = await execute(ada, deleteOne);
+    expect(destructive).toMatchObject({ status: 'needs_approval', reason: expect.stringContaining('destructive') });
+    await ada.callTool('approvals.grant', { id: destructive.approval?.id as string });
+    const overBudget = await execute(ada, deleteOne);
+    expect(overBudget).toMatchObject({
+      status: 'needs_approval',
+      findings: [expect.objectContaining({ rule: BUDGET_EXCEEDED_RULE })],
+    });
+    expect(overBudget.approval?.id).not.toBe(destructive.approval?.id);
+    expect(executed).not.toContain('tickets.delete:7');
+    await ada.callTool('approvals.grant', { id: overBudget.approval?.id as string });
+
+    expect(await execute(ada, deleteOne)).toMatchObject({ status: 'ok', result: { deleted: 7 } });
+    expect(executed).toContain('tickets.delete:7');
+  });
+
+  it('asks a person through elicitation in the same call, for a script and for codecall:invoke', async () => {
+    const config = serverConfig(
+      { directCalls: { enabled: true }, budgets: threeCallsPerHour() },
+      { elicitation: true },
+    );
+    const ada = await open(config, 'ada', { onElicitation: accept });
+    await execute(ada, THREE_GETS);
+
+    expect(await execute(ada, "return await callTool('tickets.get', { id: 4 });")).toMatchObject({
+      status: 'ok',
+      result: { id: 4 },
+    });
+    const invoked = (await ada.callTool('codecall:invoke', {
+      tool: 'tickets.get',
+      input: { id: 5 },
+    })) as CallToolResult;
+    expect(invoked.isError).toBeFalsy();
+    expect(executed).toEqual(['tickets.get:1', 'tickets.get:2', 'tickets.get:3', 'tickets.get:4', 'tickets.get:5']);
+  });
+
+  it('denies the call when the person declines', async () => {
+    const config = serverConfig({ budgets: threeCallsPerHour() }, { elicitation: true });
+    const ada = await open(config, 'ada', { onElicitation: async () => ({ action: 'decline' }) });
+    await execute(ada, THREE_GETS);
+
+    expect(await execute(ada, "return await callTool('tickets.get', { id: 4 });")).toMatchObject({
+      status: 'denied',
+      reason: expect.stringContaining('the person did not approve it'),
+    });
+    expect(executed).toEqual(['tickets.get:1', 'tickets.get:2', 'tickets.get:3']);
   });
 });

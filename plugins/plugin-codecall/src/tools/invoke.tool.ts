@@ -1,17 +1,20 @@
 // file: libs/plugins/src/codecall/tools/invoke.tool.ts
+import type { ReviewDecision } from '@enclave-vm/core/worker';
+
 import type { CallToolResult } from '@frontmcp/protocol';
 import { getCallSurface, Tool, ToolContext } from '@frontmcp/sdk';
 import { sha256Hex } from '@frontmcp/utils';
 
-import { budgetMeterOf } from '../budgets/budget-meter';
+import { budgetMeterOf, type BudgetMeter } from '../budgets/budget-meter';
 import { CodeCallBudgetStoreToken } from '../budgets/budget-store';
 import CodeCallConfig from '../providers/code-call.config';
 import { approvalAnswerSchema, approvalQuestionOf, clientCanElicit } from '../review/approval-elicitation';
-import { createRunReview, reviewContextOf } from '../review/create-run-review';
+import { approvalsOf, createRunReview, reviewContextOf } from '../review/create-run-review';
 import { ApprovalServiceViewToken } from '../review/review-approvals';
 import { invocationScriptOf, reviewInvocation } from '../review/review-invocation';
 import { reviewResultOf, type CodeCallReviewResult } from '../review/review-result';
 import CodeCallReviewService from '../review/review.service';
+import type { PendingApproval } from '../review/run-review';
 import { asCodeCallDispatch, checkCodeCallToolAccess, isBlockedSelfReference } from '../security';
 import { AuditLoggerService } from '../services/audit-logger.service';
 import {
@@ -29,6 +32,20 @@ function buildErrorResult(message: string): CallToolResult {
     content: [{ type: 'text', text: message }],
     isError: true,
   };
+}
+
+/** What a review or the budgets decided for the call: a refusal, and the approval it waits for. */
+interface InvocationDecision {
+  refusal?: CodeCallReviewResult;
+  pending?: PendingApproval;
+}
+
+/** The result for a budget's decision at the call, or undefined when it allows the call. */
+function refusalOf(decision: ReviewDecision, pending?: PendingApproval): CodeCallReviewResult | undefined {
+  if (decision.decision === 'allow') return undefined;
+  const { decision: status, findings } = decision;
+  const reason = 'reason' in decision ? decision.reason : undefined;
+  return reviewResultOf({ status, reason, findings }, pending);
 }
 
 /** A refusal of the review, with its result as structured content too. */
@@ -97,16 +114,20 @@ export default class InvokeTool extends ToolContext {
       return buildErrorResult(`Tool "${toolName}" is not available. Use codecall:search to discover available tools.`);
     }
 
-    const budgets = budgetMeterOf(this.tryGet(CodeCallBudgetStoreToken), this, this.logger);
-    const budgetDecision = await budgets?.check(toolName);
-    if (budgetDecision && budgetDecision.decision !== 'allow') {
-      const { decision: status, findings } = budgetDecision;
-      const reason = 'reason' in budgetDecision ? budgetDecision.reason : undefined;
-      audit?.logSecurityAccessDenied(executionId, toolName, `budget: ${status}`);
-      return buildReviewResult(reviewResultOf({ status, reason, findings }));
+    const reviewService = this.tryGet(CodeCallReviewService);
+    const approvedOverBudget = new Set<string>();
+    const approvals = approvalsOf(
+      { authInfo: this.authInfo, approvalService: this.tryGet(ApprovalServiceViewToken), granted: approvedOverBudget },
+      sha256Hex(invocationScriptOf(toolName, toolInput)),
+      reviewService,
+    );
+    const budgets = budgetMeterOf(this.tryGet(CodeCallBudgetStoreToken), this, approvals, this.logger);
+    const budgetRefusal = budgets && (await this.budgetRefusal(budgets, toolName, toolInput, approvedOverBudget));
+    if (budgetRefusal) {
+      audit?.logSecurityAccessDenied(executionId, toolName, `budget: ${budgetRefusal.status}`);
+      return buildReviewResult(budgetRefusal);
     }
 
-    const reviewService = this.tryGet(CodeCallReviewService);
     const refusal = reviewService ? await this.review(reviewService, toolName, toolInput, surface) : undefined;
     if (refusal) {
       audit?.logSecurityAccessDenied(executionId, toolName, `review: ${refusal.status}`);
@@ -164,7 +185,7 @@ export default class InvokeTool extends ToolContext {
     const code = invocationScriptOf(toolName, toolInput);
     const canElicit = clientCanElicit(this.scope, this.tryGetContext());
     const approvedByPerson = new Set<string>();
-    const reviewOnce = async () => {
+    return this.askingApproval(approvedByPerson, async () => {
       const runReview = await createRunReview(
         reviewService,
         {
@@ -181,14 +202,35 @@ export default class InvokeTool extends ToolContext {
       );
       const refusal = await reviewInvocation(runReview, code, reviewContextOf(this, surface));
       return { refusal, pending: runReview.pendingApproval };
-    };
-    const first = await reviewOnce();
+    });
+  }
+
+  /** The budgets' answer for the call; a client that can answer is asked once to approve a call over a budget. */
+  private budgetRefusal(
+    budgets: BudgetMeter,
+    toolName: string,
+    toolInput: Record<string, unknown>,
+    approvedByPerson: Set<string>,
+  ): Promise<CodeCallReviewResult | undefined> {
+    return this.askingApproval(approvedByPerson, async () => {
+      const decision = await budgets.check(toolName, toolInput);
+      return { refusal: refusalOf(decision, budgets.pendingApproval), pending: budgets.pendingApproval };
+    });
+  }
+
+  /** What `decide` answers; when it waits for an approval the client can ask for, asked once and decided again. */
+  private async askingApproval(
+    approvedByPerson: Set<string>,
+    decide: () => Promise<InvocationDecision>,
+  ): Promise<CodeCallReviewResult | undefined> {
+    const first = await decide();
+    const canElicit = clientCanElicit(this.scope, this.tryGetContext());
     if (first.refusal?.status !== 'needs_approval' || !first.pending || !canElicit) return first.refusal;
     const answer = await this.elicit(approvalQuestionOf(first.refusal.reason, first.pending), approvalAnswerSchema);
     if (answer.status !== 'accept' || answer.content?.approve !== true) {
       return { status: 'denied', reason: `${first.refusal.reason}; the person did not approve it` };
     }
     approvedByPerson.add(first.pending.reference.id);
-    return (await reviewOnce()).refusal;
+    return (await decide()).refusal;
   }
 }

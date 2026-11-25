@@ -534,6 +534,9 @@ export const codeCallTraceOptionsSchema = z
   })
   .prefault({});
 
+/** How long an approval counts after it was granted, unless `review.approvalMaxAgeSeconds` is set. */
+export const DEFAULT_APPROVAL_MAX_AGE_SECONDS = 3600;
+
 /** What the read-then-send rule answers: `needs_changes`, `denied`, or nothing with `false`. */
 export const codeCallReadThenSendSchema = z.union([z.literal(false), z.enum(['needs_changes', 'denied'])]);
 
@@ -595,7 +598,7 @@ export const codeCallReviewOptionsSchema = z
     /** How long one review hook may take, in ms (30000). */
     timeoutMs: z.number().int().min(1).optional(),
     /** How long an approval counts after it was granted, in seconds (3600). */
-    approvalMaxAgeSeconds: z.number().int().min(1).default(3600),
+    approvalMaxAgeSeconds: z.number().int().min(1).default(DEFAULT_APPROVAL_MAX_AGE_SECONDS),
   })
   .refine((review) => !review.provider || review.policy !== undefined, {
     path: ['policy'],

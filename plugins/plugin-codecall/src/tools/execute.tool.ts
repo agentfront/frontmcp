@@ -3,7 +3,7 @@
 import { getCallSurface, toMcpError, Tool, ToolContext, type McpError, type ToolEntry } from '@frontmcp/sdk';
 import { escapeControlCharacters, sha256Hex } from '@frontmcp/utils';
 
-import { budgetMeterOf, withBudgets } from '../budgets/budget-meter';
+import { budgetMeterOf, withBudgets, type BudgetMeter } from '../budgets/budget-meter';
 import { CodeCallBudgetStoreToken } from '../budgets/budget-store';
 import type { CodeCallToolDescription, CodeCallVmEnvironment } from '../codecall.symbol';
 import {
@@ -20,11 +20,11 @@ import { keptNamesOf } from '../kept-values/kept-value-script';
 import { KeptValueStoreToken } from '../kept-values/kept-value.types';
 import CodeCallConfig, { extractionThresholdOf } from '../providers/code-call.config';
 import { approvalAnswerSchema, approvalQuestionOf, clientCanElicit } from '../review/approval-elicitation';
-import { createRunReview, reviewContextOf } from '../review/create-run-review';
+import { approvalsOf, createRunReview, reviewContextOf, type RunReviewCaller } from '../review/create-run-review';
 import { ApprovalServiceViewToken } from '../review/review-approvals';
 import { reviewDecisionOf, reviewResultOf } from '../review/review-result';
 import CodeCallReviewService from '../review/review.service';
-import { reviewOutcomeOf, type RunReview } from '../review/run-review';
+import { reviewOutcomeOf, type PendingApproval, type RunReview } from '../review/run-review';
 import { jsonBytes, RunJournal } from '../runs/run-journal';
 import type { CodeCallRunInput, CodeCallRunStore } from '../runs/run-record.store';
 import { CodeCallRunStoreToken } from '../runs/run-record.types';
@@ -56,11 +56,17 @@ import {
 /** How many times one `codecall:execute` asks a person, through elicitation, to approve a call it stopped at. */
 const MAX_APPROVALS_ASKED = 5;
 
-/** One run of the script, with its journal and, with `review` on, its review. */
+/** One run of the script, with its journal and, when they are on, its review and its budgets. */
 interface ReviewedAttempt {
   result: CodeCallExecuteResult;
   journal: RunJournal;
   review?: RunReview;
+  budgets?: BudgetMeter;
+}
+
+/** The approval a stopped run waits for: its budgets' or its review's, whichever stopped it. */
+function pendingApprovalOf(attempt: Pick<ReviewedAttempt, 'review' | 'budgets'>): PendingApproval | undefined {
+  return attempt.budgets?.pendingApproval ?? attempt.review?.pendingApproval;
 }
 
 /**
@@ -137,19 +143,19 @@ export default class ExecuteTool extends ToolContext {
     let runId: string | undefined;
     try {
       attempt = await this.runApproved(input, scriptHash, newJournal);
-      const { result, journal, review } = attempt;
+      const { result, journal, review, budgets } = attempt;
       run = {
         scriptHash,
         status: result.status,
         startedAt: startedAt.toISOString(),
         endedAt: new Date().toISOString(),
-        reviewDecision: review ? reviewDecisionOf(result) : null,
+        reviewDecision: review || budgets ? reviewDecisionOf(result) : null,
         ...(result.status === 'ok' && { resultBytes: jsonBytes(result.result) }),
         journal: [...journal.close()],
       };
       runId = runs ? await this.keepRun(runs, run) : undefined;
       const traceLines = traceOf(result.status, journal, trace);
-      if (review && 'findings' in result && result.findings) spans?.recordFindings(result.findings);
+      if ((review || budgets) && 'findings' in result && result.findings) spans?.recordFindings(result.findings);
       const kept = keptNamesOf(run.journal);
       return {
         ...result,
@@ -165,7 +171,7 @@ export default class ExecuteTool extends ToolContext {
 
   /**
    * Runs the script, and again each time a person approves, through elicitation, the call it stopped at. Without
-   * `review`, or without a client that can ask, it runs once.
+   * `review` or `budgets`, or without a client that can ask, it runs once.
    */
   private async runApproved(
     input: ExecuteToolInput,
@@ -174,10 +180,11 @@ export default class ExecuteTool extends ToolContext {
   ): Promise<ReviewedAttempt> {
     const reviewService = this.tryGet(CodeCallReviewService);
     const approvedByPerson = new Set<string>();
-    const canElicit = reviewService !== undefined && clientCanElicit(this.scope, this.tryGetContext());
+    const approvesCalls = reviewService !== undefined || this.tryGet(CodeCallBudgetStoreToken) !== undefined;
+    const canElicit = approvesCalls && clientCanElicit(this.scope, this.tryGetContext());
     let attempt = await this.attemptRun(input, scriptHash, newJournal(), reviewService, approvedByPerson, canElicit);
     for (let asked = 0; canElicit && asked < MAX_APPROVALS_ASKED; asked++) {
-      const pending = attempt.review?.pendingApproval;
+      const pending = pendingApprovalOf(attempt);
       if (attempt.result.status !== 'needs_approval' || !pending) break;
       const answer = await this.elicit(approvalQuestionOf(attempt.result.reason, pending), approvalAnswerSchema);
       if (answer.status !== 'accept' || answer.content?.approve !== true) {
@@ -201,25 +208,22 @@ export default class ExecuteTool extends ToolContext {
     approvedByPerson: ReadonlySet<string>,
     canElicit: boolean,
   ): Promise<ReviewedAttempt> {
-    const review = reviewService
-      ? await createRunReview(
-          reviewService,
-          {
-            scope: this.scope,
-            config: this.get(CodeCallConfig),
-            authInfo: this.authInfo,
-            surface: getCallSurface(),
-            allowedTools: input.allowedTools ? new Set(input.allowedTools) : undefined,
-            approvalService: this.tryGet(ApprovalServiceViewToken),
-            canElicit,
-            granted: approvedByPerson,
-            journal,
-          },
-          scriptHash,
-        )
-      : undefined;
-    const result = await this.runScript(input, journal, review);
-    return { result, journal, review };
+    const caller: RunReviewCaller = {
+      scope: this.scope,
+      config: this.get(CodeCallConfig),
+      authInfo: this.authInfo,
+      surface: getCallSurface(),
+      allowedTools: input.allowedTools ? new Set(input.allowedTools) : undefined,
+      approvalService: this.tryGet(ApprovalServiceViewToken),
+      canElicit,
+      granted: approvedByPerson,
+      journal,
+    };
+    const review = reviewService ? await createRunReview(reviewService, caller, scriptHash) : undefined;
+    const approvals = approvalsOf(caller, scriptHash, reviewService);
+    const budgets = budgetMeterOf(this.tryGet(CodeCallBudgetStoreToken), this, approvals, this.logger);
+    const result = await this.runScript(input, journal, review, budgets);
+    return { result, journal, review, budgets };
   }
 
   /** The run's spans while observability traces requests, else none. */
@@ -258,6 +262,7 @@ export default class ExecuteTool extends ToolContext {
     input: ExecuteToolInput,
     journal: RunJournal,
     review?: RunReview,
+    budgets?: BudgetMeter,
   ): Promise<CodeCallExecuteResult> {
     const { script, allowedTools } = input;
 
@@ -280,7 +285,6 @@ export default class ExecuteTool extends ToolContext {
     const allowedToolSet = allowedTools ? new Set(allowedTools) : null;
     // `getTool` answers synchronously, so the tools the caller's authorities withhold are judged now.
     const withheld = await toolsWithheldByAuthorities(this.scope, this.authInfo);
-    const budgets = budgetMeterOf(this.tryGet(CodeCallBudgetStoreToken), this, this.logger);
 
     const environment: CodeCallVmEnvironment = {
       callTool: async <TInput, TResult>(
@@ -520,7 +524,7 @@ export default class ExecuteTool extends ToolContext {
         : undefined;
       if (reviewOutcome) {
         audit?.logExecutionFailure(executionId, script, durationMs, `review: ${reviewOutcome.status}`);
-        return reviewResultOf(reviewOutcome, review?.pendingApproval);
+        return reviewResultOf(reviewOutcome, pendingApprovalOf({ review, budgets }));
       }
 
       // Map execution result to CodeCall result

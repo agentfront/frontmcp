@@ -20,18 +20,19 @@ export class CodeCallBudgetStore implements OnShutdown {
     private readonly now: () => number = Date.now,
   ) {}
 
-  /** The first budget the caller reached in its window; a stored count that is not a number counts as reached. */
-  async exceededBy(caller: string): Promise<ExceededBudget | undefined> {
+  /** The budgets the caller reached in their windows; a stored count that is not a number counts as reached. */
+  async exceededOf(caller: string): Promise<ExceededBudget[]> {
     const nowSeconds = this.now() / 1000;
     const stored = await this.storage.mget(this.budgets.map((budget) => this.keyOf(budget, caller, nowSeconds)));
-    const index = this.budgets.findIndex((budget, position) => {
-      const used = Number(stored[position] ?? 0);
-      return Number.isNaN(used) || used >= budget.limit;
-    });
-    if (index === -1) return undefined;
-    const budget = this.budgets[index];
-    const windowEnd = windowStartOf(budget, nowSeconds) + budget.windowSeconds;
-    return { budget, resetsInSeconds: Math.ceil(windowEnd - nowSeconds) };
+    return this.budgets
+      .filter((budget, position) => {
+        const used = Number(stored[position] ?? 0);
+        return Number.isNaN(used) || used >= budget.limit;
+      })
+      .map((budget) => {
+        const windowEnd = windowStartOf(budget, nowSeconds) + budget.windowSeconds;
+        return { budget, resetsInSeconds: Math.ceil(windowEnd - nowSeconds) };
+      });
   }
 
   /** Adds what one call used to the caller's budgets that count it. */

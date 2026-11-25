@@ -211,6 +211,26 @@ describe.each<CodeCallVmRuntime>(['node-vm', 'interpreter'])('codecall:execute t
       expect(JSON.stringify(runSpan?.attributes)).not.toContain('secret-name');
     });
 
+    it("puts a budget's decision and finding on the run span with review off", async () => {
+      const budgets = {
+        limits: [{ name: 'calls-per-hour', counts: 'toolCalls' as const, limit: 2, windowSeconds: 3600 }],
+        storage: { type: 'memory' as const },
+      };
+
+      const outcome = await execute(serverConfig({ vm, budgets }, true), THREE_CALLS);
+
+      expect(outcome.status).toBe('needs_approval');
+      const runSpan = codecallSpans().find((span) => span.name === 'codecall run');
+      expect(runSpan?.attributes).toMatchObject({
+        'codecall.review.decision': 'needs_approval',
+        'codecall.review.findings.count': 1,
+        'codecall.review.findings.rules': 'budget-exceeded',
+        'codecall.review.findings': expect.stringMatching(
+          /Budget \\"calls-per-hour\\" is used up.*resets in \d+ seconds/,
+        ),
+      });
+    });
+
     it('sends no span while observability is off', async () => {
       await execute(serverConfig({ vm }, false), THREE_CALLS);
 

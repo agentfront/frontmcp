@@ -4,6 +4,8 @@ import { toMcpError, type FrontMcpLogger } from '@frontmcp/sdk';
 
 import type { CodeCallBudget } from '../codecall.types';
 import type { ReviewCallerContext } from '../review/create-run-review';
+import type { ReviewApprovals } from '../review/review-approvals';
+import type { PendingApproval } from '../review/run-review';
 import { isBlockedSelfReference } from '../security/self-reference-guard';
 import type { CodeCallBudgetStore, ExceededBudget } from './budget-store';
 
@@ -23,6 +25,11 @@ const REFUSED_BEFORE_TOOL: ReadonlySet<string> = new Set([
 const UNIT_BY_COUNT: Record<CodeCallBudget['counts'], string> = {
   toolCalls: 'tool calls',
   recordsChanged: 'records changed',
+};
+
+const SUGGESTION_BY_DECISION: Record<CodeCallBudget['onExceeded'], string> = {
+  needs_approval: 'A person can approve this call; otherwise send it again once the window resets',
+  denied: 'Send it again once the window resets',
 };
 
 /** A script can name any string as a tool; a finding shows at most this much of it. */
@@ -45,19 +52,25 @@ function reachedTool(error: unknown): boolean {
   return !REFUSED_BEFORE_TOOL.has(code) && statusCode !== 429;
 }
 
-function exceededDecision({ budget, resetsInSeconds }: ExceededBudget, toolName: string): ReviewDecision {
+function exceededDecision(
+  { budget, resetsInSeconds }: ExceededBudget,
+  toolName: string,
+  refusedByPerson = false,
+): ReviewDecision {
   const shownName = toolName.slice(0, MAX_TOOL_NAME_CHARS);
+  const decision = refusedByPerson ? 'denied' : budget.onExceeded;
   const reason =
     `Budget "${budget.name}" is used up: this caller reached ${budget.limit} ${UNIT_BY_COUNT[budget.counts]} ` +
-    `in its ${budget.windowSeconds}-second window, so the call to ${shownName} did not run`;
+    `in its ${budget.windowSeconds}-second window, which resets in ${resetsInSeconds} seconds, ` +
+    `so the call to ${shownName} did not run${refusedByPerson ? '; a person refused to approve it' : ''}`;
   return {
-    decision: budget.onExceeded,
+    decision,
     reason,
     findings: [
       {
         rule: BUDGET_EXCEEDED_RULE,
         message: reason,
-        suggestion: `The budget resets in ${resetsInSeconds} seconds`,
+        suggestion: SUGGESTION_BY_DECISION[decision],
         toolName: shownName,
       },
     ],
@@ -89,26 +102,47 @@ export interface BudgetedCall {
 
 /** The budgets of one caller for one run: checked before each call, added to after each call that went out. */
 export class BudgetMeter {
+  /** The approval a `needs_approval` of this run refers to, with the call it covers. */
+  pendingApproval?: PendingApproval;
   /** A count that could not be kept closes the rest of the run, since the stored counts are now short. */
   private countLost = false;
+  /** An approval covers one call of a run: the approvals calls of this run already used. */
+  private readonly usedApprovals = new Set<string>();
 
   constructor(
     private readonly store: CodeCallBudgetStore,
     private readonly caller: string,
+    private readonly approvals: ReviewApprovals,
     private readonly logger?: FrontMcpLogger,
   ) {}
 
-  /** Allow, or the answer of the first budget the caller reached; `denied` when the counts can't be read. */
-  async check(toolName: string): Promise<ReviewDecision> {
+  /** Allow, or the answer of a budget the caller reached, unless a person approved this call over each one. */
+  async check(toolName: string, args: unknown): Promise<ReviewDecision> {
     if (isBlockedSelfReference(toolName)) return ALLOW;
     if (this.countLost) return unavailableDecision(toolName);
+    let exceeded: ExceededBudget[];
     try {
-      const exceeded = await this.store.exceededBy(this.caller);
-      return exceeded ? exceededDecision(exceeded, toolName) : ALLOW;
+      exceeded = await this.store.exceededOf(this.caller);
     } catch (error: unknown) {
       this.warn('codecall: could not read the budget counts', error);
       return unavailableDecision(toolName);
     }
+    const denying = exceeded.find(({ budget }) => budget.onExceeded === 'denied');
+    if (denying) return exceededDecision(denying, toolName);
+    const call = { toolName, args };
+    const approvedIds: string[] = [];
+    for (const over of exceeded) {
+      const reference = this.approvals.budgetReferenceFor(call, over.budget.name);
+      const state = this.usedApprovals.has(reference.id) ? 'missing' : await this.approvals.stateOf(reference, false);
+      if (state === 'denied') return exceededDecision(over, toolName, true);
+      if (state !== 'approved') {
+        this.pendingApproval = { reference, call };
+        return exceededDecision(over, toolName);
+      }
+      approvedIds.push(reference.id);
+    }
+    for (const id of approvedIds) this.usedApprovals.add(id);
+    return ALLOW;
   }
 
   startCall(): BudgetedCall {
@@ -141,9 +175,10 @@ export class BudgetMeter {
 export function budgetMeterOf(
   store: CodeCallBudgetStore | undefined,
   caller: ReviewCallerContext,
+  approvals: ReviewApprovals,
   logger?: FrontMcpLogger,
 ): BudgetMeter | undefined {
-  return store && new BudgetMeter(store, budgetCallerOf(caller), logger);
+  return store && new BudgetMeter(store, budgetCallerOf(caller), approvals, logger);
 }
 
 /** Enclave's review hooks with the budgets asked first at each call, whether or not `review` is on. */
@@ -157,7 +192,7 @@ export function withBudgets(
     ...hooks,
     pre: async (input) => {
       if (input.phase === 'call') {
-        const decision = await budgets.check(input.toolName);
+        const decision = await budgets.check(input.toolName, input.args);
         if (decision.decision !== 'allow') return decision;
       }
       return reviewPre ? reviewPre(input) : ALLOW;

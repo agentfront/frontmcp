@@ -80,6 +80,13 @@ export class ReviewApprovals {
     };
   }
 
+  /** The reference for a call over a budget: that call and that budget only, apart from every review approval. */
+  budgetReferenceFor(call: { toolName: string; args: unknown }, budget: string): CodeCallApprovalReference {
+    const argumentsHash = argumentsHashOf(call.args);
+    const id = approvalIdOf({ scriptHash: this.options.scriptHash, budget, toolName: call.toolName, argumentsHash });
+    return { id, toolName: call.toolName, argumentsHash };
+  }
+
   /** Whether a person approved or refused the reference; `consume` counts the call against a grant with limits. */
   async stateOf(reference: CodeCallApprovalReference, consume: boolean): Promise<CodeCallApprovalState> {
     if (this.options.granted.has(reference.id)) return APPROVED;
