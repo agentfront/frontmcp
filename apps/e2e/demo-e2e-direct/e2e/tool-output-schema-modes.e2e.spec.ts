@@ -342,15 +342,14 @@ describe('tools/call output.undeclaredKeys (E2E)', () => {
     await expect(server.callTool('quote_strict', {})).rejects.toMatchObject({ code: 'INVALID_OUTPUT' });
   });
 
-  it('a call that renders the UI sends declared keys only, even under keep', async () => {
+  it("a call that renders the UI keeps undeclared keys under 'keep'", async () => {
     const result = await server.callTool('quote_view', {});
 
     expect(result._meta?.['ui/html']).toBeDefined();
-    expect(result.structuredContent).toEqual({ price: 10 });
-    expect(JSON.stringify(result)).not.toContain(UNDECLARED_VALUE);
+    expect(result.structuredContent).toEqual({ price: 10, quoteCostCenter: UNDECLARED_VALUE });
   });
 
-  it('a UI render for a client that takes no structuredContent sends declared keys only, even under keep', async () => {
+  it("a UI render for a client that takes no structuredContent keeps undeclared keys under 'keep'", async () => {
     const client = await connect(undeclaredKeysServerConfig, {
       clientInfo: { name: 'quote-viewer', version: '1.0.0' },
     });
@@ -358,7 +357,7 @@ describe('tools/call output.undeclaredKeys (E2E)', () => {
       const result = await client.callTool('quote_view', {});
 
       expect(JSON.stringify(result)).toContain('ui/html');
-      expect(JSON.stringify(result)).not.toContain(UNDECLARED_VALUE);
+      expect(JSON.stringify(result)).toContain(UNDECLARED_VALUE);
     } finally {
       await client.close();
     }

@@ -25,6 +25,7 @@ import {
 import { InvalidEntityError, InvalidOutputError } from '../errors';
 import { isPackageSpecifier, parsePackageSpecifier } from '../esm-loader/package-specifier';
 import { toStructuredContent } from '../utils/content.utils';
+import { resolveStructuredContentValidation } from './tool-output-policy';
 
 // Import utilities from @frontmcp/utils
 
@@ -120,7 +121,7 @@ export function toolDiscoveryDeps(rec: ToolRecord): Token[] {
  * Check if a value is already a valid CallToolResult.
  * Remote tools return CallToolResult directly, so we should pass it through as-is.
  */
-function isCallToolResult(value: unknown): value is ParsedToolResult {
+export function isCallToolResult(value: unknown): value is ParsedToolResult {
   if (typeof value !== 'object' || value === null) return false;
   const obj = value as Record<string, unknown>;
 
@@ -147,10 +148,8 @@ export function buildParsedToolResult(
   raw: unknown,
   options: OutputParseOptions = {},
 ): ParsedToolResult {
-  // If raw is already a valid CallToolResult (e.g., from remote tools), return it as-is
-  // This prevents double-wrapping of MCP-formatted responses
-  if (isCallToolResult(raw)) {
-    return raw;
+  if (isReturnedCallToolResult(descriptor, raw)) {
+    return withDeclaredStructuredContent(descriptor, raw, options);
   }
 
   const content: ContentBlock[] = [];
@@ -234,6 +233,132 @@ export function buildParsedToolResult(
   }
 
   return result;
+}
+
+/**
+ * Whether `raw` is a `CallToolResult` the tool returned, not its own data: a value with an empty `content` list and no
+ * `structuredContent` that the tool's object `outputSchema` accepts is the tool's data.
+ */
+export function isReturnedCallToolResult(descriptor: unknown, raw: unknown): raw is ParsedToolResult {
+  if (!isCallToolResult(raw)) return false;
+  if (raw.content.length > 0 || raw.structuredContent !== undefined || raw.isError) return true;
+  return !structuredOutputSchemaOf(descriptor)?.safeParse(raw).success;
+}
+
+/** The SDK's own answers that ask the model to collect an elicitation's input; they carry no `structuredContent`. */
+const elicitationFallbacks = new WeakSet<object>();
+
+/** Mark `answer` as the SDK's elicitation fallback, which `outputSchema` validation leaves as it is. */
+export function asElicitationFallback<Answer extends object>(answer: Answer): Answer {
+  elicitationFallbacks.add(answer);
+  return answer;
+}
+
+/**
+ * A CallToolResult the tool returned itself, its `structuredContent` parsed against the tool's object
+ * `outputSchema` and undeclared-keys policy, and the text block that repeats it rebuilt to match.
+ */
+function withDeclaredStructuredContent(
+  descriptor: unknown,
+  result: ParsedToolResult,
+  options: OutputParseOptions,
+): ParsedToolResult {
+  const schema = structuredOutputSchemaOf(descriptor);
+  if (!schema || result.isError || elicitationFallbacks.has(result)) return result;
+  const { structuredContent } = result;
+  const parsed = declaredStructuredContent(schema, structuredContent);
+  if ('error' in parsed) {
+    if (
+      resolveStructuredContentValidation({ validateStructuredContent: options.validateStructuredContent }) === 'enforce'
+    ) {
+      throw parsed.error;
+    }
+    options.onInvalidStructuredContent?.();
+    return result;
+  }
+  const declared = toStructuredContent(applyUndeclaredKeysPolicy(schema, structuredContent, parsed.declared, options));
+  const sent: unknown = JSON.parse(JSON.stringify(structuredContent));
+  if (isSameJson(declared, sent)) return result;
+  const content = result.content.map((block) =>
+    block.type === 'text' && repeatsJson(block.text, sent) ? { ...block, text: JSON.stringify(declared) } : block,
+  );
+  return { ...result, content, structuredContent: declared };
+}
+
+/** Whether `text` is JSON for `value`, however it is spaced or its keys are ordered. */
+function repeatsJson(text: string, value: unknown): boolean {
+  try {
+    return isSameJson(JSON.parse(text), value);
+  } catch {
+    return false;
+  }
+}
+
+function isSameJson(left: unknown, right: unknown): boolean {
+  if (left === right) return true;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return (
+      Array.isArray(left) &&
+      Array.isArray(right) &&
+      left.length === right.length &&
+      left.every((item, index) => isSameJson(item, right[index]))
+    );
+  }
+  if (!isRecord(left) || !isRecord(right)) return false;
+  const leftKeys = Object.keys(left);
+  return (
+    leftKeys.length === Object.keys(right).length &&
+    leftKeys.every((key) => Object.prototype.hasOwnProperty.call(right, key) && isSameJson(left[key], right[key]))
+  );
+}
+
+/** The declared part of a returned `structuredContent`, or why it misses the `outputSchema` (a missing one does). */
+function declaredStructuredContent(
+  schema: z.ZodType,
+  structuredContent: unknown,
+): { declared: unknown } | { error: InvalidOutputError } {
+  if (structuredContent === undefined)
+    return { error: new InvalidOutputError({ reason: 'missing structuredContent' }) };
+  try {
+    return { declared: parseDeclaredOutput(schema, structuredContent) };
+  } catch (error) {
+    return { error: error instanceof InvalidOutputError ? error : new InvalidOutputError() };
+  }
+}
+
+/** Zod wrappers whose answer has the shape of the schema they wrap. */
+const SHAPE_KEEPING_WRAPPERS: ReadonlySet<string> = new Set([
+  'readonly',
+  'optional',
+  'nullable',
+  'default',
+  'prefault',
+  'nonoptional',
+  'catch',
+]);
+
+/**
+ * Whether a schema answers a JSON object, as a `CallToolResult`'s `structuredContent` is: an object or a record, a
+ * union or an intersection of nothing else, a pipe from one, or one of them behind `z.lazy()` or a shape-keeping wrapper.
+ */
+function answersObject(schema: unknown, lazies: ReadonlySet<object> = new Set()): boolean {
+  const def = (schema as { _zod?: { def?: Record<string, unknown> } } | null | undefined)?._zod?.def;
+  if (!def) return false;
+  const type = String(def['type']);
+  if (type === 'object' || type === 'record') return true;
+  if (type === 'lazy') {
+    return !lazies.has(def) && answersObject((def['getter'] as () => unknown)(), new Set([...lazies, def]));
+  }
+  if (type === 'pipe') return answersObject(def['in'], lazies);
+  if (type === 'union') return (def['options'] as unknown[]).every((option) => answersObject(option, lazies));
+  if (type === 'intersection') return answersObject(def['left'], lazies) && answersObject(def['right'], lazies);
+  return SHAPE_KEEPING_WRAPPERS.has(type) && answersObject(def['innerType'], lazies);
+}
+
+/** The schema an output descriptor gives `structuredContent` as a whole; none for a scalar, a list or a literal. */
+function structuredOutputSchemaOf(descriptor: unknown): z.ZodType | undefined {
+  if (descriptor instanceof z.ZodType) return answersObject(descriptor) ? descriptor : undefined;
+  return !Array.isArray(descriptor) && isZodRawShape(descriptor) ? z.object(descriptor) : undefined;
 }
 
 /**
@@ -361,7 +486,16 @@ function parseSingleValue(
  * A schema with a transform is always stripped: its output cannot be compared with the answer key by key.
  */
 function parseAgainstOutputSchema(schema: z.ZodType, value: unknown, options: OutputParseOptions = {}): unknown {
-  const declared = parseDeclaredOutput(schema, value);
+  return applyUndeclaredKeysPolicy(schema, value, parseDeclaredOutput(schema, value), options);
+}
+
+/** `declared`, what the schema accepts of `value`, with the undeclared keys of `value` handled per the policy. */
+function applyUndeclaredKeysPolicy(
+  schema: z.ZodType,
+  value: unknown,
+  declared: unknown,
+  options: OutputParseOptions,
+): unknown {
   const policy = options.undeclaredKeys ?? 'strip';
   if (policy === 'strip' || hasTransform(schema)) return declared;
   const undeclaredKeys = findDroppedKeys(value, declared);

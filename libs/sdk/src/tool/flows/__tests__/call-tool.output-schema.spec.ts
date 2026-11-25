@@ -19,6 +19,7 @@ import {
   ToolContext,
   type FlowCtxOf,
   type LogRecord,
+  type OutputPolicy,
   type TemplateContext,
 } from '../../../common';
 import { InvalidOutputError } from '../../../errors';
@@ -258,6 +259,116 @@ class ShowQuoteTool extends ToolContext {
   }
 }
 
+@Tool({ name: 'get_quote_result', inputSchema: {}, outputSchema: { price: z.number() } })
+class GetQuoteResultTool extends ToolContext {
+  async execute() {
+    const content = [
+      { type: 'text', text: JSON.stringify(quoteAnswer) },
+      { type: 'text', text: 'Quote ready' },
+    ];
+    return { content, structuredContent: quoteAnswer } as unknown as { price: number };
+  }
+}
+
+@Tool({ name: 'get_off_schema_result', inputSchema: {}, outputSchema: { price: z.number() } })
+class GetOffSchemaResultTool extends ToolContext {
+  async execute() {
+    const offSchema = { price: 'ten' };
+    return {
+      content: [{ type: 'text', text: JSON.stringify(offSchema) }],
+      structuredContent: offSchema,
+    } as unknown as {
+      price: number;
+    };
+  }
+}
+
+const offSchemaResult = {
+  content: [{ type: 'text', text: '{"price":"ten"}' }],
+  structuredContent: { price: 'ten' },
+} as unknown as { price: number };
+
+/** The decorator's types take no wrapped or scalar-union schema; a cast (or JavaScript) still passes one at runtime. */
+type PriceSchema = z.ZodObject<{ price: z.ZodNumber }>;
+
+@Tool({
+  name: 'get_readonly_off_schema',
+  inputSchema: {},
+  outputSchema: z.object({ price: z.number() }).readonly() as unknown as PriceSchema,
+})
+class GetReadonlyOffSchemaTool extends ToolContext {
+  async execute() {
+    return offSchemaResult;
+  }
+}
+
+@Tool({
+  name: 'get_lazy_off_schema',
+  inputSchema: {},
+  outputSchema: z.lazy(() => z.object({ price: z.number() })) as unknown as PriceSchema,
+})
+class GetLazyOffSchemaTool extends ToolContext {
+  async execute() {
+    return offSchemaResult;
+  }
+}
+
+@Tool({
+  name: 'get_scalar_union_result',
+  inputSchema: {},
+  outputSchema: z.union([z.string(), z.number()]) as unknown as z.ZodString,
+})
+class GetScalarUnionResultTool extends ToolContext {
+  async execute() {
+    return { content: [{ type: 'text', text: 'ten' }] } as unknown as string;
+  }
+}
+
+@Tool({ name: 'list_lines', inputSchema: {}, outputSchema: { content: z.array(z.string()) } })
+class ListLinesTool extends ToolContext {
+  async execute() {
+    return { content: [] as string[] };
+  }
+}
+
+@Tool({ name: 'get_pending_claim_result', inputSchema: {}, outputSchema: { price: z.number() } })
+class GetPendingClaimResultTool extends ToolContext {
+  async execute() {
+    return {
+      content: [{ type: 'text', text: 'not a question' }],
+      _meta: { elicitationPending: { elicitId: 'made-up' } },
+    } as unknown as { price: number };
+  }
+}
+
+const quoteParses = { count: 0 };
+
+@Tool({
+  name: 'get_counted_quote',
+  inputSchema: {},
+  outputSchema: z.object({ price: z.number() }).transform((quote) => {
+    quoteParses.count++;
+    return quote;
+  }) as unknown as PriceSchema,
+})
+class GetCountedQuoteTool extends ToolContext {
+  async execute() {
+    return { price: 10 };
+  }
+}
+
+@Tool({
+  name: 'show_lines',
+  inputSchema: {},
+  outputSchema: { content: z.array(z.string()) },
+  ui: { template: (ctx: TemplateContext<unknown, { content: string[] }>) => JSON.stringify(ctx.output) },
+})
+class ShowLinesTool extends ToolContext {
+  async execute() {
+    return { content: ['first line'], linesCostCenter: 'LCC-2210' } as { content: string[] };
+  }
+}
+
 @Tool({ name: 'get_partner_quote', inputSchema: {}, outputSchema: { price: z.number() } })
 class GetPartnerQuoteTool extends ToolContext {
   async execute() {
@@ -277,7 +388,25 @@ class GetTaggedQuoteTool extends ToolContext {
   }
 }
 
-@App({ id: 'quotes', name: 'Quotes', tools: [GetQuoteTool, GetStrictQuoteTool, ShowQuoteTool, GetTaggedQuoteTool] })
+@App({
+  id: 'quotes',
+  name: 'Quotes',
+  tools: [
+    GetQuoteTool,
+    GetStrictQuoteTool,
+    ShowQuoteTool,
+    GetTaggedQuoteTool,
+    GetQuoteResultTool,
+    GetOffSchemaResultTool,
+    ShowLinesTool,
+    GetReadonlyOffSchemaTool,
+    GetLazyOffSchemaTool,
+    GetScalarUnionResultTool,
+    ListLinesTool,
+    GetPendingClaimResultTool,
+    GetCountedQuoteTool,
+  ],
+})
 class QuotesApp {}
 
 @Tool({ name: 'get_plugin_quote', inputSchema: {}, outputSchema: { price: z.number() } })
@@ -307,7 +436,7 @@ describe('tools/call undeclared output keys', () => {
     quoteWarnings.length = 0;
   });
 
-  function startServer(output?: { undeclaredKeys?: 'strip' | 'keep' | 'warn' | 'fail' }) {
+  function startServer(output?: OutputPolicy) {
     return createTestFetchServer({
       info: { name: 'undeclared-keys', version: '1.0.0' },
       apps: [QuotesApp, PartnersApp],
@@ -329,6 +458,7 @@ describe('tools/call undeclared output keys', () => {
       isError: result['isError'] === true,
       code: resultMeta?.['code'],
       structuredContent: result['structuredContent'],
+      content: result['content'],
       wire: JSON.stringify(result),
     };
   }
@@ -423,14 +553,129 @@ describe('tools/call undeclared output keys', () => {
   it.each([
     ['a client that takes structuredContent', undefined],
     ['a client that takes no structuredContent', { name: 'claude-desktop', version: '1.0.0' }],
-  ])("renders a tool's UI from declared keys only under 'keep', for %s", async (_label, clientInfo) => {
-    const server = await startServer({ undeclaredKeys: 'keep' });
+  ])("renders a tool's UI from declared keys only by default, for %s", async (_label, clientInfo) => {
+    process.env['NODE_ENV'] = 'production';
+    const server = await startServer();
 
     const result = await callQuote(server, 'show_quote', clientInfo);
 
     expect(result.isError).toBe(false);
     expect(result.wire).toContain('ui/html');
     expect(result.wire).not.toContain('QCC-4410');
+  });
+
+  it.each([
+    ['a client that takes structuredContent', undefined],
+    ['a client that takes no structuredContent', { name: 'claude-desktop', version: '1.0.0' }],
+  ])("renders a tool's UI and answers with undeclared keys under 'keep', for %s", async (_label, clientInfo) => {
+    const server = await startServer({ undeclaredKeys: 'keep' });
+
+    const result = await callQuote(server, 'show_quote', clientInfo);
+
+    expect(result.isError).toBe(false);
+    expect(result.wire).toContain('ui/html');
+    expect(result.wire).toContain('QCC-4410');
+  });
+
+  it("refuses a tool's UI answer with undeclared keys under 'fail'", async () => {
+    const server = await startServer({ undeclaredKeys: 'fail' });
+
+    expect(await callQuote(server, 'show_quote')).toMatchObject({ isError: true, code: 'INVALID_OUTPUT' });
+  });
+
+  it("parses a UI tool's own data that has a content array as data, not as a CallToolResult", async () => {
+    process.env['NODE_ENV'] = 'production';
+    const server = await startServer();
+
+    const { message } = await rpc20260728(server.handler, 'tools/call', { name: 'show_lines', arguments: {} });
+    const widgetHtml = String((message.result?.['_meta'] as Record<string, unknown> | undefined)?.['ui/html']);
+
+    expect(widgetHtml).toContain('window.__mcpToolOutput = {"content":["first line"]};');
+    expect(JSON.stringify(message)).not.toContain('LCC-2210');
+  });
+
+  it('strips the structuredContent of a CallToolResult the tool returns, and the text that repeats it', async () => {
+    process.env['NODE_ENV'] = 'production';
+    const server = await startServer();
+
+    const result = await callQuote(server, 'get_quote_result');
+
+    expect(result.structuredContent).toEqual({ price: 10 });
+    expect(result.content).toEqual([
+      { type: 'text', text: '{"price":10}' },
+      { type: 'text', text: 'Quote ready' },
+    ]);
+  });
+
+  it("keeps the undeclared keys of a CallToolResult the tool returns under 'keep'", async () => {
+    const server = await startServer({ undeclaredKeys: 'keep' });
+
+    expect((await callQuote(server, 'get_quote_result')).structuredContent).toEqual(quoteAnswer);
+  });
+
+  it('refuses a CallToolResult off its outputSchema with INVALID_OUTPUT by default', async () => {
+    const server = await startServer();
+
+    expect(await callQuote(server, 'get_off_schema_result')).toMatchObject({ isError: true, code: 'INVALID_OUTPUT' });
+  });
+
+  it("sends a CallToolResult off its outputSchema as returned under validateStructuredContent: 'warn', warning once per tool", async () => {
+    const server = await startServer({ validateStructuredContent: 'warn' });
+
+    const first = await callQuote(server, 'get_off_schema_result');
+    await callQuote(server, 'get_off_schema_result');
+
+    expect(first).toMatchObject({ isError: false, structuredContent: { price: 'ten' } });
+    const warnings = quoteWarnings.filter((line) => line.includes('get_off_schema_result'));
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("output.validateStructuredContent: 'warn'");
+  });
+
+  it.each(['get_readonly_off_schema', 'get_lazy_off_schema'])(
+    'validates the structuredContent of %s, whose object outputSchema sits behind a wrapper',
+    async (name) => {
+      const server = await startServer();
+
+      expect(await callQuote(server, name)).toMatchObject({ isError: true, code: 'INVALID_OUTPUT' });
+    },
+  );
+
+  it('sends a CallToolResult of a tool whose outputSchema is a union of scalars as returned', async () => {
+    const server = await startServer();
+
+    expect(await callQuote(server, 'get_scalar_union_result')).toMatchObject({
+      isError: false,
+      content: [{ type: 'text', text: 'ten' }],
+    });
+  });
+
+  it('answers with the data of a tool whose own output has an empty content list', async () => {
+    const server = await startServer();
+
+    expect(await callQuote(server, 'list_lines')).toMatchObject({ isError: false, structuredContent: { content: [] } });
+  });
+
+  it('validates a CallToolResult that only claims to be an elicitation question in its _meta', async () => {
+    const server = await startServer();
+
+    expect(await callQuote(server, 'get_pending_claim_result')).toMatchObject({
+      isError: true,
+      code: 'INVALID_OUTPUT',
+    });
+  });
+
+  it('parses the output of a call that renders no UI once', async () => {
+    const server = await startServer();
+    quoteParses.count = 0;
+
+    expect(await callQuote(server, 'get_counted_quote')).toMatchObject({ isError: false });
+    expect(quoteParses.count).toBe(1);
+  });
+
+  it("refuses a CallToolResult with undeclared keys under 'fail'", async () => {
+    const server = await startServer({ undeclaredKeys: 'fail' });
+
+    expect(await callQuote(server, 'get_quote_result')).toMatchObject({ isError: true, code: 'INVALID_OUTPUT' });
   });
 
   it('refuses an unknown undeclaredKeys policy at boot', async () => {

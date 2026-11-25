@@ -96,7 +96,8 @@ import { TaskNotifier } from '../../task/helpers/task-notifier';
 import { TASK_DEFAULTS, toWireShape, type TaskRecord } from '../../task/task.types';
 import { linkedAbortController } from '../../utils/abort.utils';
 import { appOwnerIdOf, hookOwnerIdOf, isServerEntryOwner } from '../../utils/lineage.utils';
-import { toolOutputPolicies } from '../tool-output-policy';
+import { resolveStructuredContentValidation, toolOutputPolicies } from '../tool-output-policy';
+import { asElicitationFallback, isReturnedCallToolResult } from '../tool.utils';
 import { toolServingMode } from '../ui/serving-mode-default';
 import { hasUIConfig, WIDGET_CALL_META_KEY } from '../ui/ui-shared';
 import { askToOpenConnectPages, credentialsRequiredErrorOf, evaluateToolCredentialGate } from './tool-credentials.gate';
@@ -268,6 +269,9 @@ const resolvedTools = new ResolvedEntries<ToolEntry>();
 /** The undeclared key paths already reported per tool, so the 'warn' policy names each one once. */
 const reportedUndeclaredKeyPaths = new WeakMap<CallToolEntry, Set<string>>();
 
+/** Tools that returned a structuredContent off their outputSchema and had it sent, so it is logged once. */
+const reportedInvalidStructuredContent = new WeakSet<CallToolEntry>();
+
 /** Tools whose answer the budget left whole because a cut broke the outputSchema, so it is logged once. */
 const reportedUnfittedTools = new WeakSet<CallToolEntry>();
 
@@ -309,6 +313,9 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   }
 
   logger = this.scopeLogger.child('CallToolFlow');
+
+  /** The output the UI renders, parsed once per call (see {@link uiOutput}). */
+  private declaredUiOutput?: { value: unknown };
 
   /** The tool's name (its `id`, else its `name`) once `findTool` resolved it, else the name the call asks for. */
   get toolName(): string {
@@ -1398,7 +1405,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
             },
           },
         };
-        toolContext.output = fallbackResponse;
+        toolContext.output = asElicitationFallback(fallbackResponse);
 
         this.logger.verbose('execute:done (elicitation fire-and-forget fallback)');
         return;
@@ -1468,8 +1475,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   @Stage('applyUI')
   async applyUI() {
     this.logger.verbose('applyUI:start');
-    const { tool, rawOutput: executeOutput, input } = this.state;
-    const rawOutput = declaredOutput(tool, executeOutput);
+    const { tool, input } = this.state;
 
     // Skip UI for calls that want the data only: an agent's tool calls, and the calls a widget
     // makes back to the server, through `ui/callServerTool` or a `tools/call` its bridge marks
@@ -1484,6 +1490,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       this.logger.verbose('applyUI:skip (no UI config)');
       return;
     }
+    const rawOutput = this.uiOutput();
 
     try {
       const scope = this.scope;
@@ -1658,9 +1665,9 @@ export default class CallToolFlow extends FlowBase<typeof name> {
    * is rendered for this call when the serving mode didn't, and goes to this caller only.
    */
   private async applyHtmlResponse(prefix: string, renderedHtml: string | undefined, platformType: AIPlatformType) {
-    const { tool, rawOutput: executeOutput, input } = this.state;
+    const { tool, input } = this.state;
     if (!tool || !this.scope.toolUI) return;
-    const rawOutput = declaredOutput(tool, executeOutput);
+    const rawOutput = this.uiOutput();
     const { buildHtmlResponseText, buildToolResponseContent, isUIRenderFailure } = await import('../ui/ui-render.js');
 
     let html = renderedHtml;
@@ -1719,9 +1726,10 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     const outputPolicies = toolOutputPolicies(tool, this.scope);
     const undeclaredKeys = resolveUndeclaredKeysPolicy(...outputPolicies);
     const parseResult = tool.safeParseOutput(rawOutput, {
-      // A call that renders the tool's UI sends declared keys only, whatever the policy
-      undeclaredKeys: uiResult && undeclaredKeys === 'keep' ? 'strip' : undeclaredKeys,
+      undeclaredKeys,
       onUndeclaredKeys: (keyPaths) => this.warnUndeclaredKeysOnce(tool, keyPaths),
+      validateStructuredContent: resolveStructuredContentValidation(...outputPolicies),
+      onInvalidStructuredContent: () => this.warnInvalidStructuredContentOnce(tool),
     });
 
     if (!parseResult.success) {
@@ -1919,6 +1927,26 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     return (schemaMode === 'definition' || schemaMode === 'both') && isObjectSchema;
   }
 
+  /** What the UI renders and echoes: what the `outputSchema` declares, and undeclared keys under 'keep'; parsed once. */
+  private uiOutput(): unknown {
+    const { tool, rawOutput } = this.state;
+    if (!tool) return rawOutput;
+    if (this.declaredUiOutput) return this.declaredUiOutput.value;
+    const keepsUndeclaredKeys = resolveUndeclaredKeysPolicy(...toolOutputPolicies(tool, this.scope)) === 'keep';
+    this.declaredUiOutput = { value: declaredOutput(tool, rawOutput, keepsUndeclaredKeys ? 'keep' : 'strip') };
+    return this.declaredUiOutput.value;
+  }
+
+  private warnInvalidStructuredContentOnce(tool: CallToolEntry): void {
+    if (reportedInvalidStructuredContent.has(tool)) return;
+    reportedInvalidStructuredContent.add(tool);
+    this.logger.warn(
+      `Tool "${tool.metadata.name}" returned a CallToolResult whose structuredContent is missing or does not ` +
+        "match its outputSchema, and output.validateStructuredContent: 'warn' sent it as returned. Without 'warn' " +
+        'such an answer is refused with INVALID_OUTPUT.',
+    );
+  }
+
   private warnUndeclaredKeysOnce(tool: CallToolEntry, keyPaths: string[]): void {
     const reportedKeyPaths = reportedUndeclaredKeyPaths.get(tool) ?? new Set<string>();
     reportedUndeclaredKeyPaths.set(tool, reportedKeyPaths);
@@ -1941,11 +1969,12 @@ export default class CallToolFlow extends FlowBase<typeof name> {
 function declaredOutput(
   tool: Pick<ToolEntry, 'outputSchema' | 'safeParseOutput'> | undefined,
   output: unknown,
+  undeclaredKeys: 'strip' | 'keep',
 ): unknown {
   if (!tool?.outputSchema || typeof output !== 'object' || output === null || Array.isArray(output)) return output;
-  if (Array.isArray((output as Record<string, unknown>)['content'])) return output;
-  const parsed = tool.safeParseOutput(output);
+  const parsed = tool.safeParseOutput(output, { undeclaredKeys });
   if (!parsed.success) return output;
+  if (isReturnedCallToolResult(tool.outputSchema, output)) return parsed.data;
   const structured = parsed.data.structuredContent;
   return typeof structured === 'object' && structured !== null && !Array.isArray(structured) ? structured : output;
 }

@@ -53,7 +53,12 @@ export function createMockScope() {
     tools: {
       getTools: jest.fn().mockReturnValue([]),
       listAllInstances: jest.fn().mockReturnValue([]),
+      lineageOf: jest.fn().mockReturnValue(undefined),
     },
+    apps: {
+      getApps: jest.fn().mockReturnValue([]),
+    },
+    metadata: {},
   };
 }
 

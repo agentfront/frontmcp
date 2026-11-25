@@ -1,9 +1,10 @@
 import { z } from '@frontmcp/lazy-zod';
 
 import { createMockOwner, createMockProviderRegistry } from '../../__test-utils__/mocks';
-import { ToolContext, ToolKind, type ToolMetadata, type ToolRecord } from '../../common';
+import { ToolContext, ToolKind, type OutputPolicy, type ToolMetadata, type ToolRecord } from '../../common';
 import { InvalidOutputError } from '../../errors';
 import { ToolInstance } from '../tool.instance';
+import { asElicitationFallback } from '../tool.utils';
 
 class AnswerTool extends ToolContext {
   async execute() {
@@ -11,13 +12,16 @@ class AnswerTool extends ToolContext {
   }
 }
 
-function toolWithOutput(outputSchema: unknown): { tool: ToolInstance } {
+function toolWithOutput(outputSchema: unknown, serverOutput?: OutputPolicy): { tool: ToolInstance } {
   const record = {
     kind: ToolKind.CLASS_TOKEN,
     provide: AnswerTool,
     metadata: { name: 'answer', inputSchema: {}, outputSchema } as unknown as ToolMetadata,
   } as unknown as ToolRecord;
-  return { tool: new ToolInstance(record, createMockProviderRegistry(), createMockOwner()) };
+  const providers = createMockProviderRegistry();
+  if (serverOutput)
+    (providers.getActiveScope() as { metadata: { output?: OutputPolicy } }).metadata.output = serverOutput;
+  return { tool: new ToolInstance(record, providers, createMockOwner()) };
 }
 
 const documentHit = z.object({ kind: z.literal('document'), title: z.string() });
@@ -303,5 +307,117 @@ describe('ToolInstance.parseOutput and undeclared keys', () => {
 
       expect(result.structuredContent).toEqual({ id: '1' });
     });
+  });
+});
+
+describe('ToolInstance.parseOutput of a CallToolResult the tool returns', () => {
+  const quote = { price: 10, costCenter: 'CC-7' };
+  const quoteResult = { content: [{ type: 'text', text: JSON.stringify(quote) }], structuredContent: quote };
+
+  it('parses its structuredContent against an object outputSchema and rebuilds the text that repeats it', () => {
+    const { tool } = toolWithOutput(z.object({ price: z.number() }));
+    const onUndeclaredKeys = jest.fn();
+
+    const result = tool.parseOutput(quoteResult, { undeclaredKeys: 'warn', onUndeclaredKeys });
+
+    expect(result).toEqual({ content: [{ type: 'text', text: '{"price":10}' }], structuredContent: { price: 10 } });
+    expect(onUndeclaredKeys).toHaveBeenCalledWith(['costCenter']);
+  });
+
+  it('leaves a result whose structuredContent has no undeclared key as it is', () => {
+    const { tool } = toolWithOutput({ price: z.number() });
+    const declaredResult = { content: [{ type: 'text', text: 'Ten' }], structuredContent: { price: 10 } };
+
+    expect(tool.parseOutput(declaredResult)).toBe(declaredResult);
+  });
+
+  it('refuses a structuredContent that does not match the outputSchema when the caller passes no policy', () => {
+    const { tool } = toolWithOutput({ price: z.string() });
+
+    expect(() => tool.parseOutput(quoteResult)).toThrow(InvalidOutputError);
+    expect(tool.safeParseOutput(quoteResult).success).toBe(false);
+  });
+
+  it("sends such a structuredContent as returned, and says so, under 'warn'", () => {
+    const { tool } = toolWithOutput({ price: z.string() });
+    const onInvalidStructuredContent = jest.fn();
+
+    expect(tool.parseOutput(quoteResult, { validateStructuredContent: 'warn', onInvalidStructuredContent })).toBe(
+      quoteResult,
+    );
+    expect(onInvalidStructuredContent).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the server's 'warn' for a caller that passes no policy, as tools/call does", () => {
+    const { tool } = toolWithOutput({ price: z.string() }, { validateStructuredContent: 'warn' });
+
+    expect(tool.parseOutput(quoteResult)).toBe(quoteResult);
+  });
+
+  it('treats a successful result without structuredContent as one that misses an object outputSchema', () => {
+    const { tool } = toolWithOutput({ price: z.number() });
+    const contentOnly = { content: [{ type: 'text', text: 'Ten' }] };
+    const onInvalidStructuredContent = jest.fn();
+
+    expect(tool.parseOutput(contentOnly, { validateStructuredContent: 'warn', onInvalidStructuredContent })).toBe(
+      contentOnly,
+    );
+    expect(onInvalidStructuredContent).toHaveBeenCalledTimes(1);
+    expect(() => tool.parseOutput(contentOnly)).toThrow(InvalidOutputError);
+  });
+
+  it("sends the SDK's elicitation fallback answer as returned, under 'enforce' too", () => {
+    const { tool } = toolWithOutput({ price: z.number() });
+    const fallback = asElicitationFallback({
+      content: [{ type: 'text', text: 'Answer first' }],
+      _meta: { elicitationPending: { elicitId: 'e-1' } },
+    });
+    const onInvalidStructuredContent = jest.fn();
+
+    expect(tool.parseOutput(fallback, { validateStructuredContent: 'enforce', onInvalidStructuredContent })).toBe(
+      fallback,
+    );
+    expect(onInvalidStructuredContent).not.toHaveBeenCalled();
+  });
+
+  it("validates a tool's own answer that only names an elicitation in its _meta", () => {
+    const { tool } = toolWithOutput({ price: z.number() });
+    const claimed = {
+      content: [{ type: 'text', text: 'Answer first' }],
+      _meta: { elicitationPending: { elicitId: 'e-1' } },
+    };
+
+    expect(() => tool.parseOutput(claimed, { validateStructuredContent: 'enforce' })).toThrow(InvalidOutputError);
+  });
+
+  it("fails with INVALID_OUTPUT when its structuredContent does not match the outputSchema under 'enforce'", () => {
+    const { tool } = toolWithOutput({ price: z.string() });
+
+    expect(() => tool.parseOutput(quoteResult, { validateStructuredContent: 'enforce' })).toThrow(InvalidOutputError);
+  });
+
+  it('rewrites a text block that repeats structuredContent as other JSON, keeping its other fields', () => {
+    const { tool } = toolWithOutput({ price: z.number() });
+    const spacedEcho = {
+      type: 'text',
+      text: '{\n  "costCenter": "CC-7",\n  "price": 10\n}',
+      annotations: { priority: 1 },
+    };
+
+    const result = tool.parseOutput({ content: [spacedEcho], structuredContent: quote });
+
+    expect(result.content).toEqual([{ type: 'text', text: '{"price":10}', annotations: { priority: 1 } }]);
+  });
+
+  it.each([
+    ['an array outputSchema', z.array(z.string()), { content: [], structuredContent: { value: ['a', 'b'] } }],
+    ['an error result', { price: z.number() }, { ...quoteResult, isError: true }],
+    ["a remote tool's result (outputSchema 'json')", 'json', quoteResult],
+    ['a scalar outputSchema', z.string(), quoteResult],
+    ['no outputSchema', undefined, quoteResult],
+  ])('sends %s as returned', (_label, outputSchema, result) => {
+    const { tool } = toolWithOutput(outputSchema);
+
+    expect(tool.parseOutput(result)).toBe(result);
   });
 });
