@@ -433,7 +433,9 @@ async execute({ ids }: { ids: string[] }) {
   memory each instance counts alone. CodeCall's reserved names are never counted.
 - **A store that fails closes.** When the budgets can't be checked (the counts or an approval can't be read), the call
   is `denied` (`budget-unavailable`), and once a count couldn't be kept, or a refused call couldn't be taken back off
-  the count, the rest of that run is too. An approval wouldn't fix a store, so it isn't asked for.
+  the count, the rest of that run is too. An approval wouldn't fix a store, so it isn't asked for. The finding names
+  the tools with effects that already ran in the script and tells the agent to send only the calls that did not run,
+  in a new script, once the store answers; a call stopped as it starts carries the same advice in its error.
 
 ## Runtime and process boundary
 

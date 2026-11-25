@@ -668,6 +668,39 @@ describe('a call stopped as it starts, with the run journal', () => {
     expect(call.refusal?.pending).toBeUndefined();
   });
 
+  it('names the tools with effects that ran when the store fails as a call starts, and says to send only the rest', async () => {
+    journal.begin('tickets.delete', { id: 1 }).succeed({ deleted: 1 });
+    journal.begin(ARCHIVE.toolName, ARCHIVE.args);
+    jest.spyOn(store, 'reserveCall').mockRejectedValueOnce(new Error('connection refused'));
+    const call = meterWithJournal().startCall(ARCHIVE);
+
+    const failure = await call.dispatch.beforeExecute().catch((error: Error) => error);
+
+    const suggestion =
+      'tickets.delete already ran in this script; once the budget store answers, send only the calls that did not run, in a new script';
+    expect(call.refusal?.decision.findings).toEqual([
+      expect.objectContaining({ rule: BUDGET_UNAVAILABLE_RULE, suggestion }),
+    ]);
+    expect(failure).toMatchObject({ code: 'RATE_LIMIT_EXCEEDED', message: expect.stringContaining(suggestion) });
+    jest.restoreAllMocks();
+  });
+
+  it('names earlier effects at the early check too, and says calls before may have run when none are known', async () => {
+    journal.begin('tickets.delete', { id: 1 }).succeed({ deleted: 1 });
+    jest.spyOn(store, 'exceededOf').mockRejectedValueOnce(new Error('connection refused'));
+    const named = await meterWithJournal().check(ARCHIVE);
+    journal = new RunJournal();
+    jest.spyOn(store, 'exceededOf').mockRejectedValueOnce(new Error('connection refused'));
+
+    const unnamed = await meterWithJournal().check(ARCHIVE);
+
+    expect(named.decision.findings?.[0]?.suggestion).toMatch(/^tickets\.delete already ran in this script; /);
+    expect(unnamed.decision.findings?.[0]?.suggestion).toBe(
+      'Calls before this one in the script may already have run; once the budget store answers, send only the calls that did not run, in a new script',
+    );
+    jest.restoreAllMocks();
+  });
+
   it('leaves out only the starting call, not an identical call running beside it', () => {
     journal.begin(ARCHIVE.toolName, ARCHIVE.args);
     journal.begin(ARCHIVE.toolName, ARCHIVE.args);

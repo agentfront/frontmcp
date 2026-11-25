@@ -46,12 +46,14 @@ function keepLineOf(ttlSeconds: number): string {
 
 const BUDGET_LINE =
   '\nBUDGETS: each caller has limits per time window, checked before each call; the calls before a stopped one ' +
-  'already ran. budget-exceeded: a budget is used up until its window resets (the finding says when); with ' +
-  'needs_approval a person may approve that one call, then send the same script again; with denied, send it after ' +
-  'the reset, also when the reason says a person refused it. approval-after-effects (needs_changes): a tool with ' +
-  'effects already ran in this script, so send the stopped call in a script of its own. budget-unavailable: the ' +
-  'budget store failed; a reset does not fix it, send it again later. A call stopped as it starts fails with ' +
-  "RATE_LIMITED and the budget reason. Other findings are the review's.";
+  'already ran, and a new script must not repeat the ones with effects. budget-exceeded: a budget is used up until ' +
+  'its window resets (the finding says when); with needs_approval a person may approve that one call, then send the ' +
+  'same script again; with denied, after the reset send the stopped call and the ones after it in a new script, ' +
+  'also when the reason says a person refused it. approval-after-effects (needs_changes): a tool with effects ' +
+  'already ran in this script, so send the stopped call in a script of its own. budget-unavailable: the budget store ' +
+  'failed, and a reset does not fix it; its finding names what already ran, and once the store answers you send ' +
+  'only the calls that did not run, in a new script. A call stopped as it starts fails with RATE_LIMITED and the ' +
+  "same advice. Other findings are the review's.";
 
 /**
  * The `codecall:execute` description for the server's resolved `vm` options, whether its `review` is on, how long

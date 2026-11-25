@@ -23,11 +23,14 @@ const UNIT_BY_COUNT: Record<CodeCallBudget['counts'], string> = {
 
 const SUGGESTION_BY_DECISION: Record<CodeCallBudget['onExceeded'], string> = {
   needs_approval: 'A person can approve this call; otherwise send it again once the window resets',
-  denied: 'Send it again once the window resets',
+  denied:
+    'Once the window resets, send this call and the ones after it in a new script, not the calls that already ran',
 };
 
 /** A script can name any string as a tool; a finding shows at most this much of it. */
 const MAX_TOOL_NAME_CHARS = 128;
+/** How many tools that already ran a finding names. */
+const MAX_NAMED_TOOLS = 10;
 const UNAVAILABLE_REASON =
   'The budgets could not be checked, so the call did not run; a window reset does not fix this';
 const REFUSED_BY_PERSON = 'a person refused to approve it';
@@ -50,9 +53,11 @@ export interface BudgetVerdict {
   pending?: PendingApproval;
 }
 
-/** What a refusal says: its reason, or the message of its first finding. */
+/** What a refusal says: its reason, or its first finding's message, with that finding's suggestion. */
 export function messageOf(decision: Exclude<ReviewDecision, { decision: 'allow' }>): string {
-  return 'reason' in decision ? decision.reason : (decision.findings[0]?.message ?? '');
+  const [finding] = decision.findings ?? [];
+  const said = 'reason' in decision ? decision.reason : (finding?.message ?? '');
+  return finding?.suggestion ? `${said} (${finding.suggestion})` : said;
 }
 
 /** Who budgets count for: the signed-in user or API key, else the verified session, else one shared anonymous bucket. */
@@ -82,7 +87,11 @@ function exceededDecision(
   };
 }
 
-function unavailableDecision(toolName: string): BudgetDecision {
+/** Once the store answers, only the calls that did not run may be sent again: the ones before may have had effects. */
+function unavailableDecision(toolName: string, ranBefore: readonly string[]): BudgetDecision {
+  const ran =
+    ranBefore.length > 0 ? `${ranBefore.slice(0, MAX_NAMED_TOOLS).join(', ')} already ran in this script` : '';
+  const before = ran || 'Calls before this one in the script may already have run';
   return {
     decision: 'denied',
     reason: UNAVAILABLE_REASON,
@@ -90,7 +99,7 @@ function unavailableDecision(toolName: string): BudgetDecision {
       {
         rule: BUDGET_UNAVAILABLE_RULE,
         message: UNAVAILABLE_REASON,
-        suggestion: 'Send the script again once the budget store answers',
+        suggestion: `${before}; once the budget store answers, send only the calls that did not run, in a new script`,
         toolName: toolName.slice(0, MAX_TOOL_NAME_CHARS),
       },
     ],
@@ -154,12 +163,12 @@ export class BudgetMeter {
   /** Early, to stop fast: allow, or a budget's answer when the call has no unspent grant over it. Spends nothing. */
   async check(call: BudgetCall): Promise<BudgetVerdict> {
     if (isBlockedSelfReference(call.toolName)) return { decision: ALLOW };
-    if (this.countLost) return { decision: unavailableDecision(call.toolName) };
+    if (this.countLost) return this.unavailable(call, false);
     try {
       return await this.verdictFor(call, await this.store.exceededOf(this.caller));
     } catch (error: unknown) {
       this.warn('codecall: could not check the budgets', error);
-      return { decision: unavailableDecision(call.toolName) };
+      return this.unavailable(call, false);
     }
   }
 
@@ -194,20 +203,20 @@ export class BudgetMeter {
 
   /** As the call enters its tool: counted at once, then kept only with grants for every budget that leaves it over. */
   private async admit(call: BudgetCall): Promise<BudgetVerdict> {
-    if (this.countLost) return { decision: unavailableDecision(call.toolName) };
+    if (this.countLost) return this.unavailable(call, true);
     const claimed: Release[] = [];
     let reservation: CallReservation | undefined;
     let admitted = false;
     try {
       reservation = await this.store.reserveCall(this.caller);
       const verdict = await this.verdictFor(call, reservation.exceeded, claimed);
-      if (this.countLost) return { decision: unavailableDecision(call.toolName) };
+      if (this.countLost) return this.unavailable(call, true);
       admitted = verdict.decision.decision === 'allow';
       return verdict;
     } catch (error: unknown) {
       this.countLost = true;
       this.warn('codecall: could not admit a call against the budgets', error);
-      return { decision: unavailableDecision(call.toolName) };
+      return this.unavailable(call, true);
     } finally {
       if (!admitted) await this.giveBack([...claimed, () => reservation?.release() ?? Promise.resolve()]);
     }
@@ -272,6 +281,12 @@ export class BudgetMeter {
       };
     }
     return undefined;
+  }
+
+  /** The answer when the budgets cannot be checked, naming the tools with effects that already ran in the run. */
+  private unavailable(call: BudgetCall, atDispatch: boolean): BudgetVerdict {
+    const ranBefore = this.approval.effectsSoFar?.(atDispatch ? call : undefined) ?? [];
+    return { decision: unavailableDecision(call.toolName, ranBefore) };
   }
 
   /** Gives back what an admission took; one that cannot be given back closes the rest of the run. */

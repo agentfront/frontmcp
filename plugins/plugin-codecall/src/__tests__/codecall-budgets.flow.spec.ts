@@ -437,7 +437,8 @@ describe('CodeCall budgets', () => {
     expect(description).toContain('send the stopped call in a script of its own');
     expect(description).toContain('BUDGETS: ');
     expect(description).toContain('the calls before a stopped one already ran');
-    expect(description).toContain('budget-unavailable: the budget store failed; a reset does not fix it');
+    expect(description).toContain('budget-unavailable: the budget store failed, and a reset does not fix it');
+    expect(description).toContain('send only the calls that did not run, in a new script');
   });
 });
 
