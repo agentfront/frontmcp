@@ -9,8 +9,11 @@ import type { CodeCallRunStore } from './run-record.store';
 /** How a run ended: the `status` of its `codecall:execute` result. */
 export type CodeCallRunStatus = CodeCallExecuteResult['status'];
 
-/** A run record's status: how the run ended, or `paused` before a call that did not run, or `cancelled` while paused. */
-export type CodeCallRunRecordStatus = CodeCallRunStatus | 'paused' | 'cancelled';
+/**
+ * A run record's status: how the run ended, or `paused` before a call that did not run, `resuming` once a resume
+ * claimed it, or `cancelled` while paused.
+ */
+export type CodeCallRunRecordStatus = CodeCallRunStatus | 'paused' | 'resuming' | 'cancelled';
 
 /** How a tool call ended; `unfinished` when the run ended while the call was still running. */
 export type CodeCallCallOutcome = 'success' | 'failure' | 'unfinished';

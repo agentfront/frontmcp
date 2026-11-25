@@ -84,8 +84,7 @@ describe('paused runs in the run store', () => {
     const claims = await Promise.all([1, 2, 3].map(() => store.claim(runId, alice, 'pause-1', 60)));
 
     expect(claims.filter(Boolean)).toHaveLength(1);
-    expect(await store.isClaimed(runId, alice, 'pause-1')).toBe(true);
-    expect(await store.isClaimed(runId, alice, 'pause-2')).toBe(false);
+    expect(await store.claim(runId, alice, 'pause-2', 60)).toBe(true);
     expect(await store.claim(runId, callerOf('session-2', 'alice'), 'pause-1', 60)).toBe(true);
   });
 
@@ -96,6 +95,31 @@ describe('paused runs in the run store', () => {
 
     expect(await store.read(runId, alice)).toBeUndefined();
     jest.restoreAllMocks();
+  });
+
+  it('fits a run whole only when keep() would keep every journal entry, at the byte where it stops', async () => {
+    const entry = {
+      position: 1,
+      tool: 'orders.get',
+      argumentsHash: 'a'.repeat(64),
+      outcome: 'success' as const,
+      durationMs: 1,
+    };
+    const run = {
+      ...pausedRun(),
+      runId: '3f0c6f7e-5d1b-4f43-9a4d-2a7c1b6e8f10',
+      journal: [entry, { ...entry, position: 2 }],
+    };
+    const metadata = { ...run, owner: { session: 'session-1', caller: 'alice' }, journal: [], omittedEntries: 2 };
+    const wholeBytes = Buffer.byteLength(JSON.stringify(metadata)) + 2 * (Buffer.byteLength(JSON.stringify(entry)) + 1);
+    const storeOf = (maxRecordBytes: number) =>
+      new CodeCallRunStore({ newHandle: () => run.runId } as unknown as ResultHandleStore, {
+        maxRecordBytes,
+        resume: true,
+      });
+
+    expect(storeOf(wholeBytes).fitsWhole(alice, run)).toBe(true);
+    expect(storeOf(wholeBytes - 1).fitsWhole(alice, run)).toBe(false);
   });
 
   it('says whether a run fits whole in runs.maxRecordBytes', () => {

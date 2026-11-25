@@ -64,10 +64,14 @@ export class CodeCallRunStore implements OnShutdown {
     return this.options.resume && hasOwner(resultOwnerOf(caller));
   }
 
-  /** Whether `run` fits in `runs.maxRecordBytes` with every journal entry, as a paused run must. */
-  fitsWhole(caller: CodeCallRunCaller, run: CodeCallRunInput): boolean {
-    const record = { runId: run.runId ?? this.handles.newHandle(), owner: resultOwnerOf(caller), ...run };
-    return jsonBytes(record) <= this.options.maxRecordBytes;
+  /** Whether `run` is kept with every journal entry, as a paused run must be: what {@link keep} would keep of it. */
+  fitsWhole(caller: CodeCallRunCaller, { runId = this.handles.newHandle(), ...run }: CodeCallRunInput): boolean {
+    try {
+      const record = fittedRecord({ runId, owner: resultOwnerOf(caller), ...run }, this.options.maxRecordBytes);
+      return record.omittedEntries === undefined;
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -81,11 +85,6 @@ export class CodeCallRunStore implements OnShutdown {
     const token = randomUUID();
     await claims.set(key, token, { ifNotExists: true, ttlSeconds });
     return (await claims.get(key)) === token;
-  }
-
-  /** Whether a resume claimed this pause of the run. */
-  async isClaimed(runId: string, caller: CodeCallRunCaller, pauseId: string): Promise<boolean> {
-    return (await this.options.claims?.exists(claimKeyOf(runId, resultOwnerOf(caller), pauseId))) === true;
   }
 
   /**

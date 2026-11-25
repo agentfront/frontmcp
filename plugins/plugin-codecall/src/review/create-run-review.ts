@@ -36,6 +36,8 @@ export interface RunReviewCaller {
   granted: ReadonlySet<string>;
   /** The journal of the run, whose calls that reached their tool are the run's effects so far. */
   journal?: RunJournal;
+  /** Only the server's reviewers, not the built-in rules: for a call the run's own review checks with the rules. */
+  reviewersOnly?: boolean;
 }
 
 /** Whether a journal entry's tool call reached its tool: it succeeded, is still running, or the tool itself failed. */
@@ -155,7 +157,9 @@ export async function createRunReview(
   };
   const hasApprovalChannel = caller.approvalService !== undefined || caller.canElicit;
   const rules =
-    options.rules === false ? undefined : new ReviewRules({ rules: options.rules, toolOf, hasApprovalChannel });
+    options.rules === false || caller.reviewersOnly
+      ? undefined
+      : new ReviewRules({ rules: options.rules, toolOf, hasApprovalChannel });
   const approvals = approvalsOf(caller, scriptHash, service);
   const effectsSoFar = effectsSoFarOf(caller, (name) => toolOf(name)?.annotations?.readOnlyHint === true);
   return new RunReview({

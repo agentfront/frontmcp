@@ -24,7 +24,7 @@ export default class CancelTool extends ToolContext {
     const runs = this.tryGet(CodeCallRunStoreToken);
     if (!runs) throw runNotFoundError(runId);
     const run = await readPausedRun(runs, runId, this);
-    await claimPausedRun(runs, run, this);
+    await claimPausedRun(runs, run, this, 0);
     const endedAt = new Date().toISOString();
     await runs.keep(this, { ...run, status: 'cancelled', endedAt, pause: undefined });
     return { runId, status: 'cancelled', startedAt: run.startedAt, endedAt, calls: run.journal.length };

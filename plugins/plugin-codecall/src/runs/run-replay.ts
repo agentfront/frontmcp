@@ -30,6 +30,23 @@ export const RUN_DIVERGED = 'RUN_DIVERGED';
 /** The clock and random values a run read. */
 type RunReads = Pick<CodeCallRunRecord, 'clock' | 'random' | 'outputs'>;
 
+/** Where the run was when a call first reached the host: what it had read and written, its operations, and when. */
+interface RunPoint {
+  clock: number;
+  random: number;
+  outputs: number;
+  operations: number;
+  at: number;
+}
+
+/**
+ * Enclave's sequence detectors and operation rate limit read the real clock, and a replay answers its recorded calls at
+ * once: a run is replayed safely only when all it did before its paused call took less than the shortest detector
+ * window (5 s), in fewer operations than the rate limit allows a second (Enclave's default, which CodeCall keeps).
+ */
+const DETECTOR_WINDOW_MS = 5000;
+const MAX_OPERATIONS_PER_SECOND = 100;
+
 const ALLOW: ReviewDecision = { decision: 'allow' };
 const PASS: PostReviewAction = { action: 'pass' };
 
@@ -53,7 +70,9 @@ export class RunReplay {
   private outputsWritten = 0;
   private readonly randomReads: number[] = [];
   private readonly recorded = new Map<number, CodeCallJournalEntry>();
-  private readonly readsAtCall = new Map<number, { clock: number; random: number; outputs: number }>();
+  private readonly pointAtCall = new Map<number, RunPoint>();
+  private readonly startedAt = Date.now();
+  private operations = 0;
   private readonly inputRefusals = new Set<number>();
   private callsReached = 0;
   private divergence?: RunDivergedError;
@@ -93,14 +112,30 @@ export class RunReplay {
   }
 
   /**
-   * The decision the call-phase hooks would give the call at `callIndex`, without asking them: the recorded refusal of
-   * a recorded call, `allow` for one that reached its tool, or undefined for a call they must decide live.
+   * The decision the call-phase hooks would give the call at `callIndex`, without asking them: the recorded refusal the
+   * script caught (`needs_changes` or `denied`), `allow` for a call that reached its tool, or for one that does not match
+   * the record (its tool handler then ends the run), or undefined for a call they must decide live.
    */
   decisionOf(callIndex: number, toolName: string, args: unknown): ReviewDecision | undefined {
     this.reached(callIndex);
     const entry = this.recorded.get(callIndex);
     if (entry) return (!mismatchOf(entry, toolName, args) && entry.decision) || ALLOW;
     return this.pendingAt(callIndex) && this.pendingMismatchOf(toolName, args) ? ALLOW : undefined;
+  }
+
+  /** Counts a call into a host function, which Enclave's rate limit counts with tool calls. */
+  hostFunctionCalled(): void {
+    this.operations++;
+  }
+
+  /**
+   * Whether replaying the run up to the call at `callIndex` stays clear of Enclave's sequence detectors and rate limit,
+   * which read the real clock: it reached that call within the shortest detector window, in fewer operations than the
+   * rate limit allows a second.
+   */
+  replaysWithinDetectors(callIndex: number): boolean {
+    const point = this.pointAtCall.get(callIndex) ?? this.pointNow();
+    return point.at - this.startedAt < DETECTOR_WINDOW_MS && point.operations < MAX_OPERATIONS_PER_SECOND;
   }
 
   /** The arguments the call at `callIndex` runs with: the agent's corrected ones for the pending call. */
@@ -114,8 +149,9 @@ export class RunReplay {
    */
   answerOf(call: ScriptToolCall | undefined, toolName: string, args: unknown): Promise<unknown> | undefined {
     if (this.divergence) return Promise.reject(this.divergence);
-    if (!call || !this.source) return undefined;
+    if (!call) return undefined;
     this.reached(call.callIndex);
+    if (!this.source) return undefined;
     const entry = this.recorded.get(call.callIndex);
     const mismatch = entry
       ? mismatchOf(entry, toolName, args)
@@ -151,10 +187,15 @@ export class RunReplay {
     return this.readsUpTo(this.clockReads.length, this.randomReads.length, this.outputsWritten);
   }
 
-  /** The clock and random values the script read, and the output it wrote, before the call at `callIndex` reached the host. */
+  /** The clock and random values the script read, and the output it wrote, before the call at `callIndex` reached the host, each kind always set. */
   readsBefore(callIndex: number): RunReads {
-    const reads = this.readsAtCall.get(callIndex);
-    return reads ? this.readsUpTo(reads.clock, reads.random, reads.outputs) : this.recordedReads();
+    const point = this.pointAtCall.get(callIndex) ?? this.pointNow();
+    return {
+      clock: undefined,
+      random: undefined,
+      outputs: undefined,
+      ...this.readsUpTo(point.clock, point.random, point.outputs),
+    };
   }
 
   /** `write`, skipped for the lines of output the run it replays already wrote: as many as it wrote, in order. */
@@ -170,10 +211,19 @@ export class RunReplay {
 
   private reached(callIndex: number): void {
     this.callsReached = Math.max(this.callsReached, callIndex + 1);
-    if (!this.readsAtCall.has(callIndex)) {
-      const outputs = this.outputsWritten;
-      this.readsAtCall.set(callIndex, { clock: this.clockReads.length, random: this.randomReads.length, outputs });
-    }
+    if (this.pointAtCall.has(callIndex)) return;
+    this.pointAtCall.set(callIndex, this.pointNow());
+    this.operations++;
+  }
+
+  private pointNow(): RunPoint {
+    return {
+      clock: this.clockReads.length,
+      random: this.randomReads.length,
+      outputs: this.outputsWritten,
+      operations: this.operations,
+      at: Date.now(),
+    };
   }
 
   private pendingAt(callIndex: number): boolean {
@@ -213,17 +263,43 @@ function callMismatchOf(recorded: CodeCallPendingCall, toolName: string, args: u
   return recorded.argumentsHash === argumentsHashOf(args) ? undefined : `to "${recorded.tool}" had other arguments`;
 }
 
+/**
+ * Whether a recorded call can be answered again: its result, the error the script got, or a refusal the script caught.
+ * A `needs_approval` stopped its run, so it is never answered from a record: its call is always asked again.
+ */
+export function isReplayable(entry: CodeCallJournalEntry): boolean {
+  if (entry.decision) return entry.decision.decision !== 'needs_approval';
+  return entry.outcome === 'success' || entry.error !== undefined;
+}
+
 /** How a call differs from the journal entry at its position, or undefined when it is the recorded call. */
 function mismatchOf(entry: CodeCallJournalEntry, toolName: string, args: unknown): string | undefined {
-  const replayable = entry.outcome === 'success' || entry.error !== undefined || entry.decision !== undefined;
   return (
-    callMismatchOf(entry, toolName, args) ?? (replayable ? undefined : `to "${entry.tool}" has no recorded result`)
+    callMismatchOf(entry, toolName, args) ??
+    (isReplayable(entry) ? undefined : `to "${entry.tool}" has no recorded result`)
   );
 }
 
-/** `environment` with its host logs quiet while the script repeats what the run it replays already wrote. */
-export function quietWhileReplaying(environment: CodeCallVmEnvironment, replay: RunReplay): CodeCallVmEnvironment {
-  return { ...environment, mcpLog: replay.quiet(environment.mcpLog), mcpNotify: replay.quiet(environment.mcpNotify) };
+/** A host function that counts its calls for the replay. */
+function counted<Args extends unknown[], Result>(
+  replay: RunReplay,
+  fn: ((...args: Args) => Result) | undefined,
+): ((...args: Args) => Result) | undefined {
+  return (
+    fn &&
+    ((...args: Args) => {
+      replay.hostFunctionCalled();
+      return fn(...args);
+    })
+  );
+}
+
+/** `environment` with its host functions counted, and its host logs quiet while the script repeats what was written. */
+export function replayedEnvironment(environment: CodeCallVmEnvironment, replay: RunReplay): CodeCallVmEnvironment {
+  const getTool = counted(replay, environment.getTool) ?? environment.getTool;
+  const mcpLog = counted(replay, replay.quiet(environment.mcpLog));
+  const mcpNotify = counted(replay, replay.quiet(environment.mcpNotify));
+  return { ...environment, getTool, mcpLog, mcpNotify };
 }
 
 /**
@@ -250,8 +326,8 @@ export async function callOrReplay(
 
 /**
  * The run's call-phase hooks (the review's and the budgets'): a call the replayed run recorded is not asked again but
- * gets its recorded decision, the pending call is asked with its corrected arguments, and a call they refuse is
- * recorded in the journal, which it never reaches otherwise.
+ * gets its recorded decision, the pending call is asked with its corrected arguments, and a call refused, live or from
+ * the record, is recorded in the journal, which it never reaches otherwise.
  */
 export function journaledReviewHooks({ pre, post, ...options }: ReviewOptions, journal: RunJournal): ReviewOptions {
   const { replay } = journal;
@@ -261,6 +337,8 @@ export function journaledReviewHooks({ pre, post, ...options }: ReviewOptions, j
       pre: async (input) => {
         if (input.phase !== 'call') return pre(input);
         const recorded = replay?.decisionOf(input.callIndex, input.toolName, input.args);
+        if (recorded && recorded.decision !== 'allow')
+          journal.refuse(input.toolName, input.args, input.callIndex, recorded);
         if (recorded) return recorded;
         const args = replay ? replay.argumentsFor(input.callIndex, input.args) : input.args;
         const decision = await pre({ ...input, args });

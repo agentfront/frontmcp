@@ -44,9 +44,9 @@ export function journalToolNameOf(tool: string): string {
   return String(tool).slice(0, MAX_TOOL_NAME_CHARS);
 }
 
-/** Journal entries without what replaying them needs (results and errors): what a run that did not pause keeps. */
+/** Journal entries without what replaying them needs (results, errors, refusals): what a run that did not pause keeps. */
 export function journalMetadataOf(entries: readonly CodeCallJournalEntry[]): CodeCallJournalEntry[] {
-  return entries.map(({ result: _result, error: _error, ...metadata }) => metadata);
+  return entries.map(({ result: _result, error: _error, decision: _decision, ...metadata }) => metadata);
 }
 
 /** A failed call's error as the script got it: its name, code and message. */

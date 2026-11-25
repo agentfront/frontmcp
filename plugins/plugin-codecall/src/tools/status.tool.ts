@@ -28,14 +28,13 @@ export default class StatusTool extends ToolContext {
     if (!runs || !record || (record.status === 'paused' && !(pause && Date.parse(pause.expiresAt) > Date.now()))) {
       throw runNotFoundError(runId);
     }
-    const resuming = pause !== undefined && (await runs.isClaimed(runId, this, pause.id));
     return {
       runId,
-      status: resuming ? 'resuming' : record.status,
+      status: record.status,
       startedAt: record.startedAt,
       endedAt: record.endedAt,
       calls: record.journal.length + (record.omittedEntries ?? 0),
-      ...(pause && !resuming && { paused: pausedAnswerOf(pause) }),
+      ...(pause && { paused: pausedAnswerOf(pause) }),
     };
   }
 }

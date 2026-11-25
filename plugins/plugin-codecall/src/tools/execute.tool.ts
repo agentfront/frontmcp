@@ -39,7 +39,7 @@ import { reviewOutcomeOf, type PendingApproval, type RunReview } from '../review
 import { withCallIdempotencyKey, type ScriptToolCall } from '../runs/call-idempotency-key';
 import { markInputRefusal, trackCallStage } from '../runs/call-stage';
 import { journalMetadataOf, jsonBytes, RunJournal } from '../runs/run-journal';
-import { pausedAnswerOf, pausedRunOf, type PausedRun } from '../runs/run-pause';
+import { pausedAnswerOf, pausedRunOf, pendingCallOf, resumeSourceOf, type PausedRun } from '../runs/run-pause';
 import type { CodeCallRunInput, CodeCallRunStore } from '../runs/run-record.store';
 import { CodeCallRunStoreToken } from '../runs/run-record.types';
 import { RUN_DIVERGED, RunReplay, type RunReplaySource } from '../runs/run-replay';
@@ -148,19 +148,19 @@ export abstract class CodeCallScriptTool extends ToolContext {
     const runs = this.tryGet(CodeCallRunStoreToken);
     const spans = this.startRunSpans(scriptHash, resolvedVm.runtime);
     const keepResults = runs?.keepsResultsOf(this) === true;
-    const newJournal = () =>
+    const newJournal = (source: RunReplaySource | undefined) =>
       new RunJournal({
         keepResults,
         keepValues: trace.values,
         observer: spans,
-        replay: keepResults ? new RunReplay(resumed?.source) : undefined,
+        replay: keepResults ? new RunReplay(source) : undefined,
       });
     const startedAt = resumed ? new Date(resumed.startedAt) : new Date();
     let attempt: ReviewedAttempt | undefined;
     let run: CodeCallRunInput | undefined;
     let runId: string | undefined;
     try {
-      attempt = await this.runApproved(input, scriptHash, newJournal);
+      attempt = await this.runApproved(input, scriptHash, newJournal, resumed?.source);
       const { result, journal, review, budgets } = attempt;
       run = {
         scriptHash,
@@ -193,19 +193,29 @@ export abstract class CodeCallScriptTool extends ToolContext {
   }
 
   /**
-   * Runs the script, and again each time a person approves, through elicitation, the call it stopped at. Without
+   * Runs the script, and each time a person approves, through elicitation, the call it stopped at, resumes it from that
+   * call, replaying the attempt that stopped (or runs it again from `source` when it could not pause there). Without
    * `review` or `budgets`, or without a client that can ask, it runs once.
    */
   private async runApproved(
     input: ExecuteToolInput,
     scriptHash: string,
-    newJournal: () => RunJournal,
+    newJournal: (source: RunReplaySource | undefined) => RunJournal,
+    source: RunReplaySource | undefined,
   ): Promise<ReviewedAttempt> {
     const reviewService = this.tryGet(CodeCallReviewService);
     const approvedByPerson = new Set<string>();
     const approvesCalls = reviewService !== undefined || this.tryGet(CodeCallBudgetStoreToken) !== undefined;
     const canElicit = approvesCalls && clientCanElicit(this.scope, this.tryGetContext());
-    let attempt = await this.attemptRun(input, scriptHash, newJournal(), reviewService, approvedByPerson, canElicit);
+    let replayed = source;
+    let attempt = await this.attemptRun(
+      input,
+      scriptHash,
+      newJournal(replayed),
+      reviewService,
+      approvedByPerson,
+      canElicit,
+    );
     for (let asked = 0; canElicit && asked < MAX_APPROVALS_ASKED; asked++) {
       const pending = pendingApprovalOf(attempt);
       if (attempt.result.status !== 'needs_approval' || !pending) break;
@@ -217,8 +227,17 @@ export abstract class CodeCallScriptTool extends ToolContext {
         };
       }
       approvedByPerson.add(pending.reference.id);
+      const pendingCall = pendingCallOf(attempt.result.status, attempt.journal);
+      if (pendingCall) replayed = resumeSourceOf(attempt.journal, pendingCall, replayed);
       attempt.journal.close();
-      attempt = await this.attemptRun(input, scriptHash, newJournal(), reviewService, approvedByPerson, canElicit);
+      attempt = await this.attemptRun(
+        input,
+        scriptHash,
+        newJournal(replayed),
+        reviewService,
+        approvedByPerson,
+        canElicit,
+      );
     }
     return attempt;
   }

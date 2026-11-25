@@ -1,5 +1,6 @@
 import { PublicMcpError } from '@frontmcp/sdk';
 
+import { journalMetadataOf } from '../runs/run-journal';
 import type { CodeCallPausedRunRecord, CodeCallRunCaller, CodeCallRunStore } from '../runs/run-record.store';
 
 /** A run the caller cannot read: it expired, was never kept, or is another caller's. */
@@ -29,14 +30,21 @@ export async function readPausedRun(
   throw runNotPausedError(runId, record.status);
 }
 
-/** Claims the run's pause for this caller, once, until it expires; a run already claimed is being resumed. */
+/**
+ * Claims the run's pause for this caller, once, and keeps the run `resuming`, so no later read takes it for paused. The
+ * claim outlives the pause by `runMs`, the time the resumed run may take; a pause that expired meanwhile is not found.
+ */
 export async function claimPausedRun(
   runs: CodeCallRunStore,
   run: CodeCallPausedRunRecord,
   caller: CodeCallRunCaller,
+  runMs: number,
 ): Promise<void> {
-  const ttlSeconds = Math.max(1, Math.ceil((Date.parse(run.pause.expiresAt) - Date.now()) / 1000));
+  const ttlSeconds = Math.max(1, Math.ceil((Date.parse(run.pause.expiresAt) - Date.now() + runMs) / 1000));
   if (!(await runs.claim(run.runId, caller, run.pause.id, ttlSeconds))) {
     throw runNotPausedError(run.runId, 'being resumed or was cancelled');
   }
+  if (!(Date.parse(run.pause.expiresAt) > Date.now())) throw runNotFoundError(run.runId);
+  const resuming = { ...run, status: 'resuming' as const, journal: journalMetadataOf(run.journal), pause: undefined };
+  await runs.keep(caller, { ...resuming, clock: undefined, random: undefined }, ttlSeconds);
 }

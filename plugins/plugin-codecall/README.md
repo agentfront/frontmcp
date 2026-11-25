@@ -164,9 +164,10 @@ SHA-256 of the arguments, the outcome (`success`, `failure` or `unfinished`), th
 the result's size. With `runs.resume` (on by default) a run also holds each call's
 result, or the error the script got, and the values the script read from `Date` and `Math.random()`, in order: what
 it takes to run the script again and answer its calls from the record (see [Replay](#replay)). It holds them in
-memory while it runs, and keeps none of them in its record, which has the journal's metadata only. A `keep` or
-`recall` is journaled too, under its reserved tool name (`codecall:keep`, `codecall:recall`) with `kind` (`'keep'` or
-`'recall'`) and the `name` it kept or read; it is not a tool call, and its arguments and result never appear in a trace.
+memory while it runs, and keeps none of them in its record, which has the journal's metadata only, unless the run
+[pauses](#pause-and-resume). A `keep` or `recall` is journaled too, under its reserved tool name (`codecall:keep`,
+`codecall:recall`) with `kind` (`'keep'` or `'recall'`) and the `name` it kept or read; it is not a tool call, and its
+arguments and result never appear in a trace.
 
 Records are kept like result handles: encrypted under keys derived from the run id and the owner, readable only by
 that owner (`this.get(CodeCallRunStoreToken).read(runId, this)`), until they expire.
@@ -223,21 +224,30 @@ runs it, `cancelled`, or how it ended), and `codecall:cancel` ends a paused run.
 - **Only before the call ran.** Whether a call reached its tool comes from FrontMCP's call flow (its input
   validation stage, and the review hooks), never from a tool's error text: a tool that throws a validation error of
   its own has run, and its run does not pause. A call that may have had an effect never pauses and is never retried.
-  So a run pauses only when its paused call is its last, every call before it settled, and its record fits whole in
-  `runs.maxRecordBytes`; a `parallel()` with calls after the paused one does not pause. A run that cannot pause
-  answers as it did before.
+  So a run pauses only when its paused call is its last, every call before it settled and none of them also asked for
+  approval (a `parallel()` that asked twice does not pause), and its record fits whole in `runs.maxRecordBytes`. A run
+  that cannot pause answers as it did before.
+- **Clear of Enclave's detectors.** Enclave's rate limit (100 operations a second) and its sequence detectors (calls
+  to one tool, a read then a send, within 5 to 30 seconds) read the real clock, and a replay answers its recorded calls
+  at once. So a run pauses only when it reached its paused call within 5 seconds of its start, in fewer than 100 tool
+  calls and host function calls: replaying them faster cannot trip a detector they passed.
 - **Once.** A resume claims the pause in the run storage, setting a key only where none is: of two resumes, on this
-  instance or another one sharing the storage, one runs the run and the other is told the run is not paused. A resume
-  that crashed leaves the run claimed: it is not run again. A storage without conditional writes (Cloudflare KV)
-  cannot claim, and its resumes fail.
+  instance or another one sharing the storage, one runs the run and the other is told the run is not paused. The run is
+  then kept `resuming` until the resumed run ends, and its claim lasts until the pause would have expired plus the
+  script's timeout. A resume that crashed leaves the run `resuming`: it is not run again. A storage without conditional
+  writes (Cloudflare KV) cannot claim, and its resumes fail.
 - **Its owner.** Only the session and caller that started the run can resume, read or cancel it; anyone else is told
   it is not found. A resume checks again that the caller may call each tool whose result it replays, and every live
-  call goes through the policy, the review and the call flow as usual.
+  call goes through the policy, the review and the call flow as usual. Corrected `arguments` go to the server's
+  reviewers first (`reviewer`, `provider`), as the one-call script `codecall:invoke` would send them; anything but
+  `allow` is the answer, and the run stays paused.
 - **Limits.** A paused run waits `runs.pause.waitSeconds` (30 minutes) and lives `runs.pause.lifetimeSeconds` (30
   minutes) from its first start, whichever ends first; after that a resume is told it is not found. The paused record
-  holds the script, encrypted with the record, to run it again; its SHA-256 must be the record's `scriptHash`.
-- **Its call-phase hooks.** A replayed call is not reviewed again and does not go through the budgets again: it gets
-  the decision the run recorded for it. The paused call is asked live, with its corrected arguments.
+  holds the script, and the results and clock and random values of the calls before the paused one, encrypted with the
+  record, to run it again; the script's SHA-256 must be the record's `scriptHash`. No other record keeps them.
+- **Its call-phase hooks.** A replayed call is not reviewed again and does not go through the budgets again: a call
+  that reached its tool is allowed, and a refusal the script caught (`needs_changes`, `denied`) is given again. A
+  `needs_approval` is never answered from a record. The paused call is asked live, with its corrected arguments.
 
 ## Keep and recall
 

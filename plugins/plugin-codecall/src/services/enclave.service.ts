@@ -12,7 +12,7 @@ import { isKeptValueCall } from '../kept-values/kept-value-script';
 import type CodeCallConfig from '../providers/code-call.config';
 import { extractionThresholdOf, MAX_ITERATIONS_PER_LOOP } from '../providers/code-call.config';
 import { RunJournal } from '../runs/run-journal';
-import { callOrReplay, journaledReviewHooks, quietWhileReplaying, type RunDivergedError } from '../runs/run-replay';
+import { callOrReplay, journaledReviewHooks, replayedEnvironment, type RunDivergedError } from '../runs/run-replay';
 import { findScriptPolicyIssues } from '../security/script-policy';
 import { toSandboxToolNamespaces } from '../utils/build-tool-namespaces';
 import { withScriptLines } from '../utils/script-lines';
@@ -322,7 +322,7 @@ export default class EnclaveService {
     }
 
     const { replay } = journal;
-    if (replay) environment = quietWhileReplaying(environment, replay);
+    if (replay) environment = replayedEnvironment(environment, replay);
     const { keptValues } = environment;
     const { script, preloadReferences } = keptValues
       ? await keptValues.prepare(code)

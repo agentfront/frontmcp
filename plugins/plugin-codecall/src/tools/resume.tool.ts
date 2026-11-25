@@ -1,6 +1,12 @@
 import { getCallSurface, Tool, type ToolEntry } from '@frontmcp/sdk';
+import { sha256Hex } from '@frontmcp/utils';
 
 import CodeCallConfig from '../providers/code-call.config';
+import { createRunReview, reviewContextOf } from '../review/create-run-review';
+import { ApprovalServiceViewToken } from '../review/review-approvals';
+import { invocationScriptOf, reviewInvocation } from '../review/review-invocation';
+import type { CodeCallReviewResult } from '../review/review-result';
+import CodeCallReviewService from '../review/review.service';
 import type { CodeCallPausedRunRecord } from '../runs/run-record.store';
 import { CodeCallRunStoreToken } from '../runs/run-record.types';
 import { checkCodeCallToolAccess, isBlockedSelfReference } from '../security';
@@ -36,13 +42,45 @@ export default class ResumeTool extends CodeCallScriptTool {
         runId,
       };
     }
-    await claimPausedRun(runs, run, this);
+    const correctionRefused = correctedArguments && (await this.reviewCorrection(run, correctedArguments));
+    if (correctionRefused) return { ...correctionRefused, runId };
+    await claimPausedRun(runs, run, this, this.get(CodeCallConfig).getAll().resolvedVm.timeoutMs);
     this.scriptRunId = runId;
     const { pause, journal, clock, random, startedAt } = run;
     return this.runAndKeep(
       { script: pause.script, allowedTools: pause.allowedTools },
       { startedAt, source: { journal, clock, random, pending: { call: pause.call, arguments: correctedArguments } } },
     );
+  }
+
+  /**
+   * The server's reviewers' answer to the corrected call, as the one-call script `codecall:invoke` would send: they judge
+   * scripts, and the stored script does not hold these arguments. Undefined when they allow it, or none are configured.
+   */
+  private async reviewCorrection(
+    run: CodeCallPausedRunRecord,
+    correctedArguments: Record<string, unknown>,
+  ): Promise<CodeCallReviewResult | undefined> {
+    const service = this.tryGet(CodeCallReviewService);
+    if (!service?.hasReviewers) return undefined;
+    const code = invocationScriptOf(run.pause.call.tool, correctedArguments);
+    const surface = getCallSurface();
+    const review = await createRunReview(
+      service,
+      {
+        scope: this.scope,
+        config: this.get(CodeCallConfig),
+        authInfo: this.authInfo,
+        surface,
+        directCall: true,
+        approvalService: this.tryGet(ApprovalServiceViewToken),
+        canElicit: false,
+        granted: new Set(),
+        reviewersOnly: true,
+      },
+      sha256Hex(code),
+    );
+    return reviewInvocation(review, code, reviewContextOf(this, surface));
   }
 
   /** A tool whose recorded result the run would replay that the caller may no longer call, as a live call would find. */

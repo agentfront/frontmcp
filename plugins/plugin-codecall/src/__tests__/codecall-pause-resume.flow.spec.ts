@@ -19,6 +19,7 @@ import {
   ToolContext,
   z,
   type CallToolResult,
+  type ConnectOptions,
   type DirectClient,
 } from '@frontmcp/sdk';
 import { mkdtemp, rm, type StorageConfig } from '@frontmcp/utils';
@@ -56,6 +57,8 @@ class NoteOrderTool extends ToolContext {
   }
 }
 
+let refundHeld: Promise<void> | undefined;
+
 @Tool({
   name: 'orders.refund',
   description: 'Refunds part of an order',
@@ -64,7 +67,55 @@ class NoteOrderTool extends ToolContext {
 class RefundOrderTool extends ToolContext {
   async execute(args: { id: string; cents: number }) {
     calls.push({ tool: 'orders.refund', args, key: this.idempotencyKey });
+    await refundHeld;
     return { refunded: args.cents };
+  }
+}
+
+@Tool({ name: 'mail.send', description: 'Sends an email', inputSchema: { to: z.string().email() } })
+class SendMailTool extends ToolContext {
+  async execute(args: { to: string }) {
+    calls.push({ tool: 'mail.send', args });
+    return { sent: args.to };
+  }
+}
+
+@Tool({
+  name: 'orders.lookup',
+  description: 'Looks an order up by number',
+  inputSchema: { number: z.number().int().positive() },
+  annotations: { readOnlyHint: true },
+})
+class LookupOrderTool extends ToolContext {
+  async execute(args: { number: number }) {
+    calls.push({ tool: 'orders.lookup', args });
+    return { id: `o${args.number}` };
+  }
+}
+
+@Tool({
+  name: 'orders.peek',
+  description: 'Peeks at an order',
+  inputSchema: { id: z.string() },
+  annotations: { readOnlyHint: true },
+})
+class PeekOrderTool extends ToolContext {
+  async execute(args: { id: string }) {
+    calls.push({ tool: 'orders.peek', args });
+    return { id: args.id };
+  }
+}
+
+@Tool({
+  name: 'orders.void',
+  description: 'Voids an order for good',
+  inputSchema: { id: z.string() },
+  annotations: { destructiveHint: true },
+})
+class VoidOrderTool extends ToolContext {
+  async execute(args: { id: string }) {
+    calls.push({ tool: 'orders.void', args });
+    return { voided: args.id };
   }
 }
 
@@ -88,11 +139,21 @@ class ReadRunTool extends ToolContext {
   }
 }
 
-function serverConfig(options: CodeCallPluginOptionsInput) {
+function serverConfig(options: CodeCallPluginOptionsInput, elicitation = false) {
   @App({
     id: 'shop',
     name: 'Shop',
-    tools: [GetOrderTool, NoteOrderTool, RefundOrderTool, StrictTool, ReadRunTool],
+    tools: [
+      GetOrderTool,
+      NoteOrderTool,
+      RefundOrderTool,
+      StrictTool,
+      ReadRunTool,
+      SendMailTool,
+      LookupOrderTool,
+      PeekOrderTool,
+      VoidOrderTool,
+    ],
     plugins: [CodeCallPlugin.init({ mode: 'codecall_only', ...options })],
   })
   class ShopApp {}
@@ -101,6 +162,7 @@ function serverConfig(options: CodeCallPluginOptionsInput) {
     info: { name: 'codecall-pause-resume', version: '1.0.0' },
     apps: [ShopApp],
     logging: { level: LogLevel.Off },
+    ...(elicitation && { elicitation: { enabled: true } }),
   };
 }
 
@@ -143,8 +205,12 @@ const PAUSING_SCRIPT =
 let dir: string;
 const clients: DirectClient[] = [];
 
-async function open(config: ReturnType<typeof serverConfig>, session: string): Promise<DirectClient> {
-  const client = await connect(config, { session: { id: session, user: { sub: 'ada' } } });
+async function open(
+  config: ReturnType<typeof serverConfig>,
+  session: string,
+  options: Omit<ConnectOptions, 'session'> = {},
+): Promise<DirectClient> {
+  const client = await connect(config, { session: { id: session, user: { sub: 'ada' } }, ...options });
   clients.push(client);
   return client;
 }
@@ -289,6 +355,63 @@ describe.each<CodeCallVmRuntime>(['node-vm', 'interpreter'])('pausing and resumi
       await call(client, 'codecall:resume', { runId: paused.runId, arguments: { id: 'o1', cents: 1250 } }),
     ).toMatchObject({ status: 'ok', result: { refunded: 1250 } });
     expect([called('orders.get'), called('orders.refund')]).toEqual([1, 1]);
+  });
+});
+
+describe.each<CodeCallVmRuntime>(['node-vm', 'interpreter'])('resuming safely on the %s runtime', (runtime) => {
+  const vm = { preset: 'secure' as const, runtime };
+
+  it("puts corrected arguments before the server's reviewers before it claims the run", async () => {
+    const reviewer = jest.fn(({ code }: { code: string }) =>
+      code.includes('evil.com')
+        ? { decision: 'denied' as const, reason: 'Mail goes to our own domain only' }
+        : { decision: 'allow' as const },
+    );
+    const client = await open(
+      serverConfig({ vm, runs: { storage: { type: 'memory' } }, review: { reviewer, policy: 'Own mail' } }),
+      `reviewers-${runtime}`,
+    );
+    const paused = await call(client, 'codecall:execute', {
+      script: "return await callTool('mail.send', { to: 'ops' });",
+    });
+    expect(paused).toMatchObject({ status: 'tool_error', paused: { call: { position: 1, tool: 'mail.send' } } });
+
+    const refused = await call(client, 'codecall:resume', { runId: paused.runId, arguments: { to: 'x@evil.com' } });
+
+    expect(refused).toMatchObject({
+      status: 'denied',
+      reason: 'Mail goes to our own domain only',
+      runId: paused.runId,
+    });
+    expect(called('mail.send')).toBe(0);
+    expect(await call(client, 'codecall:status', { runId: paused.runId })).toMatchObject({ status: 'paused' });
+    expect(
+      await call(client, 'codecall:resume', { runId: paused.runId, arguments: { to: 'ops@example.com' } }),
+    ).toMatchObject({
+      status: 'ok',
+      result: { sent: 'ops@example.com' },
+    });
+  });
+
+  it('keeps the run resuming while a resume runs it, so a second resume is refused', async () => {
+    const client = await open(serverConfig({ vm, runs: { storage: { type: 'memory' } } }), `resuming-${runtime}`);
+    const { runId } = await call(client, 'codecall:execute', { script: PAUSING_SCRIPT });
+    let release: () => void = () => undefined;
+    refundHeld = new Promise((resolve) => {
+      release = resolve;
+    });
+
+    const first = call(client, 'codecall:resume', { runId, arguments: { id: 'o1', cents: 1 } });
+    while (called('orders.refund') === 0) await new Promise((resolve) => setTimeout(resolve, 5));
+    const status = await call(client, 'codecall:status', { runId });
+    const second = await call(client, 'codecall:resume', { runId, arguments: { id: 'o1', cents: 1 } });
+    release();
+    refundHeld = undefined;
+
+    expect(status).toMatchObject({ status: 'resuming' });
+    expect(second).toMatchObject({ error: { message: expect.stringContaining('is not paused: it is resuming') } });
+    expect(await first).toMatchObject({ status: 'ok' });
+    expect(called('orders.refund')).toBe(1);
   });
 });
 
