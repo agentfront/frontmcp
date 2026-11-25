@@ -116,7 +116,13 @@ export class StorageTaskStore implements TaskStore {
     // scope by sessionId), verify the record's own sessionId.
     if (record.sessionId !== sessionId) return null;
     if (record.expiresAt && Date.now() > record.expiresAt) {
-      await this.delete(taskId, sessionId);
+      // Best effort: the expired task is answered as gone even when its index entry cannot be removed
+      await this.delete(taskId, sessionId).catch((error: unknown) =>
+        this.logger?.warn('[StorageTaskStore] failed to clean up an expired task', {
+          taskId,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
       return null;
     }
     return record;

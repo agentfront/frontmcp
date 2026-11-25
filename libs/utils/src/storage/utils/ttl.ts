@@ -96,7 +96,10 @@ export function normalizeTTL(ttl: number, unit: 'seconds' | 'milliseconds'): num
   return unit === 'milliseconds' ? Math.ceil(ttl / 1000) : ttl;
 }
 
-/** `extendTtl` for an adapter that cannot check and set in one step: never lowers the TTL it reads. */
+/**
+ * `extendTtl` for an adapter that cannot check and set in one step: never lowers the TTL it reads. `ttl()` gives whole
+ * seconds, so a key can end up to a second short of `ttlSeconds` when its remaining TTL rounds up to it.
+ */
 export async function extendTtlByReading(
   adapter: { ttl(key: string): Promise<number | null>; expire(key: string, ttlSeconds: number): Promise<boolean> },
   key: string,

@@ -223,7 +223,7 @@ describe('StorageTaskStore', () => {
 
       expect(page.tasks.map((task) => task.taskId)).toEqual(['t-2', 't-3']);
       expect(page.nextCursor).toBeUndefined();
-      expect(await storage.namespace('index-start').get('session-A')).toBe('2');
+      expect(await storage.namespace('index-start').get('session-A')).toMatch(/:2$/);
       expect(again.tasks.map((task) => task.taskId)).toEqual(['t-2', 't-3']);
     });
 
@@ -271,7 +271,7 @@ describe('StorageTaskStore', () => {
       const written = await indexed.list('session-A');
 
       expect(whileWriting.tasks.map((task) => task.taskId)).toEqual(['t-2']);
-      expect(await storage.namespace('index-start').get('session-A')).toBe('1');
+      expect(await storage.namespace('index-start').get('session-A')).toMatch(/:1$/);
       expect(written.tasks.map((task) => task.taskId)).toEqual(['in-flight', 't-2']);
     });
 
@@ -415,7 +415,7 @@ describe('StorageTaskStore', () => {
       const positionsRead = reads.mock.calls.flatMap(([keys]) => keys.filter((key) => key.includes(':index:')));
       expect(first.tasks.map((task) => task.taskId)).toEqual(['t-1', 't-42']);
       expect(again.tasks.map((task) => task.taskId)).toEqual(['t-1', 't-42']);
-      expect(await storage.namespace('index-skip').get('session-A:1')).toBe('41');
+      expect(await storage.namespace('index-skip').get('session-A:1')).toMatch(/:41$/);
       // One batch of the page size from the head, then the position after the jump, not the 40 deleted ones
       expect(positionsRead).toHaveLength(6);
     });
@@ -458,6 +458,79 @@ describe('StorageTaskStore', () => {
       jest.restoreAllMocks();
     });
 
+    it('answers an expired task as gone, and keeps listing the live ones, when its index entry cannot be removed', async () => {
+      await indexed.create(makeRecord({ taskId: 'live' }));
+      await storage
+        .namespace('records')
+        .set('session-A:stale', JSON.stringify(makeRecord({ taskId: 'stale', expiresAt: Date.now() - 1_000 })), {
+          ttlSeconds: 60,
+        });
+      const sessionIndex = await (
+        indexed as unknown as { loadSessionIndex(): Promise<TaskSessionIndex> }
+      ).loadSessionIndex();
+      jest.spyOn(sessionIndex, 'remove').mockRejectedValue(new Error('index unreachable'));
+      const scanning = new StorageTaskStore(storage, undefined, { listFrom: 'scan' });
+
+      await expect(indexed.get('stale', 'session-A')).resolves.toBeNull();
+      expect((await scanning.list('session-A')).tasks.map((task) => task.taskId)).toEqual(['live']);
+      await scanning.destroy();
+    });
+
+    it('ignores a skip remembered under an earlier count once the count started again', async () => {
+      for (const taskId of ['t-1', 't-2']) await indexed.create(makeRecord({ taskId }));
+      await indexed.delete('t-1', 'session-A');
+      await indexed.list('session-A');
+      await storage.namespace('index-count').delete('session-A');
+
+      await indexed.create(makeRecord({ taskId: 'fresh' }));
+      const page = await indexed.list('session-A');
+
+      expect(page.tasks.map((task) => task.taskId)).toContain('fresh');
+    });
+
+    it('keeps the ready marker as long as the count, so an active index never scans again', async () => {
+      await indexed.create(makeRecord({ taskId: 'kept', expiresAt: Date.now() + 1_000 }));
+      await indexed.list('session-A');
+
+      await indexed.update('kept', 'session-A', { expiresAt: Date.now() + 7_200_000 });
+
+      expect(await storage.namespace('index-ready').ttl('session-A')).toBeGreaterThan(7_000);
+    });
+
+    it('gives no task two positions when a backfill loses its claim to another, and lists each once', async () => {
+      for (const taskId of ['old-1', 'old-2', 'old-3']) await writtenByAnOlderInstance(taskId);
+      const other = new StorageTaskStore(storage, undefined, { listFrom: 'index', maxTtlMs: 1_500 });
+      const rootIncrBy = storage.root.incrBy.bind(storage.root);
+      let stolen = false;
+      jest.spyOn(storage.root, 'incrBy').mockImplementation(async (key: string, amount: number) => {
+        if (!stolen) {
+          stolen = true;
+          await storage.namespace('index-ready').delete('session-A');
+          await other.list('session-A');
+        }
+        return rootIncrBy(key, amount);
+      });
+
+      await indexed.list('session-A');
+      jest.restoreAllMocks();
+
+      const count = Number(await storage.namespace('index-count').get('session-A'));
+      const positions = await storage
+        .namespace('index')
+        .mget(Array.from({ length: count }, (_, index) => `session-A:${index + 1}`));
+      const numbered = positions.filter((taskId): taskId is string => taskId !== null);
+      expect([...numbered].sort()).toEqual(['old-1', 'old-2', 'old-3']);
+      const listed: string[] = [];
+      let cursor: string | undefined;
+      do {
+        const page = await indexed.list('session-A', { pageSize: 1, cursor });
+        listed.push(...page.tasks.map((task) => task.taskId));
+        cursor = page.nextCursor;
+      } while (cursor);
+      expect([...listed].sort()).toEqual(['old-1', 'old-2', 'old-3']);
+      await other.destroy();
+    });
+
     it('leaves unnumbered an earlier task that expires while the backfill runs', async () => {
       const realNow = Date.now.bind(Date);
       let skewMs = 0;
@@ -490,7 +563,7 @@ describe('StorageTaskStore', () => {
       const page = await indexed.list('session-A');
 
       expect(page.tasks.map((task) => task.taskId)).toEqual(['t-3']);
-      expect(await storage.namespace('index-start').get('session-A')).toBe('2');
+      expect(await storage.namespace('index-start').get('session-A')).toMatch(/:2$/);
     });
 
     it('keeps reading an empty position numbered after the last settled write, which may be a write in progress', async () => {

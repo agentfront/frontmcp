@@ -11,7 +11,8 @@ const BACKFILL_CLAIM_TTL_SECONDS = 60;
 const POSITION_WRITE_SECONDS = 60;
 /** Keys read in one `mget`, so a session with many tasks never sends one oversized command. */
 const READ_BATCH_SIZE = 500;
-const BACKFILLED = 'done';
+/** `index-ready:{session}` once the session's earlier tasks are indexed: `done:{generation}`, while its count lives. */
+const BACKFILLED = 'done:';
 
 function sessionTaskKey(sessionId: string, suffix: string | number): string {
   return `${sessionId}:${suffix}`;
@@ -41,8 +42,9 @@ export type TaskIndexPage = { tasks: TaskRecord[]; endPosition: number; position
  * the id of the `n`th task (kept an hour past it), `index-of:{session}:{taskId}` its number (gone with the task, so a
  * position whose task has none is gone for good), `index-count:{session}` the numbers used, `index-start:{session}`
  * the leading numbers whose tasks are gone, `index-skip:{session}:{n}` the last of the numbers after `n` whose tasks
- * are gone, `index-settled:{session}` a number every position up to which had been
- * written by a time (`{number}:{epoch ms}`), and `index-ready:{session}` that the session's earlier tasks were indexed.
+ * are gone (both `{generation}:{number}`, for the count they were read under), `index-settled:{session}` a number
+ * every position up to which had been written by a time (`{number}:{epoch ms}`), and `index-ready:{session}` that the
+ * session's earlier tasks were indexed (`done:{generation}`).
  */
 export class TaskSessionIndex {
   private readonly positions: NamespacedStorage;
@@ -73,6 +75,8 @@ export class TaskSessionIndex {
   /** Give a task written now the session's next number; the session's earlier tasks are indexed when it is listed. */
   async add(record: TaskRecord, ttlSeconds: number): Promise<void> {
     const position = await this.counts.incr(record.sessionId);
+    // A count that starts again is a new generation: its earlier tasks are indexed again and old skips no longer hold
+    if (position === 1) await this.readiness.delete(record.sessionId);
     await this.keepCountAlive(record.sessionId, Math.max(this.countTtlSeconds, ttlSeconds + POSITION_GRACE_SECONDS));
     await this.number(record, position, ttlSeconds);
   }
@@ -93,6 +97,8 @@ export class TaskSessionIndex {
   /** Keep the session's count at least `ttlSeconds` longer, never shorter: it outlives every position it numbered. */
   private async keepCountAlive(sessionId: string, ttlSeconds: number): Promise<void> {
     await this.counts.extendTtl(sessionId, ttlSeconds);
+    const readiness = await this.readiness.get(sessionId);
+    if (readiness?.startsWith(BACKFILLED)) await this.readiness.extendTtl(sessionId, ttlSeconds);
   }
 
   /** Mark a deleted task gone for good, so a first page may start after its position. */
@@ -105,14 +111,16 @@ export class TaskSessionIndex {
    * waits for the session's earlier tasks to be indexed; a continuation reads the positions its first page numbered.
    */
   async page(sessionId: string, startPosition: number, pageSize: number): Promise<TaskIndexPage> {
-    if (startPosition === 0 && !(await this.ensureBackfilled(sessionId))) return undefined;
+    const generation =
+      startPosition === 0 ? await this.ensureBackfilled(sessionId) : await this.generationOf(sessionId);
+    if (startPosition === 0 && generation === undefined) return undefined;
     const positionsUsed = Number((await this.counts.get(sessionId)) ?? 0);
     const writtenUpTo = await this.writtenUpTo(sessionId, positionsUsed);
     const tasks: TaskRecord[] = [];
     const listedTaskIds = new Set<string>();
     // A run of positions gone for good after the head or a live task is remembered, and later lists jump it
     let anchor = startPosition;
-    let skippedTo = await this.skippedTo(sessionId, anchor);
+    let skippedTo = await this.skippedTo(sessionId, anchor, generation);
     let goneUpTo = skippedTo;
     let runOpen = true;
     let position = skippedTo;
@@ -130,11 +138,11 @@ export class TaskSessionIndex {
           if (runOpen) goneUpTo = at;
           continue;
         }
-        if (goneUpTo > skippedTo) await this.rememberSkip(sessionId, anchor, goneUpTo);
+        if (goneUpTo > skippedTo) await this.rememberSkip(sessionId, anchor, goneUpTo, generation);
         listedTaskIds.add(record.taskId);
         tasks.push(record);
         anchor = at;
-        skippedTo = await this.skippedTo(sessionId, at);
+        skippedTo = await this.skippedTo(sessionId, at, generation);
         goneUpTo = skippedTo;
         runOpen = true;
         if (skippedTo > at && tasks.length < pageSize) {
@@ -143,25 +151,42 @@ export class TaskSessionIndex {
         }
       }
     }
-    if (goneUpTo > skippedTo) await this.rememberSkip(sessionId, anchor, goneUpTo);
+    if (goneUpTo > skippedTo) await this.rememberSkip(sessionId, anchor, goneUpTo, generation);
     return { tasks, endPosition: position, positionsUsed };
   }
 
-  /** Where a list goes on after `anchor`: past the run of positions gone for good it remembered there, if any. */
-  private async skippedTo(sessionId: string, anchor: number): Promise<number> {
+  /** The generation of the session's indexed count, or none while its earlier tasks are not indexed. */
+  private async generationOf(sessionId: string): Promise<string | undefined> {
+    const readiness = await this.readiness.get(sessionId);
+    return readiness?.startsWith(BACKFILLED) ? readiness.slice(BACKFILLED.length) : undefined;
+  }
+
+  /**
+   * Where a list goes on after `anchor`: past the run of positions gone for good it remembered there, if any, and only
+   * when it was remembered under this generation of the count.
+   */
+  private async skippedTo(sessionId: string, anchor: number, generation: string | undefined): Promise<number> {
+    if (generation === undefined) return anchor;
     const stored =
       anchor === 0 ? await this.starts.get(sessionId) : await this.skips.get(sessionTaskKey(sessionId, anchor));
-    return Math.max(anchor, Number(stored ?? 0));
+    const [storedGeneration, goneUpTo] = (stored ?? '').split(':');
+    return storedGeneration === generation ? Math.max(anchor, Number(goneUpTo)) : anchor;
   }
 
   /** The positions after `anchor` up to `goneUpTo` hold tasks gone for good: a list jumps them from now on. */
-  private async rememberSkip(sessionId: string, anchor: number, goneUpTo: number): Promise<void> {
+  private async rememberSkip(
+    sessionId: string,
+    anchor: number,
+    goneUpTo: number,
+    generation: string | undefined,
+  ): Promise<void> {
     const remaining = await this.counts.ttl(sessionId);
-    if (remaining === null || remaining <= 0) return;
+    if (generation === undefined || remaining === null || remaining <= 0) return;
+    const skip = `${generation}:${goneUpTo}`;
     if (anchor === 0) {
-      await this.starts.set(sessionId, String(goneUpTo), { ttlSeconds: remaining });
+      await this.starts.set(sessionId, skip, { ttlSeconds: remaining });
     } else {
-      await this.skips.set(sessionTaskKey(sessionId, anchor), String(goneUpTo), { ttlSeconds: remaining });
+      await this.skips.set(sessionTaskKey(sessionId, anchor), skip, { ttlSeconds: remaining });
     }
   }
 
@@ -204,37 +229,42 @@ export class TaskSessionIndex {
   }
 
   /**
-   * Index the session's tasks no number lists yet, written before the store kept an index, once: one request claims it,
-   * numbers what is missing and marks the session ready. False while another request does.
+   * Index the session's tasks no number lists yet, written before the store kept an index, once per generation of its
+   * count: one request claims it, numbers what is missing and, while the claim is still its own, marks the session
+   * ready. The generation, or none while another request does (the caller then lists from the scan).
    */
-  private async ensureBackfilled(sessionId: string): Promise<boolean> {
+  private async ensureBackfilled(sessionId: string): Promise<string | undefined> {
     const state = await this.readiness.get(sessionId);
-    if (state === BACKFILLED) return true;
-    if (state !== null) return false;
-    const claim = `running:${randomUUID()}`;
+    if (state?.startsWith(BACKFILLED)) return state.slice(BACKFILLED.length);
+    if (state !== null) return undefined;
+    const generation = randomUUID();
+    const claim = `running:${generation}`;
     await this.readiness.set(sessionId, claim, { ifNotExists: true, ttlSeconds: BACKFILL_CLAIM_TTL_SECONDS });
-    if ((await this.readiness.get(sessionId)) !== claim) return false;
-    await this.backfill(sessionId, () => this.renewClaim(sessionId, claim));
-    await this.readiness.set(sessionId, BACKFILLED, { ttlSeconds: this.countTtlSeconds });
-    return true;
+    if ((await this.readiness.get(sessionId)) !== claim) return undefined;
+    if (!(await this.backfill(sessionId, () => this.renewClaim(sessionId, claim)))) return undefined;
+    if (!(await this.renewClaim(sessionId, claim))) return undefined;
+    const remaining = await this.counts.ttl(sessionId);
+    const ttlSeconds = remaining !== null && remaining > 0 ? remaining : this.countTtlSeconds;
+    await this.readiness.set(sessionId, `${BACKFILLED}${generation}`, { ttlSeconds });
+    return generation;
   }
 
-  /** Hold the backfill claim for another {@link BACKFILL_CLAIM_TTL_SECONDS} while it is still this request's. */
-  private async renewClaim(sessionId: string, claim: string): Promise<void> {
-    if ((await this.readiness.get(sessionId)) === claim) {
-      await this.readiness.expire(sessionId, BACKFILL_CLAIM_TTL_SECONDS);
-    }
+  /** Hold the backfill claim for another {@link BACKFILL_CLAIM_TTL_SECONDS}; false once it is no longer this request's. */
+  private async renewClaim(sessionId: string, claim: string): Promise<boolean> {
+    if ((await this.readiness.get(sessionId)) !== claim) return false;
+    await this.readiness.expire(sessionId, BACKFILL_CLAIM_TTL_SECONDS);
+    return true;
   }
 
   /**
    * Number the session's live tasks that no position lists: those with no `index-of` key, or one whose position does
    * not hold the task (a request that died between the two). The records are scanned before those are read, and the
-   * claim is renewed between batches.
+   * claim is renewed between batches; false, numbering nothing more, once it was lost.
    */
-  private async backfill(sessionId: string, renewClaim: () => Promise<void>): Promise<void> {
+  private async backfill(sessionId: string, renewClaim: () => Promise<boolean>): Promise<boolean> {
     const { records, recordKey, scanSessionTaskIds } = this.source;
     const taskIds = await scanSessionTaskIds(sessionId);
-    await renewClaim();
+    if (!(await renewClaim())) return false;
     const stored = await mgetInBatches(
       (keys) => records.mget(keys),
       taskIds.map((taskId) => recordKey(sessionId, taskId)),
@@ -251,27 +281,45 @@ export class TaskSessionIndex {
       (keys) => this.positions.mget(keys),
       numbered.map((position) => sessionTaskKey(sessionId, position ?? 0)),
     );
-    const missing = live.filter((record, index) => numbered[index] === null || listedAt[index] !== record.taskId);
-    await renewClaim();
+    const missingAt = live.flatMap((record, index) =>
+      numbered[index] === null || listedAt[index] !== record.taskId ? [index] : [],
+    );
+    const missing = missingAt.map((index) => live[index]);
+    if (!(await renewClaim())) return false;
     const lastPosition = await this.counts.incrBy(sessionId, missing.length);
     // An earlier task can live longer than tasks.maxTtlMs allows now: the count outlives its position too
     const longestTtl = Math.max(0, ...missing.map((record) => expiresAtToTTL(record.expiresAt)));
     await this.keepCountAlive(sessionId, Math.max(this.countTtlSeconds, longestTtl + POSITION_GRACE_SECONDS));
     const firstPosition = lastPosition - missing.length + 1;
     for (const [offset, record] of missing.entries()) {
+      if (offset % READ_BATCH_SIZE === 0 && offset > 0 && !(await renewClaim())) return false;
       // A task that expired since it was read keeps its number unused; an empty position is skipped
       const ttlSeconds = expiresAtToTTL(record.expiresAt);
-      if (ttlSeconds > 0) await this.numberAsItIsNow(record, firstPosition + offset, ttlSeconds);
-      if ((offset + 1) % READ_BATCH_SIZE === 0) await renewClaim();
+      const staleNumber = numbered[missingAt[offset]];
+      if (ttlSeconds > 0) await this.numberEarlierTask(record, firstPosition + offset, ttlSeconds, staleNumber);
     }
+    return true;
   }
 
   /**
-   * Number an earlier task, then read it again: an update that moved its expiry later before its `index-of` key existed
-   * found nothing to extend, so the position takes the record's expiry as it is now.
+   * Number an earlier task unless another request already did (its `index-of` key is set only where none is, after
+   * dropping `staleNumber`, the number of a position that does not hold it), then read the task again: an update that
+   * moved its expiry later before its `index-of` key existed found nothing to extend.
    */
-  private async numberAsItIsNow(record: TaskRecord, position: number, ttlSeconds: number): Promise<void> {
-    await this.number(record, position, ttlSeconds);
+  private async numberEarlierTask(
+    record: TaskRecord,
+    position: number,
+    ttlSeconds: number,
+    staleNumber: string | null,
+  ): Promise<void> {
+    const { sessionId, taskId } = record;
+    const indexOfKey = sessionTaskKey(sessionId, taskId);
+    if (staleNumber !== null) await this.positionOf.deleteIfEquals(indexOfKey, staleNumber);
+    await this.positionOf.set(indexOfKey, String(position), { ttlSeconds, ifNotExists: true });
+    if ((await this.positionOf.get(indexOfKey)) !== String(position)) return;
+    await this.positions.set(sessionTaskKey(sessionId, position), taskId, {
+      ttlSeconds: ttlSeconds + POSITION_GRACE_SECONDS,
+    });
     const current = await this.source.readTask(record.taskId, record.sessionId);
     const currentTtl = current ? expiresAtToTTL(current.expiresAt) : 0;
     if (current && currentTtl > ttlSeconds) await this.extend(current, currentTtl);

@@ -8,7 +8,7 @@ export const COMPARE_AND_EXPIRE_SCRIPT = `if redis.call('GET', KEYS[1]) == ARGV[
  * Redis Lua script for `extendTtl`: gives KEYS[1] ARGV[1] seconds to live when it has no TTL or a shorter one, never
  * shortening it, returning 1 when it set the TTL and 0 otherwise (a missing key included).
  */
-export const EXTEND_TTL_SCRIPT = `local left = redis.call('TTL', KEYS[1]) if left == -2 then return 0 end if left == -1 or left < tonumber(ARGV[1]) then return redis.call('EXPIRE', KEYS[1], ARGV[1]) end return 0`;
+export const EXTEND_TTL_SCRIPT = `local left = redis.call('PTTL', KEYS[1]) if left == -2 then return 0 end if left == -1 or left < tonumber(ARGV[1]) * 1000 then return redis.call('EXPIRE', KEYS[1], ARGV[1]) end return 0`;
 
 /** Redis Lua script for `setIfEquals`: sets KEYS[1] to ARGV[2] only while it holds ARGV[1], returning 1 or 0. */
 export const COMPARE_AND_SET_SCRIPT = `if redis.call('GET', KEYS[1]) == ARGV[1] then redis.call('SET', KEYS[1], ARGV[2]) return 1 end return 0`;

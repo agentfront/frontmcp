@@ -28,6 +28,16 @@ describe('extendTtl()', () => {
       expect(await adapter.ttl('count')).toBeGreaterThan(90);
     });
 
+    it('lengthens a TTL that is shorter by less than a second', async () => {
+      const startedAt = Date.now();
+      jest.spyOn(Date, 'now').mockReturnValue(startedAt);
+      await adapter.set('count', '1', { ttlSeconds: 60 });
+      jest.spyOn(Date, 'now').mockReturnValue(startedAt + 400);
+
+      await expect(adapter.extendTtl('count', 60)).resolves.toBe(true);
+      jest.restoreAllMocks();
+    });
+
     it('gives a key without a TTL one, and does nothing for a missing key', async () => {
       await adapter.set('count', '1');
 
@@ -55,6 +65,8 @@ describe('extendTtl()', () => {
 
       await expect(adapter.extendTtl('count', 90)).resolves.toBe(true);
       expect(evalScript).toHaveBeenCalledWith(EXTEND_TTL_SCRIPT, 1, 'p:count', '90');
+      expect(EXTEND_TTL_SCRIPT).toContain("redis.call('PTTL', KEYS[1])");
+      expect(EXTEND_TTL_SCRIPT).toContain('tonumber(ARGV[1]) * 1000');
     });
   });
 

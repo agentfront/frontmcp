@@ -12,7 +12,7 @@ import type { TaskRecord } from '../../task.types';
 import { StorageTaskStore } from '../storage-task.store';
 
 const COMPARE_AND_DELETE_PREFIX = "if redis.call('GET', KEYS[1]) == ARGV[1]";
-const EXTEND_TTL_PREFIX = "local left = redis.call('TTL', KEYS[1])";
+const EXTEND_TTL_PREFIX = "local left = redis.call('PTTL', KEYS[1])";
 const DEAD_WORKER_PID = 999_999;
 
 /** The ioredis commands RedisStorageAdapter sends, kept in a Map with millisecond expiry. */
