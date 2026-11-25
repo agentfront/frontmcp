@@ -1,7 +1,7 @@
 /**
  * Replay on Enclave's real runtimes: a recorded run answers its calls from its journal without calling the tools, its
  * script reads the same clock and random values, the calls past the journal run live, and a script that makes another
- * call at a recorded position ends with a divergence.
+ * call at a recorded position, or ends before its recorded calls, ends with a divergence, unless the sandbox stopped it.
  */
 import { AgentScriptRunner } from '@enclave-vm/core/worker';
 
@@ -37,9 +37,13 @@ function environment() {
   return Object.assign(env, { callTool, mcpLog });
 }
 
-function serviceFor(runtime: 'node-vm' | 'interpreter', runtimes = createDefaultRuntimes()): EnclaveService {
+function serviceFor(
+  runtime: 'node-vm' | 'interpreter',
+  runtimes = createDefaultRuntimes(),
+  limits: { maxToolCalls?: number } = {},
+): EnclaveService {
   return new EnclaveService(
-    new CodeCallConfig({ vm: { preset: 'secure', runtime, timeoutMs: 5000 } }),
+    new CodeCallConfig({ vm: { preset: 'secure', runtime, timeoutMs: 5000, ...limits } }),
     undefined,
     runtimes,
   );
@@ -124,6 +128,42 @@ describe.each(['node-vm', 'interpreter'] as const)('replaying a run on the %s ru
       },
     });
     expect(env.callTool).not.toHaveBeenCalled();
+  });
+
+  it('ends with the refusal, not a divergence, when the sandbox stops the script before its recorded calls', async () => {
+    const first = await recordedRun();
+    const env = environment();
+
+    const refused = await serviceFor(runtime, createDefaultRuntimes(), { maxToolCalls: 1 }).execute(
+      SCRIPT,
+      env,
+      recordingJournal(first.source),
+    );
+
+    expect(refused).toMatchObject({
+      success: false,
+      error: { message: expect.stringContaining('Maximum tool call limit exceeded (1)') },
+    });
+    expect(refused.error?.code).not.toBe('RUN_DIVERGED');
+    expect(env.callTool).not.toHaveBeenCalled();
+  });
+
+  it('ends with a divergence when the script itself ends before its recorded calls', async () => {
+    const first = await recordedRun();
+
+    const diverged = await service.execute(
+      `throw new Error('Stopped early');\n${SCRIPT}`,
+      environment(),
+      recordingJournal(first.source),
+    );
+
+    expect(diverged).toMatchObject({
+      success: false,
+      error: {
+        code: 'RUN_DIVERGED',
+        message: 'The run diverged from its journal: script ended before call 3, which its run made',
+      },
+    });
   });
 
   it('keeps the review decisions of a run that diverged', async () => {

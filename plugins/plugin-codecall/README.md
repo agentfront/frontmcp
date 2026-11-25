@@ -188,7 +188,8 @@ A store that fails is logged as a warning, and the result goes out without `runI
 A run is replayed by running the same script again: each call the journal recorded gets its recorded result or error
 without its tool being called, matched by its position, and its tool and arguments must be the ones recorded. A
 script that makes another call at a recorded position, or ends before it made every recorded call, ends with a
-`runtime_error` named `RunDivergedError`, and no call after that point runs. `Date` and `Math.random()` return the
+`runtime_error` named `RunDivergedError`, and no call after that point runs. A script the sandbox stops before then (a
+detector, a limit or a timeout) ends with the sandbox's own error instead. `Date` and `Math.random()` return the
 recorded values in order, then live ones, and the script's output the first run already wrote (console lines and
 `mcpLog`) is not written to the server's log again.
 
@@ -233,8 +234,9 @@ runs it, `cancelled`, or how it ended), and `codecall:cancel` ends a paused run.
   at once. A paused record keeps when each call reached the host, and Enclave 2.21.1 and later judge the replayed calls
   by those times (`replayedCalls`), with the last of them placed at the moment the resume starts. The time between it
   and the paused call is lost: a run that passed a detector only thanks to that time (a list call, a call that took
-  more than 5 seconds, then a paused send) is stopped when resumed, and the resume answers that the run diverged. Host
-  function calls (`getTool`, `mcpLog`, `mcpNotify`) do run again, so a run pauses only after fewer than 100 of them.
+  more than 5 seconds, then a paused send) is stopped when resumed, and the resume answers with the detector's error.
+  Host function calls (`getTool`, `mcpLog`, `mcpNotify`) do run again, so a run pauses only after fewer than 100 of
+  them.
   With an older Enclave, or a record without those times, a run pauses only when it made its tool and host function
   calls up to the paused call within 5 seconds, fewer than 100 of them, and no more calls to one tool than
   `vm.rapidEnumerationThreshold` (and its overrides) allow: replaying them faster cannot trip a detector they passed.

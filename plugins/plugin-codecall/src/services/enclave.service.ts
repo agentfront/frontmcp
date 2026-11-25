@@ -115,6 +115,19 @@ const ITERATION_LIMIT_ERROR = {
   message: `${ITERATION_LIMIT_PREFIX} (${MAX_ITERATIONS_PER_LOOP}). This limit prevents infinite loops.`,
 };
 
+/** The codes Enclave gives any error a script ends with: the script's own, and the refusals of a call it throws into it. */
+const SCRIPT_ERROR_CODES = new Set(['DOUBLE_VM_EXECUTION_ERROR', 'VM_EXECUTION_ERROR']);
+
+/** How Enclave's refusals start: its detectors, rate limit, operation names, call and loop limits, and an abort. */
+const SANDBOX_REFUSAL =
+  /^(?:Suspicious pattern detected: |Operation rate limit exceeded |Operation ".*" (?:does not match allowed|matches blocked) pattern$|Maximum (?:tool call|iteration) limit exceeded|Execution aborted$)/;
+
+/** Whether Enclave stopped the script itself, never a tool: an error with a code of Enclave's own, or one of its refusals. */
+function stoppedBySandbox(error: EnclaveExecutionResult['error']): boolean {
+  if (!error || error.toolName) return false;
+  return (error.code !== undefined && !SCRIPT_ERROR_CODES.has(error.code)) || SANDBOX_REFUSAL.test(error.message);
+}
+
 /** `@enclave-vm/ast`'s message for a script that doesn't parse. */
 const PARSE_FAILURE_PREFIX = 'Failed to parse AgentScript code: ';
 
@@ -434,7 +447,7 @@ export default class EnclaveService {
       const result = await runner.run(script);
       const { pendingToolCalls } = gate.close();
       const mapped = this.mapEnclaveResult(result, logs, toolFailures, script, pendingToolCalls);
-      const divergence = replay?.divergenceOf(mapped.timedOut);
+      const divergence = replay?.divergenceOf(mapped.timedOut || stoppedBySandbox(mapped.error));
       const ended = divergence ? divergedResult(divergence, mapped) : mapped;
       return result.review ? { ...ended, review: result.review } : ended;
     } finally {

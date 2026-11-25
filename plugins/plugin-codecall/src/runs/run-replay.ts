@@ -253,10 +253,13 @@ export class RunReplay {
     return this.refusalsBeforeTool.has(callIndex);
   }
 
-  /** The divergence the run ends with, also when it ended, without timing out, before making every recorded call. */
-  divergenceOf(timedOut: boolean): RunDivergedError | undefined {
+  /**
+   * The divergence the run ends with: a recorded call made with another tool or arguments, or a script that ended before
+   * making every recorded call, unless the sandbox stopped it there (a timeout, or a refusal of its own).
+   */
+  divergenceOf(stoppedBySandbox: boolean): RunDivergedError | undefined {
     const recordedCalls = (this.source?.journal.length ?? 0) + (this.source?.pending ? 1 : 0);
-    if (this.divergence || timedOut || this.callsReached >= recordedCalls) return this.divergence;
+    if (this.divergence || stoppedBySandbox || this.callsReached >= recordedCalls) return this.divergence;
     return this.diverge(`script ended before call ${recordedCalls}, which its run made`);
   }
 
