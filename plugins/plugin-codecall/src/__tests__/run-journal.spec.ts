@@ -152,6 +152,21 @@ describe('RunJournal', () => {
     expect(callEnded).toHaveBeenCalledTimes(1);
   });
 
+  it('marks keep and recall with their kind and name, keeps the recalled value for resume, and never their values for a trace', () => {
+    const journal = new RunJournal({ keepResults: true, keepValues: true });
+    journal.begin('codecall:keep', { name: 'overdue', value: ['inv-1'] }).succeed(undefined);
+    journal.begin('codecall:recall', { name: 'overdue' }).succeed(['inv-1']);
+    journal.begin('users.get', { id: 1 }).succeed({ id: 1 });
+
+    const [keep, recall, tool] = journal.close();
+    expect(keep).toMatchObject({ tool: 'codecall:keep', kind: 'keep', name: 'overdue', outcome: 'success' });
+    expect(recall).toMatchObject({ tool: 'codecall:recall', kind: 'recall', name: 'overdue', result: ['inv-1'] });
+    expect(tool).not.toHaveProperty('kind');
+    expect(journal.valuesOf(keep)).toBeUndefined();
+    expect(journal.valuesOf(recall)).toBeUndefined();
+    expect(journal.valuesOf(tool)).toEqual({ arguments: { id: 1 }, result: { id: 1 } });
+  });
+
   it('keeps no values without keepValues', () => {
     const journal = new RunJournal();
     journal.begin('users.get', { id: 1 }).succeed({ id: 1 });

@@ -1,6 +1,7 @@
 import { canonicalJson, sha256Hex } from '@frontmcp/utils';
 
 import { TOOL_CALL_ERROR_CODES } from '../errors';
+import { keptValueCallOf } from '../kept-values/kept-value-script';
 import { toPlainJson } from '../utils/plain-json';
 import type { CodeCallCallPhase, CodeCallJournalEntry } from './run-record.types';
 
@@ -73,18 +74,20 @@ export class RunJournal {
 
   constructor(private readonly options: RunJournalOptions = {}) {}
 
-  /** Records a call as the tool handler is entered. */
+  /** Records a call as the tool handler is entered; a `keep` or `recall` never keeps its values, which are kept data. */
   begin(tool: string, args: unknown): RunJournalCall {
+    const keptValueCall = keptValueCallOf(tool, args);
     const entry: CodeCallJournalEntry = {
       position: this.entries.length + 1,
       tool: String(tool).slice(0, MAX_TOOL_NAME_CHARS),
+      ...keptValueCall,
       argumentsHash: argumentsHashOf(args),
       outcome: 'unfinished',
       durationMs: 0,
     };
     this.entries.push(entry);
     this.unsettledStartTimes.set(entry, Date.now());
-    if (this.options.keepValues) this.values.set(entry, { arguments: args });
+    if (this.options.keepValues && !keptValueCall.kind) this.values.set(entry, { arguments: args });
     this.options.observer?.callStarted(entry);
     return {
       succeed: (result) => {

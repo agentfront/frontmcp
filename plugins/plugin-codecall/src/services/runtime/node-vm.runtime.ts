@@ -20,6 +20,7 @@ import type { CreateEnclaveOptions, Enclave } from '@enclave-vm/core';
 import { CodeCallRuntimeError } from './runtime.errors';
 import {
   CODECALL_ENCLAVE_SECURITY_LEVEL,
+  runOptionsOf,
   type CodeCallScriptRunner,
   type CodeCallScriptRunSpec,
   type CodeCallScriptRuntime,
@@ -158,7 +159,7 @@ export function createNodeVmRuntime(loader: NodeVmModuleLoader = loadNodeVmModul
       }
       const enclave = createEnclave(module, toEnclaveOptions(spec));
       return {
-        run: (code) => enclave.run<unknown>(code, undefined, { reviewContext: spec.reviewContext }),
+        run: (code) => enclave.run<unknown>(code, undefined, runOptionsOf(spec)),
         dispose: () => enclave.dispose(),
       };
     },

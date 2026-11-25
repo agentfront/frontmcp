@@ -25,6 +25,7 @@ import {
 
 import {
   codeCallPluginOptionsSchema,
+  type CodeCallKeepOptions,
   type CodeCallMode,
   type CodeCallPluginOptions,
   type CodeCallPluginOptionsInput,
@@ -32,6 +33,8 @@ import {
   type CodeCallRunsOptions,
   type CodeCallToolMetadata,
 } from './codecall.types';
+import { KeptValueStore } from './kept-values/kept-value.store';
+import { KeptValueStoreToken } from './kept-values/kept-value.types';
 import CodeCallConfig from './providers/code-call.config';
 import CodeCallReviewService from './review/review.service';
 import { CodeCallRunStore } from './runs/run-record.store';
@@ -73,6 +76,19 @@ function runStoreProvider(runs: CodeCallRunsOptions): ProviderType {
   });
 }
 
+/** The store of kept values, opened when the server starts and closed when it stops. */
+function keptValueStoreProvider(keep: CodeCallKeepOptions): ProviderType {
+  const { storage, namespace, ttlSeconds, maxBytes } = keep;
+  return storeProvider({
+    name: 'codecall:kept-values',
+    provide: KeptValueStoreToken,
+    scope: ProviderScope.GLOBAL,
+    inject: () => [] as const,
+    useFactory: async () =>
+      new KeptValueStore(await createResultHandleStore({ storage, namespace, ttlSeconds }), { ttlSeconds, maxBytes }),
+  });
+}
+
 /** The review of scripts and calls, with the server's rules and reviewers. */
 function reviewServiceProvider(review: CodeCallReviewOptions): ProviderType {
   return { name: 'codecall:review', provide: CodeCallReviewService, useValue: new CodeCallReviewService(review) };
@@ -111,18 +127,19 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
     this.options = codeCallPluginOptionsSchema.parse(options);
   }
 
-  /** A `runs.storage` on Redis or SQLite, which a browser refuses at startup. */
+  /** A `runs.storage` or `keep.storage` on Redis or SQLite, which a browser refuses at startup. */
   static override browserStores(options: CodeCallPluginOptionsInput): PluginStoreInBrowser[] {
-    const { enabled, storage } = codeCallPluginOptionsSchema.parse(options).runs;
-    if (!enabled) return [];
-    const opensServerStore = storage.type === 'redis' || storage.type === 'sqlite';
-    return [
-      {
+    const { runs, keep } = codeCallPluginOptionsSchema.parse(options);
+    return Object.entries({ runs, keep })
+      .filter(([, store]) => store.enabled)
+      .map(([option, { storage }]) => ({
         plugin: 'CodeCallPlugin',
-        option: opensServerStore ? `runs.storage: { type: '${storage.type}' }` : undefined,
-        memory: "runs.storage: { type: 'memory' }",
-      },
-    ];
+        option:
+          storage.type === 'redis' || storage.type === 'sqlite'
+            ? `${option}.storage: { type: '${storage.type}' }`
+            : undefined,
+        memory: `${option}.storage: { type: 'memory' }`,
+      }));
   }
 
   /**
@@ -182,6 +199,7 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
         },
       },
       ...(parsedOptions.runs.enabled ? [runStoreProvider(parsedOptions.runs)] : []),
+      ...(parsedOptions.keep.enabled ? [keptValueStoreProvider(parsedOptions.keep)] : []),
       ...(parsedOptions.review ? [reviewServiceProvider(parsedOptions.review)] : []),
     ];
   }
@@ -201,7 +219,11 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
     );
     Reflect.defineMetadata(
       FrontMcpToolTokens.description,
-      buildExecuteToolDescription(config.resolvedVm, config.review !== undefined),
+      buildExecuteToolDescription(
+        config.resolvedVm,
+        config.review !== undefined,
+        config.keep.enabled ? config.keep.ttlSeconds : undefined,
+      ),
       ConfiguredExecuteTool,
     );
     return [

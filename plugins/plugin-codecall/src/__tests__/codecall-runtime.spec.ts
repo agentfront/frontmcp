@@ -257,6 +257,7 @@ describe('interpreter runtime', () => {
     'console',
     'rapid-enumeration',
     'review',
+    'kept-references',
   ];
 
   function fakeRunnerEntry(capabilities: readonly string[] = fullCapabilities) {
@@ -319,6 +320,7 @@ describe('interpreter runtime', () => {
           sidecar: { enabled: true },
           consoleHandler: jest.fn(),
           review: { pre: jest.fn() },
+          preloadReferences: [],
         }),
       ),
     ).toEqual([
@@ -329,6 +331,7 @@ describe('interpreter runtime', () => {
       'sidecar',
       'console',
       'review',
+      'kept-references',
     ]);
     expect(requiredCapabilities(spec({ toolNamespaces: {} }))).not.toContain('tool-namespaces');
   });
@@ -405,6 +408,19 @@ describe('interpreter runtime', () => {
     );
     await runner.run('return 1;');
     expect(run).toHaveBeenCalledWith('return 1;', undefined, { reviewContext: { session: 's-1' } });
+  });
+
+  it('gives a run the sidecar entries it starts with', async () => {
+    const preloadReferences = [
+      { id: '__REF_0b8e2f6a-1c2d-4e5f-8a9b-0c1d2e3f4a5b__', data: 'doc', source: 'tool-result' as const },
+    ];
+    const { entry, run } = fakeRunnerEntry();
+    const runner = await createInterpreterRuntime(async () => entry).createRunner(
+      spec({ sidecar: { enabled: true }, preloadReferences }),
+    );
+    await runner.run('return 1;');
+
+    expect(run).toHaveBeenCalledWith('return 1;', undefined, { reviewContext: undefined, preloadReferences });
   });
 
   it('runs raw AgentScript through the runner and disposes it', async () => {
