@@ -24,7 +24,6 @@ import {
   buildPrmUrl,
   buildUnauthorizedHeader,
   deriveAuthorizationId,
-  deriveExpectedAudience,
   deriveTypedUser,
   extractBearerToken,
   isJwt,
@@ -45,6 +44,7 @@ import {
 import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import { LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
+import { transparentTokenAudiences, type TransparentAudienceOptions } from '../transparent-audience';
 
 // Input schema
 const inputSchema = httpRequestInputSchema;
@@ -351,10 +351,11 @@ export default class AuthVerifyFlow extends FlowBase<typeof name> {
 
     // Validate audience
     const authOptionsForAudience = this.scope.auth?.options as Record<string, unknown> | undefined;
-    const expectedAudience =
-      (authOptionsForAudience?.['expectedAudience'] as string | string[] | undefined) ??
-      deriveExpectedAudience(baseUrl);
-    const expectedAudienceArray = Array.isArray(expectedAudience) ? expectedAudience : [expectedAudience];
+    const expectedAudienceArray = transparentTokenAudiences(
+      authOptionsForAudience as TransparentAudienceOptions,
+      baseUrl,
+      this.scope,
+    );
 
     const audResult = validateAudience(verifyResult.payload?.['aud'] as string | string[] | undefined, {
       expectedAudiences: expectedAudienceArray,

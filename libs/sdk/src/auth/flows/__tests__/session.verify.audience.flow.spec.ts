@@ -41,6 +41,7 @@ function createTransparentScope(
   providerJwks: { keys: JWK[] },
   expectedAudience?: string | string[],
   requireAudience?: boolean,
+  audienceFromRequestHost?: boolean,
 ) {
   const scope = createMockScopeEntry({ auth: { mode: 'transparent' } as never });
   const auth = scope.auth as unknown as Record<string, unknown>;
@@ -49,6 +50,7 @@ function createTransparentScope(
     mode: 'transparent',
     ...(expectedAudience !== undefined ? { expectedAudience } : {}),
     ...(requireAudience !== undefined ? { requireAudience } : {}),
+    ...(audienceFromRequestHost !== undefined ? { audienceFromRequestHost } : {}),
     providerConfig: { id: 'idp', jwks: providerJwks },
   };
   return scope;
@@ -61,11 +63,20 @@ async function runVerify(opts: {
   requireAudience?: boolean;
   forwardedHost?: string;
   allowedHosts?: string[];
+  protectionOff?: boolean;
+  audienceFromRequestHost?: boolean;
 }) {
-  const scope = createTransparentScope(opts.providerJwks, opts.expectedAudience, opts.requireAudience);
+  const scope = createTransparentScope(
+    opts.providerJwks,
+    opts.expectedAudience,
+    opts.requireAudience,
+    opts.audienceFromRequestHost,
+  );
   if (opts.allowedHosts) {
     const http = scope.metadata.http as Record<string, unknown>;
-    http['security'] = { dnsRebindingProtection: { allowedHosts: opts.allowedHosts } };
+    http['security'] = {
+      dnsRebindingProtection: { allowedHosts: opts.allowedHosts, ...(opts.protectionOff && { enabled: false }) },
+    };
   }
   const input = createMockHttpRequest({
     method: 'POST',
@@ -103,9 +114,22 @@ describe('SessionVerifyFlow — transparent audience validation (GHSA-hvvp-67p3-
     return jwt.sign(privateKey);
   }
 
+  /** Run with NODE_ENV set to `nodeEnv`, or unset. */
+  async function withNodeEnv<T>(nodeEnv: string | undefined, run: () => Promise<T>): Promise<T> {
+    const original = process.env['NODE_ENV'];
+    if (nodeEnv === undefined) delete process.env['NODE_ENV'];
+    else process.env['NODE_ENV'] = nodeEnv;
+    try {
+      return await run();
+    } finally {
+      process.env['NODE_ENV'] = original;
+    }
+  }
+
+  // With audienceFromRequestHost the request host decides, so these show it is the request's own Host that does.
   it('rejects a validly-signed token whose aud names a different service', async () => {
     const jwt = await mint({ sub: 'user123', aud: 'http://service-a.example' });
-    const { output } = await runVerify({ jwt, providerJwks });
+    const { output } = await runVerify({ jwt, providerJwks, audienceFromRequestHost: true });
 
     expect(output?.kind).toBe('unauthorized');
   });
@@ -115,9 +139,27 @@ describe('SessionVerifyFlow — transparent audience validation (GHSA-hvvp-67p3-
     // by spoofing X-Forwarded-Host to service-a's host. Since forwarded headers
     // are ignored by default, the expected audience stays this resource → reject.
     const jwt = await mint({ sub: 'user123', aud: 'https://service-a.example' });
-    const { output } = await runVerify({ jwt, providerJwks, forwardedHost: 'service-a.example' });
+    const { output } = await runVerify({
+      jwt,
+      providerJwks,
+      forwardedHost: 'service-a.example',
+      audienceFromRequestHost: true,
+    });
 
     expect(output?.kind).toBe('unauthorized');
+  });
+
+  it('accepts a token for a host listed in FRONTMCP_ALLOWED_HOSTS', async () => {
+    process.env['FRONTMCP_ALLOWED_HOSTS'] = `other.example, ${VICTIM_HOST.toUpperCase()}`;
+    try {
+      const jwt = await mint({ sub: 'user123', aud: VICTIM_AUDIENCE });
+      const { output, error } = await runVerify({ jwt, providerJwks });
+
+      expect(output).toBeUndefined();
+      expect(error).toBeUndefined();
+    } finally {
+      delete process.env['FRONTMCP_ALLOWED_HOSTS'];
+    }
   });
 
   it('accepts a token for the host the server is configured to answer under (allowedHosts)', async () => {
@@ -142,13 +184,67 @@ describe('SessionVerifyFlow — transparent audience validation (GHSA-hvvp-67p3-
     }
   });
 
-  it('accepts a token whose aud matches this resource (host-derived)', async () => {
+  it("refuses a token for the request's host when nothing configures the audience", async () => {
     const jwt = await mint({ sub: 'user123', aud: VICTIM_AUDIENCE });
-    const { output, error } = await runVerify({ jwt, providerJwks });
+    const { output } = await runVerify({ jwt, providerJwks });
+
+    expect(output?.kind).toBe('unauthorized');
+  });
+
+  it("refuses a token for the request's host when it is listed but DNS-rebinding protection is off", async () => {
+    const jwt = await mint({ sub: 'user123', aud: VICTIM_AUDIENCE });
+    const { output } = await runVerify({ jwt, providerJwks, allowedHosts: [VICTIM_HOST], protectionOff: true });
+
+    expect(output?.kind).toBe('unauthorized');
+  });
+
+  it("accepts a token for the request's host with audienceFromRequestHost (host-derived, as 1.12 did)", async () => {
+    const jwt = await mint({ sub: 'user123', aud: VICTIM_AUDIENCE });
+    const { output, error } = await runVerify({ jwt, providerJwks, audienceFromRequestHost: true });
 
     // No respond → the stage falls through to later stages (audience + scopes ok).
     expect(output).toBeUndefined();
     expect(error).toBeUndefined();
+  });
+
+  it("accepts a token for the server's loopback address when nothing is configured, in tests and development", async () => {
+    for (const aud of ['http://localhost:3001', 'http://127.0.0.1:3001', 'http://[::1]:3001']) {
+      const { output, error } = await runVerify({ jwt: await mint({ sub: 'user123', aud }), providerJwks });
+      expect(output).toBeUndefined();
+      expect(error).toBeUndefined();
+    }
+    const otherPort = await runVerify({
+      jwt: await mint({ sub: 'user123', aud: 'http://localhost:4000' }),
+      providerJwks,
+    });
+    expect(otherPort.output?.kind).toBe('unauthorized');
+  });
+
+  it.each([['production'], ['staging'], [undefined]])(
+    'refuses every token that names an audience when nothing is configured and NODE_ENV is %s',
+    async (nodeEnv) => {
+      await withNodeEnv(nodeEnv, async () => {
+        const loopback = await runVerify({
+          jwt: await mint({ sub: 'user123', aud: 'http://localhost:3001' }),
+          providerJwks,
+        });
+        expect(loopback.output?.kind).toBe('unauthorized');
+
+        const withoutAudience = await runVerify({ jwt: await mint({ sub: 'user123' }), providerJwks });
+        expect(withoutAudience.output).toBeUndefined();
+        expect(withoutAudience.error).toBeUndefined();
+      });
+    },
+  );
+
+  it("accepts a token for the request's host with audienceFromRequestHost in production too", async () => {
+    await withNodeEnv('production', async () => {
+      const jwt = await mint({ sub: 'user123', aud: VICTIM_AUDIENCE });
+      const { output, error } = await runVerify({ jwt, providerJwks, audienceFromRequestHost: true });
+
+      expect(output).toBeUndefined();
+      expect(error).toBeUndefined();
+    });
   });
 
   it('rejects a token whose aud is the bare, scheme-less host (broadening removed)', async () => {
@@ -156,7 +252,7 @@ describe('SessionVerifyFlow — transparent audience validation (GHSA-hvvp-67p3-
     // token bound only to `victim.example` (no scheme/path) is not accepted —
     // it could otherwise authorize at every scheme/path on that host.
     const jwt = await mint({ sub: 'user123', aud: VICTIM_HOST });
-    const { output } = await runVerify({ jwt, providerJwks });
+    const { output } = await runVerify({ jwt, providerJwks, allowedHosts: [VICTIM_HOST] });
 
     expect(output?.kind).toBe('unauthorized');
   });
@@ -178,7 +274,12 @@ describe('SessionVerifyFlow — transparent audience validation (GHSA-hvvp-67p3-
 
   it('still accepts a token whose aud matches when requireAudience is true', async () => {
     const jwt = await mint({ sub: 'user123', aud: VICTIM_AUDIENCE });
-    const { output, error } = await runVerify({ jwt, providerJwks, requireAudience: true });
+    const { output, error } = await runVerify({
+      jwt,
+      providerJwks,
+      requireAudience: true,
+      allowedHosts: [VICTIM_HOST],
+    });
 
     expect(output).toBeUndefined();
     expect(error).toBeUndefined();

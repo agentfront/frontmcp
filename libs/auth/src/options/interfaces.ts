@@ -919,6 +919,15 @@ export interface TransparentAuthOptionsInterface {
    * audience-less tokens outright — recommended when your IdP always sets `aud`.
    */
   requireAudience?: boolean;
+  /**
+   * Check a token's `aud` against the host each request names when neither `expectedAudience`,
+   * `FRONTMCP_PUBLIC_URL` nor `security.dnsRebindingProtection.allowedHosts` configures the audience, as 1.12 and
+   * earlier did. The client chooses that host, so this is only for migrating; the server warns at startup while it
+   * is set. Without it (and without those settings), a production server refuses tokens that carry an `aud`, and
+   * any other accepts only its loopback address on `http.port`.
+   * @default false
+   */
+  audienceFromRequestHost?: boolean;
   requiredScopes?: string[];
   allowAnonymous?: boolean;
   anonymousScopes?: string[];
