@@ -52,9 +52,10 @@ class FakeRedisClient {
     return this.read(key) === null ? 0 : 1;
   }
 
-  async eval(script: string, _keyCount: number, key: string, expected: string): Promise<number> {
+  async eval(script: string, _keyCount: number, key: string, expected: string, ttlSeconds?: string): Promise<number> {
     await Promise.resolve();
     if (script.startsWith(EXTEND_TTL_PREFIX)) return this.extendTtl(key, Number(expected));
+    if (script.includes("'EXPIRE'")) return this.read(key) === expected ? this.expire(key, Number(ttlSeconds)) : 0;
     if (!script.startsWith(COMPARE_AND_DELETE_PREFIX)) throw new Error('unexpected script');
     if (this.failNextCompareAndDelete) {
       this.failNextCompareAndDelete = false;

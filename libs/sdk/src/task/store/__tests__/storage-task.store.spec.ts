@@ -531,6 +531,74 @@ describe('StorageTaskStore', () => {
       await other.destroy();
     });
 
+    it('lists a task once, at the position its index-of names, when a race left it at two positions', async () => {
+      for (const taskId of ['a', 'twice', 'b']) await indexed.create(makeRecord({ taskId }));
+      await storage.namespace('index').set('session-A:4', 'twice', { ttlSeconds: 60 });
+      await storage.namespace('index-count').set('session-A', '4', { ttlSeconds: 60 });
+      await storage.namespace('index-of').set('session-A:twice', '4', { ttlSeconds: 60 });
+
+      const listed: string[] = [];
+      let cursor: string | undefined;
+      do {
+        const page = await indexed.list('session-A', { pageSize: 1, cursor });
+        listed.push(...page.tasks.map((task) => task.taskId));
+        cursor = page.nextCursor;
+      } while (cursor);
+
+      expect(listed).toEqual(['a', 'b', 'twice']);
+    });
+
+    it('keeps its backfill claim through a scan that outlasts the claim TTL', async () => {
+      jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] });
+      try {
+        await storage
+          .namespace('records')
+          .set('session-A:old-1', JSON.stringify(makeRecord({ taskId: 'old-1', expiresAt: Date.now() + 7_200_000 })), {
+            ttlSeconds: 7_200,
+          });
+        const rootKeys = storage.root.keys.bind(storage.root);
+        const scans = jest.spyOn(storage.root, 'keys').mockImplementation(async (pattern?: string) => {
+          await new Promise((resolve) => setTimeout(resolve, 70_000));
+          return rootKeys(pattern);
+        });
+
+        const listing = indexed.list('session-A');
+        await jest.advanceTimersByTimeAsync(70_000);
+        const page = await listing;
+
+        expect(page.tasks.map((task) => task.taskId)).toEqual(['old-1']);
+        expect(await storage.namespace('index-ready').get('session-A')).toMatch(/^done:/);
+        expect(scans).toHaveBeenCalledTimes(1);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('gives the count a TTL before the first increment', async () => {
+      const rootIncr = storage.root.incr.bind(storage.root);
+      const ttlsAtIncrement: Array<number | null> = [];
+      jest.spyOn(storage.root, 'incr').mockImplementation(async (key: string) => {
+        ttlsAtIncrement.push(await storage.root.ttl(key));
+        return rootIncr(key);
+      });
+
+      await indexed.create(makeRecord({ taskId: 'first' }));
+
+      expect(ttlsAtIncrement).toEqual([expect.any(Number)]);
+      expect(ttlsAtIncrement[0]).toBeGreaterThan(0);
+    });
+
+    it('keeps the ready marker of a session indexed with no tasks when its first task is written', async () => {
+      await indexed.list('session-A');
+      const scans = jest.spyOn(storage.root, 'keys');
+
+      await indexed.create(makeRecord({ taskId: 'first' }));
+      const page = await indexed.list('session-A');
+
+      expect(page.tasks.map((task) => task.taskId)).toEqual(['first']);
+      expect(scans).not.toHaveBeenCalled();
+    });
+
     it('leaves unnumbered an earlier task that expires while the backfill runs', async () => {
       const realNow = Date.now.bind(Date);
       let skewMs = 0;
@@ -558,7 +626,7 @@ describe('StorageTaskStore', () => {
         await storage.namespace('index-of').delete(`session-A:${taskId}`);
       }
       for (const position of [1, 2]) await storage.namespace('index').delete(`session-A:${position}`);
-      await storage.namespace('index-settled').set('session-A', `2:${Date.now() - 120_000}`, { ttlSeconds: 60 });
+      await storage.namespace('index-settled').set('session-A', '2', { ttlSeconds: 3_600 - 120 });
 
       const page = await indexed.list('session-A');
 
@@ -569,7 +637,7 @@ describe('StorageTaskStore', () => {
     it('keeps reading an empty position numbered after the last settled write, which may be a write in progress', async () => {
       await indexed.create(makeRecord({ taskId: 't-1' }));
       await storage.namespace('index').delete('session-A:1');
-      await storage.namespace('index-settled').set('session-A', `1:${Date.now()}`, { ttlSeconds: 60 });
+      await storage.namespace('index-settled').set('session-A', '1', { ttlSeconds: 3_600 });
 
       await indexed.list('session-A');
 
