@@ -12,6 +12,7 @@ import type { TaskRecord } from '../../task.types';
 import { StorageTaskStore } from '../storage-task.store';
 
 const COMPARE_AND_DELETE_PREFIX = "if redis.call('GET', KEYS[1]) == ARGV[1]";
+const EXTEND_TTL_PREFIX = "local left = redis.call('PTTL', KEYS[1])";
 const DEAD_WORKER_PID = 999_999;
 
 /** The ioredis commands RedisStorageAdapter sends, kept in a Map with millisecond expiry. */
@@ -53,6 +54,7 @@ class FakeRedisClient {
 
   async eval(script: string, _keyCount: number, key: string, expected: string): Promise<number> {
     await Promise.resolve();
+    if (script.startsWith(EXTEND_TTL_PREFIX)) return this.extendTtl(key, Number(expected));
     if (!script.startsWith(COMPARE_AND_DELETE_PREFIX)) throw new Error('unexpected script');
     if (this.failNextCompareAndDelete) {
       this.failNextCompareAndDelete = false;
@@ -61,6 +63,44 @@ class FakeRedisClient {
     if (this.read(key) !== expected) return 0;
     this.entries.delete(key);
     return 1;
+  }
+
+  /** As the extend-TTL script: a TTL is set when the key has none or a shorter one, in one step. */
+  private extendTtl(key: string, ttlSeconds: number): number {
+    const entry = this.liveEntry(key);
+    const wanted = Date.now() + ttlSeconds * 1000;
+    if (!entry || (entry.expiresAt !== undefined && entry.expiresAt >= wanted)) return 0;
+    entry.expiresAt = wanted;
+    return 1;
+  }
+
+  async incr(key: string): Promise<number> {
+    return this.incrby(key, 1);
+  }
+
+  /** As Redis: a missing key counts from 0, and the key keeps its TTL. */
+  async incrby(key: string, amount: number): Promise<number> {
+    await Promise.resolve();
+    const entry = this.liveEntry(key);
+    const next = Number(entry?.value ?? 0) + amount;
+    this.entries.set(key, { value: String(next), expiresAt: entry?.expiresAt });
+    return next;
+  }
+
+  async expire(key: string, ttlSeconds: number): Promise<number> {
+    await Promise.resolve();
+    const entry = this.liveEntry(key);
+    if (!entry) return 0;
+    entry.expiresAt = Date.now() + ttlSeconds * 1000;
+    return 1;
+  }
+
+  /** As Redis: -2 for a missing key, -1 for a key without a TTL, else the seconds left. */
+  async ttl(key: string): Promise<number> {
+    await Promise.resolve();
+    const entry = this.liveEntry(key);
+    if (!entry) return -2;
+    return entry.expiresAt === undefined ? -1 : Math.round((entry.expiresAt - Date.now()) / 1000);
   }
 
   async publish(): Promise<number> {
@@ -72,6 +112,10 @@ class FakeRedisClient {
     const prefix = pattern.endsWith('*') ? pattern.slice(0, -1) : pattern;
     const keys = [...this.entries.keys()].filter((key) => key.startsWith(prefix) && this.read(key) !== null);
     return ['0', keys];
+  }
+
+  private liveEntry(key: string): { value: string; expiresAt?: number } | undefined {
+    return this.read(key) === null ? undefined : this.entries.get(key);
   }
 
   private read(key: string): string | null {

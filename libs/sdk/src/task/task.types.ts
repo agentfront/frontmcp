@@ -27,6 +27,13 @@ export const TASK_DEFAULTS = {
   maxConcurrentPerSession: 16,
 } as const;
 
+/**
+ * Where `tasks/list` reads a session's tasks: `'index'` (the default since 1.13) the per-session index every task write
+ * keeps, `'scan'` every stored task key. A task an instance from before the index writes has no index entry, so a
+ * deployment upgrading from such a version lists from `'scan'` until every instance writes the index.
+ */
+export type TaskListSource = 'scan' | 'index';
+
 /** Upper bound of `tasks.maxConcurrentPerSession`: a capped task creation reads that many slot keys in one MGET. */
 export const MAX_CONCURRENT_TASKS_PER_SESSION = 1000;
 

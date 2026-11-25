@@ -21,13 +21,13 @@ import {
 } from './helpers/browser-bundle';
 
 const BUDGETS: Array<{ entry: string; label: string; maxBytes: number }> = [
-  // +990 / +991 bytes (#1348): ctx.resolveResource and ctx.removeTool let a hook stand in for a stage
-  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_342_768 },
-  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_350_000 },
+  // +141 bytes each (#1315): an expired task's index cleanup is best-effort, and the index's skips and ready marker follow its count
+  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_344_519 },
+  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_351_750 },
 ];
 
-// +36 bytes (#1345): tools/list and tools/call hold back a tool meant for the MCP Apps page, also from a client without clientInfo
-const VITE_INITIAL_CHUNK_MAX_BYTES = 785_122;
+// +372 bytes (#1315): the task index never shortens a TTL (an atomic extendTtl in the storage adapters) and jumps runs of gone tasks
+const VITE_INITIAL_CHUNK_MAX_BYTES = 785_598;
 
 // What create() never needs: the parser behind @enclave-vm/ast (#885), the MCP client (#886) and server-only code
 const NEVER_BUNDLED: Record<string, RegExp> = {

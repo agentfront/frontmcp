@@ -3,7 +3,7 @@ import { guardConfigSchema, type GuardConfig } from '@frontmcp/guard';
 import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import type { ServerManifest } from '../../manifest/server-manifest.schema';
-import { MAX_CONCURRENT_TASKS_PER_SESSION } from '../../task/task.types';
+import { MAX_CONCURRENT_TASKS_PER_SESSION, type TaskListSource } from '../../task/task.types';
 import type { AdapterType, AppType, PluginType, ProviderType, ResourceType, SkillType, ToolType } from '../interfaces';
 import {
   annotatedFrontMcpAdaptersSchema,
@@ -697,6 +697,8 @@ export interface FrontMcpBaseMetadata {
     defaultPollIntervalMs?: number;
     /** Unfinished tasks a caller may have at once (per session, or per subject under 2026-07-28); default 16, at most 1000. */
     maxConcurrentPerSession?: number;
+    /** `tasks/list` reads `'index'` (the default), or `'scan'` while an instance from before the index still runs. */
+    listFrom?: TaskListSource;
     /**
      * Throw at startup instead of warning when the runtime cannot run tasks
      * reliably (edge/serverless). Default: `false`.
@@ -867,6 +869,7 @@ export const frontMcpBaseSchema = z.object({
       maxTtlMs: z.number().int().positive().optional(),
       defaultPollIntervalMs: z.number().int().positive().optional(),
       maxConcurrentPerSession: z.number().int().positive().max(MAX_CONCURRENT_TASKS_PER_SESSION).optional(),
+      listFrom: z.enum(['scan', 'index']).optional(),
       strict: z.boolean().optional(),
       runner: z.enum(['in-process', 'cli']).optional(),
       sqlite: z

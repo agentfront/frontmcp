@@ -7,6 +7,9 @@
  * Key layout (under the store's NamespacedStorage):
  *  - `records:{sessionId}:{taskId}` — the TaskRecord JSON
  *  - `slots:{sessionId}:{n}` — the taskId holding the owner's concurrency slot `n`; expires with its record
+ *  - `index:{sessionId}:{n}` — the taskId a session created `n`th, which `tasks/list` pages through; expires with it
+ *  - `index-count:{sessionId}` — how many index positions the session used; kept as long as its longest-lived task
+ *  - `index-of:`, `index-start:`, `index-ready:{sessionId}` — the rest of the index: see `task-session-index.ts`
  *  - Pub/sub channels:
  *      - `terminal:{taskId}` — fires when a task reaches terminal status
  *      - `cancel:{taskId}`   — fires when a task is asked to cancel
@@ -25,7 +28,8 @@ import {
 
 import { type FrontMcpLogger } from '../../common';
 import { isAlive, isLocalWorker } from '../helpers/process-liveness';
-import { isTerminal, type TaskRecord } from '../task.types';
+import { isTerminal, TASK_DEFAULTS, type TaskListSource, type TaskRecord } from '../task.types';
+import type { TaskSessionIndex } from './task-session-index';
 import type { TaskCancelCallback, TaskListPage, TaskStore, TaskTerminalCallback, TaskUnsubscribe } from './task.store';
 
 const TERMINAL_CHANNEL_PREFIX = 'terminal:';
@@ -47,16 +51,26 @@ export class StorageTaskStore implements TaskStore {
   private readonly storage: NamespacedStorage;
   private readonly records: TypedStorage<TaskRecord>;
   private readonly slots: NamespacedStorage;
+  /** Loaded with the first task write or index list, so a server that never runs a task does not carry it. */
+  private sessionIndex?: Promise<TaskSessionIndex>;
   private readonly logger?: FrontMcpLogger;
+  private readonly listFrom: TaskListSource;
+  private readonly maxTtlMs: number;
 
   private readonly terminalCallbacks = new Map<string, Set<TaskTerminalCallback>>();
   private readonly terminalSubs = new Map<string, Unsubscribe>();
   private readonly cancelCallbacks = new Map<string, Set<TaskCancelCallback>>();
   private readonly cancelSubs = new Map<string, Unsubscribe>();
 
-  constructor(storage: NamespacedStorage, logger?: FrontMcpLogger) {
+  constructor(
+    storage: NamespacedStorage,
+    logger?: FrontMcpLogger,
+    options: { listFrom?: TaskListSource; maxTtlMs?: number } = {},
+  ) {
     this.storage = storage;
     this.logger = logger;
+    this.listFrom = options.listFrom ?? 'index';
+    this.maxTtlMs = options.maxTtlMs ?? TASK_DEFAULTS.maxTtlMs;
     this.records = new TypedStorage(storage.namespace(RECORDS_NAMESPACE));
     this.slots = storage.namespace(SLOTS_NAMESPACE);
   }
@@ -70,6 +84,8 @@ export class StorageTaskStore implements TaskStore {
       return;
     }
     const key = recordKey(record.sessionId, record.taskId);
+    // Indexed first: a session without an index yet scans for its earlier tasks, which must not find this one
+    await (await this.loadSessionIndex()).add(record, ttlSeconds);
     await this.records.set(key, record, { ttlSeconds });
     this.logger?.debug('[StorageTaskStore] created', { taskId: record.taskId, ttlSeconds });
   }
@@ -100,7 +116,13 @@ export class StorageTaskStore implements TaskStore {
     // scope by sessionId), verify the record's own sessionId.
     if (record.sessionId !== sessionId) return null;
     if (record.expiresAt && Date.now() > record.expiresAt) {
-      await this.delete(taskId, sessionId);
+      // Best effort: the expired task is answered as gone even when its index entry cannot be removed
+      await this.delete(taskId, sessionId).catch((error: unknown) =>
+        this.logger?.warn('[StorageTaskStore] failed to clean up an expired task', {
+          taskId,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
       return null;
     }
     return record;
@@ -124,6 +146,8 @@ export class StorageTaskStore implements TaskStore {
       return null;
     }
     await this.records.set(recordKey(sessionId, taskId), merged, { ttlSeconds });
+    // Asked for an expiry: the index takes it, never shortening, also when a retry finds the record already saved
+    if (patch.expiresAt !== undefined) await (await this.loadSessionIndex()).extend(merged, ttlSeconds);
     if (isTerminal(merged.status)) await this.releaseSlot(merged);
     return merged;
   }
@@ -131,7 +155,13 @@ export class StorageTaskStore implements TaskStore {
   async delete(taskId: string, sessionId: string): Promise<void> {
     const existing = await this.records.get(recordKey(sessionId, taskId));
     await this.records.delete(recordKey(sessionId, taskId));
-    if (existing) await this.releaseSlot(existing);
+    if (!existing) return;
+    // The record is gone, so a retry would find nothing: the slot is released even when the index write fails
+    try {
+      await (await this.loadSessionIndex()).remove(existing);
+    } finally {
+      await this.releaseSlot(existing);
+    }
   }
 
   private async acquireSlot(record: TaskRecord, maxActive: number, ttlSeconds: number): Promise<number | undefined> {
@@ -198,32 +228,66 @@ export class StorageTaskStore implements TaskStore {
 
   async list(sessionId: string, opts: { cursor?: string; pageSize?: number } = {}): Promise<TaskListPage> {
     const pageSize = Math.max(1, Math.min(opts.pageSize ?? DEFAULT_PAGE_SIZE, 500));
+    // A cursor goes on in the order its first page was read in, whichever source this instance lists from
+    const resumed = opts.cursor ? decodeCursor(opts.cursor) : undefined;
+    const startAt = resumed?.offset ?? 0;
+    const source = resumed?.source ?? this.listFrom;
+    return source === 'scan'
+      ? this.listFromScan(sessionId, startAt, pageSize)
+      : this.listFromIndex(sessionId, startAt, pageSize);
+  }
 
-    // TypedStorage wraps a namespaced store; `.keys()` on the adapter returns
-    // the namespaced keys with the `records:` prefix already present. We scan
-    // for keys starting with `{sessionId}:` and return stable-sorted page.
-    const namespaced = this.storage.namespace(RECORDS_NAMESPACE);
-    const allKeys = await namespaced.keys();
-    const sessionPrefix = `${sessionId}:`;
-    const matching = allKeys
-      .filter((k) => k.startsWith(sessionPrefix))
-      .map((k) => k.slice(sessionPrefix.length))
-      .sort();
-
-    const offset = opts.cursor ? decodeCursor(opts.cursor) : 0;
+  /** A page of the session's tasks in task-id order, from a scan of every stored task key (`tasks.listFrom: 'scan'`). */
+  private async listFromScan(sessionId: string, offset: number, pageSize: number): Promise<TaskListPage> {
+    const matching = await this.scanSessionTaskIds(sessionId);
     const slice = matching.slice(offset, offset + pageSize);
-    const records: TaskRecord[] = [];
+    const tasks: TaskRecord[] = [];
     for (const taskId of slice) {
-      const rec = await this.get(taskId, sessionId);
-      if (rec) records.push(rec);
+      const record = await this.get(taskId, sessionId);
+      if (record) tasks.push(record);
     }
-
     const nextOffset = offset + slice.length;
-    const page: TaskListPage = { tasks: records };
-    if (nextOffset < matching.length) {
-      page.nextCursor = encodeCursor(nextOffset);
-    }
+    const page: TaskListPage = { tasks };
+    if (nextOffset < matching.length) page.nextCursor = encodeCursor(nextOffset, 'scan');
     return page;
+  }
+
+  /** A page of the session's tasks in creation order, read from its index (`tasks.listFrom: 'index'`). */
+  private async listFromIndex(sessionId: string, startPosition: number, pageSize: number): Promise<TaskListPage> {
+    const sessionIndex = await this.loadSessionIndex();
+    const indexPage = await sessionIndex.page(sessionId, startPosition, pageSize);
+    // Another request is indexing the session's earlier tasks: a first page lists them from the scan
+    if (!indexPage) return this.listFromScan(sessionId, 0, pageSize);
+    const { tasks, endPosition, positionsUsed } = indexPage;
+    const page: TaskListPage = { tasks };
+    if (endPosition < positionsUsed) page.nextCursor = encodeCursor(endPosition, 'index');
+    return page;
+  }
+
+  private loadSessionIndex(): Promise<TaskSessionIndex> {
+    this.sessionIndex ??= import('./task-session-index.js').then(
+      ({ TaskSessionIndex }) =>
+        new TaskSessionIndex(
+          this.storage,
+          {
+            records: this.records,
+            recordKey,
+            scanSessionTaskIds: (sessionId) => this.scanSessionTaskIds(sessionId),
+            readTask: (taskId, sessionId) => this.get(taskId, sessionId),
+          },
+          this.maxTtlMs / 1000,
+        ),
+    );
+    return this.sessionIndex;
+  }
+
+  /** The ids of the session's stored tasks, sorted, from every stored task key. */
+  private async scanSessionTaskIds(sessionId: string): Promise<string[]> {
+    const sessionPrefix = `${sessionId}:`;
+    return (await this.storage.namespace(RECORDS_NAMESPACE).keys())
+      .filter((key) => key.startsWith(sessionPrefix))
+      .map((key) => key.slice(sessionPrefix.length))
+      .sort();
   }
 
   async subscribeTerminal(taskId: string, _sessionId: string, cb: TaskTerminalCallback): Promise<TaskUnsubscribe> {
@@ -415,19 +479,21 @@ export class StorageTaskStore implements TaskStore {
 
 // Cursor encoding uses cross-platform base64url so the task store works under
 // Node, browser, Deno, Bun, and edge runtimes (Buffer is not available everywhere).
-function encodeCursor(offset: number): string {
-  return base64urlEncode(new TextEncoder().encode(JSON.stringify({ offset })));
+/** A page's cursor names where it read: an offset in task-id order (`scan`) or an index position (`index`). */
+function encodeCursor(offset: number, source: TaskListSource): string {
+  return base64urlEncode(new TextEncoder().encode(JSON.stringify({ offset, source })));
 }
 
-function decodeCursor(cursor: string): number {
+/** A cursor without a source came from a scan, as every cursor up to 1.12.2 did. */
+function decodeCursor(cursor: string): { offset: number; source: TaskListSource } {
   try {
     const bytes = base64urlDecode(cursor);
     const parsed = JSON.parse(new TextDecoder().decode(bytes));
     if (typeof parsed?.offset === 'number' && parsed.offset >= 0 && Number.isInteger(parsed.offset)) {
-      return parsed.offset;
+      return { offset: parsed.offset, source: parsed.source === 'index' ? 'index' : 'scan' };
     }
   } catch {
     // fall through
   }
-  return 0;
+  return { offset: 0, source: 'scan' };
 }
