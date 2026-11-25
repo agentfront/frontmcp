@@ -43,14 +43,28 @@ class CachedTicketsTool extends ToolContext {
     counts: z.array(z.number()).optional(),
     refuse: z.boolean().optional(),
     hang: z.boolean().optional(),
+    late: z.boolean().optional(),
   },
 })
 class DispatchTool extends ToolContext {
-  async execute({ name, counts, refuse, hang }: { name: string; counts?: number[]; refuse?: boolean; hang?: boolean }) {
+  async execute({
+    name,
+    counts,
+    refuse,
+    hang,
+    late,
+  }: {
+    name: string;
+    counts?: number[];
+    refuse?: boolean;
+    hang?: boolean;
+    late?: boolean;
+  }) {
     const beforeExecute = async () => {
       heard.push('started');
       if (refuse) throw new Error('refused before the tool ran');
       if (hang) await new Promise(() => undefined);
+      if (late) await new Promise((resolve) => setTimeout(resolve, 100));
     };
     const outcome = await this.scope
       .runFlow('tools:call-tool', {
@@ -122,6 +136,14 @@ describe("a dispatcher's beforeExecute and onRecordsChanged", () => {
       outcome: expect.stringMatching(/^ExecutionTimeoutError: /),
       heard: ['started'],
     });
+  });
+
+  it("does not start the tool when beforeExecute settles after the tool's timeout", async () => {
+    const result = await server.callTool('dispatch', { name: 'timed_tickets', late: true });
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    expect(result.structuredContent).toMatchObject({ outcome: expect.stringMatching(/^ExecutionTimeoutError: /) });
+    expect(heard).toEqual(['started']);
   });
 
   it('is not told of a call a hook answered before execute()', async () => {

@@ -1323,6 +1323,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     const running = runOnSurface(callSurfaceOf(this.input.ctx), () =>
       runAsTool({ name: tool.name, fullName: tool.fullName }, async () => {
         await this.input.ctx.beforeExecute?.();
+        if (toolContext.signal?.aborted) return;
         toolContext.output = await toolContext.execute(toolContext.input);
       }),
     );
