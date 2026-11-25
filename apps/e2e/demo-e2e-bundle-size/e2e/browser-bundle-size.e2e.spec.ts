@@ -21,9 +21,9 @@ import {
 } from './helpers/browser-bundle';
 
 const BUDGETS: Array<{ entry: string; label: string; maxBytes: number }> = [
-  // +66 bytes each (#1332): a tool gets the idempotency key of the call context it was dispatched with, and keeps it in an elicitation fallback
-  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_344_741 },
-  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_351_972 },
+  // +12 bytes each (#1335): a call dispatched in process keeps the request's elicitation route
+  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_344_753 },
+  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_351_984 },
 ];
 
 // +372 bytes (#1315): the task index never shortens a TTL (an atomic extendTtl in the storage adapters) and jumps runs of gone tasks
