@@ -18,7 +18,7 @@ import {
 import type { KeptValueCalls } from '../kept-values/kept-value-calls';
 import { keptNamesOf } from '../kept-values/kept-value-script';
 import { KeptValueStoreToken } from '../kept-values/kept-value.types';
-import CodeCallConfig, { extractionThresholdOf } from '../providers/code-call.config';
+import CodeCallConfig, { extractionThresholdOf, rapidEnumerationThresholdOf } from '../providers/code-call.config';
 import {
   approvalAnswerSchema,
   approvalQuestionOf,
@@ -39,7 +39,7 @@ import { reviewOutcomeOf, type PendingApproval, type RunReview } from '../review
 import { withCallIdempotencyKey, type ScriptToolCall } from '../runs/call-idempotency-key';
 import { markInputRefusal, trackCallStage } from '../runs/call-stage';
 import { journalMetadataOf, jsonBytes, RunJournal } from '../runs/run-journal';
-import { pausedAnswerOf, pausedRunOf, pendingCallOf, resumeSourceOf, type PausedRun } from '../runs/run-pause';
+import { pausedAnswerOf, pausedRunOf, retrySourceOf, type PausedRun } from '../runs/run-pause';
 import type { CodeCallRunInput, CodeCallRunStore } from '../runs/run-record.store';
 import { CodeCallRunStoreToken } from '../runs/run-record.types';
 import { RUN_DIVERGED, RunReplay, type RunReplaySource } from '../runs/run-replay';
@@ -148,12 +148,16 @@ export abstract class CodeCallScriptTool extends ToolContext {
     const runs = this.tryGet(CodeCallRunStoreToken);
     const spans = this.startRunSpans(scriptHash, resolvedVm.runtime);
     const keepResults = runs?.keepsResultsOf(this) === true;
+    const toolLimits = {
+      threshold: rapidEnumerationThresholdOf(resolvedVm),
+      overrides: resolvedVm.rapidEnumerationOverrides,
+    };
     const newJournal = (source: RunReplaySource | undefined) =>
       new RunJournal({
         keepResults,
         keepValues: trace.values,
         observer: spans,
-        replay: keepResults ? new RunReplay(source) : undefined,
+        replay: keepResults ? new RunReplay(source, toolLimits) : undefined,
       });
     const startedAt = resumed ? new Date(resumed.startedAt) : new Date();
     let attempt: ReviewedAttempt | undefined;
@@ -227,8 +231,9 @@ export abstract class CodeCallScriptTool extends ToolContext {
         };
       }
       approvedByPerson.add(pending.reference.id);
-      const pendingCall = pendingCallOf(attempt.result.status, attempt.journal);
-      if (pendingCall) replayed = resumeSourceOf(attempt.journal, pendingCall, replayed);
+      const next = retrySourceOf(attempt.result.status, attempt.journal, replayed);
+      if (!next) break;
+      replayed = next.source;
       attempt.journal.close();
       attempt = await this.attemptRun(
         input,

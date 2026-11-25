@@ -1,14 +1,15 @@
 import type { PreReviewInput, ReviewDecision } from '@enclave-vm/core/worker';
 
 import { argumentsHashOf, RunJournal } from '../runs/run-journal';
-import { pausableSoFar, pendingCallOf, resumeSourceOf } from '../runs/run-pause';
-import { journaledReviewHooks, RunReplay, type RunReplaySource } from '../runs/run-replay';
+import { pausableSoFar, pendingCallOf, resumeSourceOf, retrySourceOf } from '../runs/run-pause';
+import type { CodeCallCallDecision } from '../runs/run-record.types';
+import { journaledReviewHooks, RunReplay, type RunReplaySource, type RunReplayToolLimits } from '../runs/run-replay';
 
-const APPROVAL: ReviewDecision = { decision: 'needs_approval', reason: 'destructive' };
-const DENIAL: ReviewDecision = { decision: 'denied', reason: 'not now' };
+const APPROVAL: CodeCallCallDecision = { decision: 'needs_approval', reason: 'destructive' };
+const DENIAL: CodeCallCallDecision = { decision: 'denied', reason: 'not now' };
 
-function journalWithReplay(source?: RunReplaySource): RunJournal {
-  const replay = new RunReplay(source);
+function journalWithReplay(source?: RunReplaySource, toolLimits?: RunReplayToolLimits): RunJournal {
+  const replay = new RunReplay(source, toolLimits);
   replay.appliedByRuntime(true);
   return new RunJournal({ keepResults: true, replay });
 }
@@ -63,6 +64,56 @@ describe('pendingCallOf', () => {
 
     expect(pendingCallOf('needs_approval', journal)).toBeUndefined();
     expect(pausableSoFar(journal)).toBe(false);
+  });
+});
+
+describe('the per-tool limit of a paused run', () => {
+  function journalOfCalls(count: number, toolLimits?: RunReplayToolLimits): RunJournal {
+    const journal = journalWithReplay(undefined, toolLimits);
+    for (let index = 0; index < count; index++) {
+      journal.replay?.answerOf({ callIndex: index }, 'orders.get', { index });
+      journal.begin('orders.get', { index }, index).succeed({});
+    }
+    journal.replay?.decisionOf(count, 'orders.void', {});
+    journal.refuse('orders.void', {}, count, APPROVAL);
+    return journal;
+  }
+
+  it('does not pause after more calls to one tool than Enclave allows in its window, unless an override allows them', () => {
+    expect(pendingCallOf('needs_approval', journalOfCalls(30))).toMatchObject({ position: 31 });
+    expect(pendingCallOf('needs_approval', journalOfCalls(31))).toBeUndefined();
+    expect(
+      pendingCallOf('needs_approval', journalOfCalls(31, { threshold: 30, overrides: { 'orders.get': 40 } })),
+    ).toMatchObject({ position: 32 });
+  });
+});
+
+describe('retrySourceOf', () => {
+  it('replays the attempt up to the approved call when it can pause there', () => {
+    const journal = journalWithReplay();
+    journal.begin('orders.get', {}, 0).succeed({ id: 'o1' });
+    journal.refuse('orders.void', {}, 1, APPROVAL);
+
+    expect(retrySourceOf('needs_approval', journal)?.source?.journal).toEqual([
+      expect.objectContaining({ position: 1, result: { id: 'o1' } }),
+    ]);
+  });
+
+  it('does not run again an attempt that completed a call after the approved one, which a retry would repeat', () => {
+    const journal = journalWithReplay();
+    journal.refuse('orders.void', {}, 0, APPROVAL);
+    journal.begin('mail.send', {}, 1).succeed({ sent: true });
+
+    expect(retrySourceOf('needs_approval', journal)).toBeUndefined();
+  });
+
+  it('runs the previous source again when no call reached its tool live', () => {
+    const previous: RunReplaySource = { journal: [] };
+    const journal = journalWithReplay(previous);
+    journal.refuse('orders.void', {}, 0, APPROVAL);
+    journal.refuse('orders.void', {}, 1, APPROVAL);
+
+    expect(retrySourceOf('needs_approval', journal, previous)).toEqual({ source: previous });
   });
 });
 

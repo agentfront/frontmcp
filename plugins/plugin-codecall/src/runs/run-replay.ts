@@ -47,6 +47,14 @@ interface RunPoint {
 const DETECTOR_WINDOW_MS = 5000;
 const MAX_OPERATIONS_PER_SECOND = 100;
 
+/** The calls to one tool Enclave allows within its window (`vm.rapidEnumerationThreshold` and its overrides). */
+export interface RunReplayToolLimits {
+  threshold: number;
+  overrides?: Record<string, number>;
+}
+
+const ENCLAVE_RAPID_ENUMERATION_THRESHOLD = 30;
+
 const ALLOW: ReviewDecision = { decision: 'allow' };
 const PASS: PostReviewAction = { action: 'pass' };
 
@@ -71,6 +79,7 @@ export class RunReplay {
   private readonly randomReads: number[] = [];
   private readonly recorded = new Map<number, CodeCallJournalEntry>();
   private readonly pointAtCall = new Map<number, RunPoint>();
+  private readonly toolAtCall = new Map<number, string>();
   private startedAt = Date.now();
   private firstOperationAt?: number;
   private operations = 0;
@@ -79,7 +88,10 @@ export class RunReplay {
   private divergence?: RunDivergedError;
   private applied = false;
 
-  constructor(private readonly source?: RunReplaySource) {
+  constructor(
+    private readonly source?: RunReplaySource,
+    private readonly toolLimits: RunReplayToolLimits = { threshold: ENCLAVE_RAPID_ENUMERATION_THRESHOLD },
+  ) {
     for (const entry of source?.journal ?? []) this.recorded.set(entry.position - 1, entry);
   }
 
@@ -119,7 +131,7 @@ export class RunReplay {
    * the record (its tool handler then ends the run), or undefined for a call they must decide live.
    */
   decisionOf(callIndex: number, toolName: string, args: unknown): ReviewDecision | undefined {
-    this.reached(callIndex);
+    this.reached(callIndex, toolName);
     const entry = this.recorded.get(callIndex);
     if (entry) return (!mismatchOf(entry, toolName, args) && entry.decision) || ALLOW;
     return this.pendingAt(callIndex) && this.pendingMismatchOf(toolName, args) ? ALLOW : undefined;
@@ -131,14 +143,26 @@ export class RunReplay {
   }
 
   /**
-   * Whether replaying the run up to the call at `callIndex` stays clear of Enclave's sequence detectors and rate limit,
+   * Whether replaying the run up to the call at `callIndex` stays clear of Enclave's sequence detectors and rate limits,
    * which read the real clock: its operations before that call, from its first, took less than the shortest detector
-   * window, and were fewer than the rate limit allows a second.
+   * window, were fewer than the rate limit allows a second, and called no tool more often than it allows in its window.
    */
   replaysWithinDetectors(callIndex: number): boolean {
     const point = this.pointAtCall.get(callIndex) ?? this.pointNow();
     const span = point.at - (this.firstOperationAt ?? point.at);
-    return span < DETECTOR_WINDOW_MS && point.operations < MAX_OPERATIONS_PER_SECOND;
+    return (
+      span < DETECTOR_WINDOW_MS && point.operations < MAX_OPERATIONS_PER_SECOND && this.withinToolLimits(callIndex)
+    );
+  }
+
+  /** Whether the calls up to the one at `callIndex` make no more calls to one tool than Enclave allows in its window. */
+  private withinToolLimits(callIndex: number): boolean {
+    const calls = new Map<string, number>();
+    for (const [index, tool] of this.toolAtCall) {
+      if (index <= callIndex) calls.set(tool, (calls.get(tool) ?? 0) + 1);
+    }
+    const { threshold, overrides = {} } = this.toolLimits;
+    return [...calls].every(([tool, count]) => count <= (Object.hasOwn(overrides, tool) ? overrides[tool] : threshold));
   }
 
   /**
@@ -170,7 +194,7 @@ export class RunReplay {
   answerOf(call: ScriptToolCall | undefined, toolName: string, args: unknown): Promise<unknown> | undefined {
     if (this.divergence) return Promise.reject(this.divergence);
     if (!call) return undefined;
-    this.reached(call.callIndex);
+    this.reached(call.callIndex, toolName);
     if (!this.source) return undefined;
     const entry = this.recorded.get(call.callIndex);
     const mismatch = entry
@@ -229,9 +253,10 @@ export class RunReplay {
     );
   }
 
-  private reached(callIndex: number): void {
+  private reached(callIndex: number, toolName: string): void {
     this.callsReached = Math.max(this.callsReached, callIndex + 1);
     if (this.pointAtCall.has(callIndex)) return;
+    this.toolAtCall.set(callIndex, journalToolNameOf(toolName));
     this.pointAtCall.set(callIndex, this.pointNow());
     this.operated();
   }

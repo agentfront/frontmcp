@@ -291,6 +291,24 @@ describe.each<CodeCallVmRuntime>(['node-vm', 'interpreter'])('pausing and resumi
     expect([called('orders.get'), called('orders.note'), called('orders.refund')]).toEqual([1, 1, 1]);
   });
 
+  it('keeps how many lines of output the paused run wrote, and gives the resumed run each line once', async () => {
+    const client = await open(serverConfig(options()), `outputs-${runtime}`);
+    const script =
+      "mcpLog('info', 'before');\n" +
+      "const refund = await callTool('orders.refund', { id: 'o1', cents: -1 });\n" +
+      "mcpLog('info', 'after');\nreturn refund.refunded;";
+    const { runId } = await call(client, 'codecall:execute', { script });
+    const record = (await call<{ record: CodeCallRunRecord }>(client, 'runs.read', { runId })).record;
+    expect(record).toMatchObject({ status: 'paused', outputs: 1 });
+
+    const resumed = await call<Answer & { logs?: string[] }>(client, 'codecall:resume', {
+      runId,
+      arguments: { id: 'o1', cents: 3 },
+    });
+
+    expect(resumed).toMatchObject({ status: 'ok', result: 3, logs: ['[mcp:info] before', '[mcp:info] after'] });
+  });
+
   it('lets one of two resumes at once run the run', async () => {
     const client = await open(serverConfig(options()), `race-${runtime}`);
     const { runId } = await call(client, 'codecall:execute', { script: PAUSING_SCRIPT });

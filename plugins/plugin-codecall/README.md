@@ -230,12 +230,14 @@ runs it, `cancelled`, or how it ended), and `codecall:cancel` ends a paused run.
 - **Clear of Enclave's detectors.** Enclave's rate limit (100 operations a second) and its sequence detectors (calls
   to one tool, a read then a send, within 5 to 30 seconds) read the real clock, and a replay answers its recorded calls
   at once. So a run pauses only when it made its tool and host function calls up to the paused call within 5 seconds,
-  and fewer than 100 of them: replaying them faster cannot trip a detector they passed. A paused record keeps when each
+  fewer than 100 of them, and no more calls to one tool than `vm.rapidEnumerationThreshold` (and its overrides) allow:
+  replaying them faster cannot trip a detector they passed. A paused record keeps when each
   call reached the host, for an Enclave that can replay calls at their own times.
 - **Once.** A resume claims the pause in the run storage, setting a key only where none is: of two resumes, on this
   instance or another one sharing the storage, one runs the run and the other is told the run is not paused. The run is
   then kept `resuming` until the resumed run ends, and its claim lasts until the pause would have expired plus the
-  script's timeout. A resume that crashed leaves the run `resuming`: it is not run again. A storage without conditional
+  script's timeout. A storage failure before the resumed run starts releases the claim and leaves the run paused, so
+  it can be resumed again; a resume that crashed after it started leaves the run `resuming`: it is not run again. A storage without conditional
   writes (Cloudflare KV) cannot claim, and its resumes fail.
 - **Its owner.** Only the session and caller that started the run can resume, read or cancel it; anyone else is told
   it is not found. A resume checks again that the caller may call each tool whose result it replays, and every live

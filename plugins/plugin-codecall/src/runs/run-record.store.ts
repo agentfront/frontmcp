@@ -75,16 +75,32 @@ export class CodeCallRunStore implements OnShutdown {
   }
 
   /**
-   * Claims one pause of a run for the caller, once: the first claim wins, on this instance or another one sharing the
-   * storage, and every later one is refused. A storage that cannot set a key only where none is cannot claim, and fails.
+   * Claims one pause of a run for the caller, once, and returns the claim's token: the first claim wins, on this instance
+   * or another one sharing the storage, and every later one gets none. A storage that cannot set a key only where none is
+   * cannot claim, and fails; a claim that may have been set when reading it back fails is released.
    */
-  async claim(runId: string, caller: CodeCallRunCaller, pauseId: string, ttlSeconds: number): Promise<boolean> {
+  async claim(
+    runId: string,
+    caller: CodeCallRunCaller,
+    pauseId: string,
+    ttlSeconds: number,
+  ): Promise<string | undefined> {
     const { claims } = this.options;
-    if (!claims) return false;
+    if (!claims) return undefined;
     const key = claimKeyOf(runId, resultOwnerOf(caller), pauseId);
     const token = randomUUID();
     await claims.set(key, token, { ifNotExists: true, ttlSeconds });
-    return (await claims.get(key)) === token;
+    try {
+      return (await claims.get(key)) === token ? token : undefined;
+    } catch (error: unknown) {
+      await claims.deleteIfEquals(key, token).catch(() => undefined);
+      throw error;
+    }
+  }
+
+  /** Releases the claim `token` holds, before its resumed run started; a claim another resume holds stays. */
+  async release(runId: string, caller: CodeCallRunCaller, pauseId: string, token: string): Promise<void> {
+    await this.options.claims?.deleteIfEquals(claimKeyOf(runId, resultOwnerOf(caller), pauseId), token);
   }
 
   /**

@@ -2,9 +2,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { ResultHandleStore } from '@frontmcp/plugin-result-handles';
-import { createStorage, mkdtemp, rm, sha256Hex, type StorageConfig } from '@frontmcp/utils';
+import { createStorage, mkdtemp, rm, sha256Hex, type NamespacedStorage, type StorageConfig } from '@frontmcp/utils';
 
 import { CodeCallRunStore, type CodeCallRunCaller, type CodeCallRunInput } from '../runs/run-record.store';
+import { claimPausedRun } from '../tools/paused-runs';
 
 function callerOf(session: string, subject?: string): CodeCallRunCaller {
   return {
@@ -34,13 +35,18 @@ function pausedRun(overrides: { script?: string; expiresAt?: string } = {}): Cod
   };
 }
 
+const claimsByStore = new WeakMap<CodeCallRunStore, NamespacedStorage>();
+
 async function storeOn(storage: StorageConfig): Promise<CodeCallRunStore> {
   const records = (await createStorage(storage)).namespace('codecall-runs');
-  return new CodeCallRunStore(new ResultHandleStore(records, 60), {
+  const claims = records.namespace('claims');
+  const store = new CodeCallRunStore(new ResultHandleStore(records, 60), {
     maxRecordBytes: 256 * 1024,
     resume: true,
-    claims: records.namespace('claims'),
+    claims,
   });
+  claimsByStore.set(store, claims);
+  return store;
 }
 
 let dir: string;
@@ -84,8 +90,42 @@ describe('paused runs in the run store', () => {
     const claims = await Promise.all([1, 2, 3].map(() => store.claim(runId, alice, 'pause-1', 60)));
 
     expect(claims.filter(Boolean)).toHaveLength(1);
-    expect(await store.claim(runId, alice, 'pause-2', 60)).toBe(true);
-    expect(await store.claim(runId, callerOf('session-2', 'alice'), 'pause-1', 60)).toBe(true);
+    expect(await store.claim(runId, alice, 'pause-2', 60)).toEqual(expect.any(String));
+    expect(await store.claim(runId, callerOf('session-2', 'alice'), 'pause-1', 60)).toEqual(expect.any(String));
+  });
+
+  it('releases a claim it may have set when reading it back fails, so the run can be claimed again', async () => {
+    const runId = (await store.keep(alice, pausedRun())) as string;
+    jest.spyOn(claimsByStore.get(store) as NamespacedStorage, 'get').mockRejectedValueOnce(new Error('storage down'));
+
+    await expect(store.claim(runId, alice, 'pause-1', 60)).rejects.toThrow('storage down');
+    expect(await store.claim(runId, alice, 'pause-1', 60)).toEqual(expect.any(String));
+  });
+
+  it('releases only the claim its token holds', async () => {
+    const runId = (await store.keep(alice, pausedRun())) as string;
+    const token = (await store.claim(runId, alice, 'pause-1', 60)) as string;
+
+    await store.release(runId, alice, 'pause-1', 'another-token');
+    expect(await store.claim(runId, alice, 'pause-1', 60)).toBeUndefined();
+    await store.release(runId, alice, 'pause-1', token);
+    expect(await store.claim(runId, alice, 'pause-1', 60)).toEqual(expect.any(String));
+  });
+
+  it('keeps a run paused, and its claim released, when marking it resuming fails before it runs', async () => {
+    const runId = (await store.keep(alice, pausedRun())) as string;
+    const paused = (await store.readPaused(runId, alice)) as NonNullable<
+      Awaited<ReturnType<CodeCallRunStore['readPaused']>>
+    >;
+    const keep = jest.spyOn(store, 'keep').mockRejectedValueOnce(new Error('storage down'));
+
+    await expect(claimPausedRun(store, paused, alice, 1000)).rejects.toThrow('storage down');
+    keep.mockRestore();
+
+    expect(await store.readPaused(runId, alice)).toMatchObject({ status: 'paused' });
+    await claimPausedRun(store, paused, alice, 1000);
+    expect(await store.read(runId, alice)).toMatchObject({ status: 'resuming' });
+    await expect(claimPausedRun(store, paused, alice, 1000)).rejects.toThrow('is not paused');
   });
 
   it('keeps a paused run for its own TTL', async () => {

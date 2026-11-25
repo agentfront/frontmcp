@@ -33,6 +33,7 @@ export async function readPausedRun(
 /**
  * Claims the run's pause for this caller, once, and keeps the run `resuming`, so no later read takes it for paused. The
  * claim outlives the pause by `runMs`, the time the resumed run may take; a pause that expired meanwhile is not found.
+ * A failure before the resumed run starts releases the claim and keeps the run paused, so it can be resumed again.
  */
 export async function claimPausedRun(
   runs: CodeCallRunStore,
@@ -40,11 +41,21 @@ export async function claimPausedRun(
   caller: CodeCallRunCaller,
   runMs: number,
 ): Promise<void> {
-  const ttlSeconds = Math.max(1, Math.ceil((Date.parse(run.pause.expiresAt) - Date.now() + runMs) / 1000));
-  if (!(await runs.claim(run.runId, caller, run.pause.id, ttlSeconds))) {
-    throw runNotPausedError(run.runId, 'being resumed or was cancelled');
+  const remainingMs = Date.parse(run.pause.expiresAt) - Date.now();
+  const ttlSeconds = Math.max(1, Math.ceil((remainingMs + runMs) / 1000));
+  const token = await runs.claim(run.runId, caller, run.pause.id, ttlSeconds);
+  if (!token) throw runNotPausedError(run.runId, 'being resumed or was cancelled');
+  const release = () => runs.release(run.runId, caller, run.pause.id, token).catch(() => undefined);
+  if (!(Date.parse(run.pause.expiresAt) > Date.now())) {
+    await release();
+    throw runNotFoundError(run.runId);
   }
-  if (!(Date.parse(run.pause.expiresAt) > Date.now())) throw runNotFoundError(run.runId);
   const resuming = { ...run, status: 'resuming' as const, journal: journalMetadataOf(run.journal), pause: undefined };
-  await runs.keep(caller, { ...resuming, clock: undefined, random: undefined }, ttlSeconds);
+  try {
+    await runs.keep(caller, { ...resuming, clock: undefined, random: undefined, outputs: undefined }, ttlSeconds);
+  } catch (error: unknown) {
+    await runs.keep(caller, run, Math.max(1, Math.ceil(remainingMs / 1000))).catch(() => undefined);
+    await release();
+    throw error;
+  }
 }

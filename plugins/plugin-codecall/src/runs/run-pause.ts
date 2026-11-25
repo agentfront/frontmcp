@@ -78,6 +78,24 @@ export function resumeSourceOf(
 }
 
 /**
+ * What the attempt after a person approved the call `journal`'s attempt stopped at replays: that attempt up to the call,
+ * when it can pause there, or `previous` when no call reached its tool live in it. Undefined when a call did that the
+ * next attempt would run again: then it must not run.
+ */
+export function retrySourceOf(
+  status: CodeCallRunStatus,
+  journal: RunJournal,
+  previous?: RunReplaySource,
+): { source?: RunReplaySource } | undefined {
+  const pending = pendingCallOf(status, journal);
+  if (pending) return { source: resumeSourceOf(journal, pending, previous) };
+  const replayed = previous?.journal.length ?? 0;
+  const reachedTool = (entry: CodeCallJournalEntry) => entry.outcome !== 'failure' || entry.phase === 'execute';
+  const ranLive = journal.entriesSoFar().some((entry) => entry.position > replayed && reachedTool(entry));
+  return ranLive ? undefined : { source: previous };
+}
+
+/**
  * The record of a run that stopped before a call that did not run, saved `paused` so `codecall:resume` can run it
  * again from its journal: undefined when it cannot pause, or its lifetime is over. It keeps the results and reads of
  * the calls before the paused one, which no other record keeps.
@@ -97,7 +115,7 @@ export function pausedRunOf(
     Date.parse(run.startedAt) + limits.lifetimeSeconds * 1000,
   );
   if (!(expiresAt > now)) return undefined;
-  const { journal: entries, clock, random, pending: resumed } = resumeSourceOf(journal, pending);
+  const { journal: entries, clock, random, outputs, pending: resumed } = resumeSourceOf(journal, pending);
   const pause: CodeCallRunPause = {
     id: randomUUID(),
     call: resumed.call,
@@ -107,7 +125,7 @@ export function pausedRunOf(
     ...(script.allowedTools && { allowedTools: script.allowedTools }),
   };
   return {
-    run: { ...run, status: 'paused', journal: [...entries], clock, random, pause },
+    run: { ...run, status: 'paused', journal: [...entries], clock, random, outputs, pause },
     ttlSeconds: Math.ceil((expiresAt - now) / 1000),
   };
 }
