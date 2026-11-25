@@ -5,7 +5,7 @@ import { argumentsHashOf, journalToolNameOf } from './run-journal';
 import type { CodeCallJournalEntry, CodeCallRunRecord } from './run-record.types';
 
 /** What a run that is run again replays: the calls its journal recorded, and the clock and random values it read. */
-export type RunReplaySource = Pick<CodeCallRunRecord, 'journal' | 'clock' | 'random'>;
+export type RunReplaySource = Pick<CodeCallRunRecord, 'journal' | 'clock' | 'random' | 'outputs'>;
 
 /** What the runtime reads for a run that may be replayed. */
 export interface RunReplayHooks {
@@ -34,6 +34,7 @@ export class RunDivergedError extends Error {
  */
 export class RunReplay {
   private readonly clockReads: number[] = [];
+  private outputsWritten = 0;
   private readonly randomReads: number[] = [];
   private callsReached = 0;
   private divergence?: RunDivergedError;
@@ -44,11 +45,6 @@ export class RunReplay {
   /** Whether this run replays another: a run that cannot apply the replay must not run. */
   get replaysRun(): boolean {
     return this.source !== undefined;
-  }
-
-  /** Whether the script has not yet passed the calls of the run it replays, whose output was already written. */
-  get replaying(): boolean {
-    return this.source !== undefined && this.callsReached <= this.source.journal.length;
   }
 
   /** The runtime options that make the run replayable: results in call order, and this replay's clock and random. */
@@ -88,18 +84,28 @@ export class RunReplay {
     return this.diverge(`script ended before call ${recordedCalls}, which its run made`);
   }
 
-  /** The clock and random values the script read, for its run record; none when the runtime did not apply the replay. */
-  recordedReads(): Pick<CodeCallRunRecord, 'clock' | 'random'> {
+  /**
+   * The clock and random values the script read, and how many lines of output it wrote, for replaying it; none when the
+   * runtime did not apply the replay.
+   */
+  recordedReads(): Pick<CodeCallRunRecord, 'clock' | 'random' | 'outputs'> {
     if (!this.applied) return {};
     return {
       ...(this.clockReads.length > 0 && { clock: [...this.clockReads] }),
       ...(this.randomReads.length > 0 && { random: [...this.randomReads] }),
+      ...(this.outputsWritten > 0 && { outputs: this.outputsWritten }),
     };
   }
 
-  /** `write`, skipped while the script repeats what the run it replays already wrote. */
+  /** `write`, skipped for the lines of output the run it replays already wrote: as many as it wrote, in order. */
   quiet<Args extends unknown[]>(write: ((...args: Args) => void) | undefined): ((...args: Args) => void) | undefined {
-    return write && ((...args: Args) => (this.replaying ? undefined : write(...args)));
+    return (
+      write &&
+      ((...args: Args) => {
+        this.outputsWritten++;
+        if (this.outputsWritten > (this.source?.outputs ?? 0)) write(...args);
+      })
+    );
   }
 
   private read(reads: number[], recorded: readonly number[] | undefined, live: () => number): number {

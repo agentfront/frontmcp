@@ -89,19 +89,28 @@ describe('RunReplay', () => {
     );
   });
 
-  it('keeps output quiet until the script passes the calls of the run it replays', async () => {
+  it('skips only as many lines of output as the run it replays wrote, whatever the calls reached', async () => {
     const write = jest.fn();
-    const replay = new RunReplay(source);
+    const replay = new RunReplay({ ...source, outputs: 2 });
     const quiet = replay.quiet(write);
 
-    quiet?.('before');
+    quiet?.('first');
     await replay.answerOf({ callIndex: 0 }, 'users.get', { id: 1 });
     await replay.answerOf({ callIndex: 1 }, 'users.update', { id: 1 })?.catch(() => undefined);
-    quiet?.('between the last recorded call and the next');
-    expect(replay.answerOf({ callIndex: 2 }, 'users.delete', {})).toBeUndefined();
-    quiet?.('after');
+    quiet?.('second');
+    quiet?.('never written by the first run');
 
-    expect(write.mock.calls).toEqual([['after']]);
+    expect(write.mock.calls).toEqual([['never written by the first run']]);
+  });
+
+  it('counts the lines it wrote for the next replay', () => {
+    const replay = new RunReplay();
+    replay.appliedByRuntime(true);
+    const quiet = replay.quiet(jest.fn());
+    quiet?.('one');
+    quiet?.('two');
+
+    expect(replay.recordedReads()).toEqual({ outputs: 2 });
   });
 
   it('writes everything in a run that replays none', () => {

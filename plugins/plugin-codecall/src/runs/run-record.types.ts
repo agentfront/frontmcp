@@ -69,6 +69,8 @@ export interface CodeCallRunRecord {
   clock?: number[];
   /** What the script's `Math.random()` returned, in order, kept only in the record of a run that can be replayed. */
   random?: number[];
+  /** How many lines of output (console, `mcpLog`, `mcpNotify`) the script wrote, which a replay does not write again. */
+  outputs?: number;
 }
 
 /** The store of run records: `this.get(CodeCallRunStoreToken)`, registered while `runs.enabled` is true. */
