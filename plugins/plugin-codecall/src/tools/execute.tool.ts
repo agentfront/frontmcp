@@ -19,7 +19,12 @@ import type { KeptValueCalls } from '../kept-values/kept-value-calls';
 import { keptNamesOf } from '../kept-values/kept-value-script';
 import { KeptValueStoreToken } from '../kept-values/kept-value.types';
 import CodeCallConfig, { extractionThresholdOf } from '../providers/code-call.config';
-import { approvalAnswerSchema, approvalQuestionOf, clientCanElicit } from '../review/approval-elicitation';
+import {
+  approvalAnswerSchema,
+  approvalQuestionOf,
+  clientCanElicit,
+  MAX_APPROVALS_ASKED,
+} from '../review/approval-elicitation';
 import { approvalsOf, createRunReview, reviewContextOf, type RunReviewCaller } from '../review/create-run-review';
 import { ApprovalServiceViewToken } from '../review/review-approvals';
 import { reviewDecisionOf, reviewResultOf } from '../review/review-result';
@@ -53,9 +58,6 @@ import {
   type ExecuteToolInput,
 } from './execute.schema';
 
-/** How many times one `codecall:execute` asks a person, through elicitation, to approve a call it stopped at. */
-const MAX_APPROVALS_ASKED = 5;
-
 /** One run of the script, with its journal and, when they are on, its review and its budgets. */
 interface ReviewedAttempt {
   result: CodeCallExecuteResult;
@@ -64,9 +66,12 @@ interface ReviewedAttempt {
   budgets?: BudgetMeter;
 }
 
-/** The approval a stopped run waits for: its budgets' or its review's, whichever stopped it. */
-function pendingApprovalOf(attempt: Pick<ReviewedAttempt, 'review' | 'budgets'>): PendingApproval | undefined {
-  return attempt.budgets?.pendingApproval ?? attempt.review?.pendingApproval;
+/** The approval a stopped run waits for: the one its result names, from its budgets or its review. */
+function pendingApprovalOf({ result, review, budgets }: ReviewedAttempt): PendingApproval | undefined {
+  const approvalId = result.status === 'needs_approval' ? result.approval?.id : undefined;
+  if (!approvalId) return undefined;
+  const pendings = [...(budgets?.pendingApprovals ?? []), review?.pendingApproval];
+  return pendings.find((pending) => pending?.reference.id === approvalId);
 }
 
 /**
@@ -295,6 +300,7 @@ export default class ExecuteTool extends ToolContext {
         name: string,
         toolInput: TInput,
         options?: CallToolOptions,
+        call?: { callIndex: number },
       ): Promise<TResult | ToolCallResult<TResult>> => {
         const throwOnError = options?.throwOnError !== false; // Default: true
 
@@ -349,7 +355,7 @@ export default class ExecuteTool extends ToolContext {
         toolCallCount += 1;
         audit?.logToolCallStart(executionId, name, callDepth);
         const toolCallStartedAt = Date.now();
-        const budgetedCall = budgets?.startCall();
+        const budgetedCall = budgets?.startCall({ toolName: name, args: toolInput, callIndex: call?.callIndex });
 
         try {
           // Build MCP-compatible CallToolRequest
@@ -366,7 +372,7 @@ export default class ExecuteTool extends ToolContext {
           const ctx = asCodeCallDispatch({
             authInfo: this.authInfo,
             surface: callerSurface,
-            onRecordsChanged: budgetedCall?.onRecordsChanged,
+            ...budgetedCall?.dispatch,
           });
 
           // Execute through the flow system - this runs all stages:
@@ -402,7 +408,7 @@ export default class ExecuteTool extends ToolContext {
           }
           return { success: true, data: result as TResult };
         } catch (error: unknown) {
-          await budgetedCall?.end(error);
+          await budgetedCall?.end();
           // ============================================================
           // Error sanitization - NEVER expose internal details
           // ============================================================
@@ -528,7 +534,8 @@ export default class ExecuteTool extends ToolContext {
         : undefined;
       if (reviewOutcome) {
         audit?.logExecutionFailure(executionId, script, durationMs, `review: ${reviewOutcome.status}`);
-        return reviewResultOf(reviewOutcome, pendingApprovalOf({ review, budgets }));
+        const pending = budgets?.pendingApprovalAt(reviewOutcome.callIndex) ?? review?.pendingApproval;
+        return reviewResultOf(reviewOutcome, pending);
       }
 
       // Map execution result to CodeCall result

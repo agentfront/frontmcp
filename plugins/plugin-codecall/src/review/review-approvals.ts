@@ -34,10 +34,10 @@ export interface CodeCallApprovalReference {
 
 export type CodeCallApprovalState = 'approved' | 'denied' | 'missing';
 
-/** A grant in the Approval plugin's store: its name, unique per grant, and how many more seconds it counts here. */
+/** A grant in the Approval plugin's store: its name, unique per grant, and when it stops counting here (epoch ms). */
 export interface RecordedGrant {
   grantKey: string;
-  countsForSeconds: number;
+  countsUntil: number;
 }
 
 export interface ReviewApprovalsOptions {
@@ -86,11 +86,20 @@ export class ReviewApprovals {
     };
   }
 
-  /** The reference for a call over a budget: that call and that budget only, apart from every review approval. */
-  budgetReferenceFor(call: { toolName: string; args: unknown }, budget: string): CodeCallApprovalReference {
+  /** The reference for a call over a budget: that call at its place in the run, and that budget, apart from review's. */
+  budgetReferenceFor(
+    call: { toolName: string; args: unknown; callIndex?: number },
+    budget: string,
+  ): CodeCallApprovalReference {
     const argumentsHash = argumentsHashOf(call.args);
-    const id = approvalIdOf({ scriptHash: this.options.scriptHash, budget, toolName: call.toolName, argumentsHash });
-    return { id, toolName: call.toolName, argumentsHash };
+    const subject: Record<string, string> = {
+      scriptHash: this.options.scriptHash,
+      budget,
+      toolName: call.toolName,
+      argumentsHash,
+    };
+    if (call.callIndex !== undefined) subject['callIndex'] = String(call.callIndex);
+    return { id: approvalIdOf(subject), toolName: call.toolName, argumentsHash };
   }
 
   /** Whether a person approved or refused the reference; `consume` counts the call against a grant with limits. */
@@ -113,12 +122,11 @@ export class ReviewApprovals {
   async recordedGrantsOf(reference: CodeCallApprovalReference): Promise<RecordedGrant[] | typeof DENIED> {
     const records = await this.recordsOf(reference.id);
     if (records.some((record) => record.state === DENIED)) return DENIED;
-    const countsUntil = (record: ApprovalRecordView) => record.grantedAt + this.options.maxAgeMs;
     return records
       .filter((record) => record.state === APPROVED)
       .map((record) => ({
         grantKey: `${reference.id}:${record.grantedAt}`,
-        countsForSeconds: Math.max(1, Math.ceil((countsUntil(record) - Date.now()) / 1000)),
+        countsUntil: record.grantedAt + this.options.maxAgeMs,
       }));
   }
 

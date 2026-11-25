@@ -53,12 +53,19 @@ export class CodeCallBudgetStore implements OnShutdown {
     return this.storage.exists(spentKeyOf(grantKey));
   }
 
-  /** Spends the grant for one call: true only for the claim whose marker was set first, on any instance. */
-  async claim(grantKey: string, ttlSeconds: number): Promise<boolean> {
+  /** Spends a grant that counts until `countsUntil` (epoch ms): the claimant, for the one claim that marked it first. */
+  async claim(grantKey: string, countsUntil: number): Promise<string | undefined> {
+    const ttlSeconds = Math.ceil((countsUntil - this.now()) / 1000);
+    if (ttlSeconds <= 0) return undefined;
     const key = spentKeyOf(grantKey);
     const claimant = randomUUID();
     await this.storage.set(key, claimant, { ttlSeconds, ifNotExists: true });
-    return (await this.storage.get(key)) === claimant;
+    return (await this.storage.get(key)) === claimant ? claimant : undefined;
+  }
+
+  /** Gives back a grant its claimant spent, while the marker is still that claimant's. */
+  async release(grantKey: string, claimant: string): Promise<void> {
+    await this.storage.deleteIfEquals(spentKeyOf(grantKey), claimant);
   }
 
   async onShutdown(): Promise<void> {

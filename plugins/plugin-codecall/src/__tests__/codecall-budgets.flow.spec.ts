@@ -8,6 +8,7 @@ import { ApprovalPlugin } from '@frontmcp/plugin-approval';
 import {
   App,
   connect,
+  InvalidInputError,
   LogLevel,
   Tool,
   ToolContext,
@@ -75,6 +76,14 @@ class DeleteTicketTool extends ToolContext {
   }
 }
 
+@Tool({ name: 'tickets.reject', description: 'Refuses a ticket from inside the tool', inputSchema: {} })
+class RejectTicketTool extends ToolContext {
+  async execute(): Promise<never> {
+    executed.push('tickets.reject');
+    throw new InvalidInputError('the ticket is closed');
+  }
+}
+
 @Tool({
   name: 'approvals.grant',
   description: 'Grants a CodeCall approval for this session, as a person would through the server',
@@ -113,7 +122,15 @@ function serverConfig(options: CodeCallPluginOptionsInput, { approvalPlugin = tr
   @App({
     id: 'desk',
     name: 'Desk',
-    tools: [GetTicketTool, ArchiveTicketsTool, EchoTool, DeleteTicketTool, GrantApprovalTool, ReadRunTool],
+    tools: [
+      GetTicketTool,
+      ArchiveTicketsTool,
+      EchoTool,
+      DeleteTicketTool,
+      RejectTicketTool,
+      GrantApprovalTool,
+      ReadRunTool,
+    ],
     plugins: [
       CodeCallPlugin.init({ mode: 'codecall_only', ...options }),
       ...(approvalPlugin ? [ApprovalPlugin.init({ storage: { type: 'memory' } })] : []),
@@ -314,6 +331,20 @@ describe('CodeCall budgets', () => {
     expect(executed).toEqual(['tickets.get:1']);
   });
 
+  it('counts a call whose tool started and then refused its input, so a tool cannot hide from a budget', async () => {
+    const ada = await open(serverConfig({ budgets: threeCallsPerHour() }), 'ada');
+
+    await execute(
+      ada,
+      "for (const id of [1, 2, 3]) {\n  try {\n    await callTool('tickets.reject', {});\n  } catch (error) {}\n}",
+    );
+
+    expect(await execute(ada, "return await callTool('tickets.get', { id: 1 });")).toMatchObject({
+      status: 'needs_approval',
+    });
+    expect(executed).toEqual(['tickets.reject', 'tickets.reject', 'tickets.reject']);
+  });
+
   it('records the decision of a budget with review off, and says in the description what a budget stop means', async () => {
     const ada = await open(serverConfig({ budgets: threeCallsPerHour() }), 'ada');
 
@@ -325,7 +356,8 @@ describe('CodeCall budgets', () => {
     const description = await executeDescriptionOf(ada);
     expect(description).toContain('| timeout | needs_approval | denied\n');
     expect(description).toContain('BUDGETS: ');
-    expect(description).toContain('it resets with its window');
+    expect(description).toContain('the calls before a stopped one already ran');
+    expect(description).toContain('budget-unavailable: the budget store failed; a reset does not fix it');
   });
 });
 
@@ -412,5 +444,80 @@ describe('approving a call over a budget', () => {
       reason: expect.stringContaining('the person did not approve it'),
     });
     expect(executed).toEqual(['tickets.get:1', 'tickets.get:2', 'tickets.get:3']);
+  });
+
+  it('binds an approval to the call at its place, so a re-run never spends it on an earlier identical call', async () => {
+    const twoCallsPerHour = { ...threeCallsPerHour(), limits: [{ ...threeCallsPerHour().limits[0], limit: 2 }] };
+    const ada = await open(serverConfig({ budgets: twoCallsPerHour }), 'ada');
+    const threeIdentical = "for (const id of [7, 7, 7]) {\n  await callTool('tickets.get', { id });\n}";
+
+    const third = await execute(ada, threeIdentical);
+    expect(third).toMatchObject({ status: 'needs_approval' });
+    await ada.callTool('approvals.grant', { id: third.approval?.id as string });
+    const rerun = await execute(ada, threeIdentical);
+
+    expect(rerun).toMatchObject({ status: 'needs_approval' });
+    expect(rerun.approval?.id).not.toBe(third.approval?.id);
+    expect(executed).toEqual(['tickets.get:7', 'tickets.get:7']);
+  });
+
+  it('checks the budgets again after a review waited for a person, and stops a call the wait let past the limit', async () => {
+    const config = serverConfig(
+      {
+        review: {},
+        directCalls: { enabled: true },
+        budgets: { ...threeCallsPerHour(), limits: [{ ...threeCallsPerHour().limits[0], limit: 1 }] },
+      },
+      { approvalPlugin: false, elicitation: true },
+    );
+    const other = await open(config, 'ada');
+    const ada = await open(config, 'ada', {
+      onElicitation: async () => {
+        await execute(other, "return await callTool('tickets.get', { id: 1 });");
+        return { action: 'accept', content: { approve: true } };
+      },
+    });
+
+    const invoked = (await ada.callTool('codecall:invoke', {
+      tool: 'tickets.delete',
+      input: { id: 9 },
+    })) as CallToolResult;
+
+    expect(invoked.isError).toBe(true);
+    expect(invoked.structuredContent).toMatchObject({
+      status: 'needs_approval',
+      findings: [expect.objectContaining({ rule: BUDGET_EXCEEDED_RULE })],
+    });
+    expect(executed).toEqual(['tickets.get:1']);
+  });
+
+  it('asks an elicitation-only client to approve each budget a codecall:invoke is over', async () => {
+    const limits = [
+      { name: 'calls-per-hour', counts: 'toolCalls' as const, limit: 1, windowSeconds: 3600 },
+      { name: 'calls-per-day', counts: 'toolCalls' as const, limit: 1, windowSeconds: 86400 },
+    ];
+    const config = serverConfig(
+      { directCalls: { enabled: true }, budgets: { limits, storage: { type: 'memory' } } },
+      { approvalPlugin: false, elicitation: true },
+    );
+    const questions: string[] = [];
+    const ada = await open(config, 'ada', {
+      onElicitation: async (request) => {
+        questions.push(request.message);
+        return { action: 'accept', content: { approve: true } };
+      },
+    });
+    await execute(ada, "await callTool('tickets.get', { id: 1 });");
+
+    const invoked = (await ada.callTool('codecall:invoke', {
+      tool: 'tickets.get',
+      input: { id: 2 },
+    })) as CallToolResult;
+
+    expect(invoked.isError).toBeFalsy();
+    expect(questions).toHaveLength(2);
+    expect(questions[0]).toContain('calls-per-hour');
+    expect(questions[1]).toContain('calls-per-day');
+    expect(executed).toEqual(['tickets.get:1', 'tickets.get:2']);
   });
 });

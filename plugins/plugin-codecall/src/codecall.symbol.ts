@@ -88,6 +88,7 @@ export interface CodeCallVmEnvironment {
    *                               The sandbox calls it without options: it applies a script's
    *                               `{ throwOnError: false }` itself, for `callTool()` and
    *                               namespace methods alike, so it needs the throw.
+   * @param call - The call's place in the run, as the sandbox numbered it (its review hooks' `callIndex`)
    *
    * SECURITY NOTES:
    * - Cannot call 'codecall:*' tools (self-reference blocked)
@@ -98,6 +99,7 @@ export interface CodeCallVmEnvironment {
     name: string,
     input: TInput,
     options?: CallToolOptions,
+    call?: { callIndex: number },
   ) => Promise<TResult | ToolCallResult<TResult>>;
 
   /**

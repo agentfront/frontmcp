@@ -388,27 +388,36 @@ async execute({ ids }: { ids: string[] }) {
 | `budgets.storage`                | `{ type: 'auto' }`   | Where counts and spent-grant markers are kept, through `createStorage()`. Share it across instances.                       |
 | `budgets.namespace`              | `'codecall-budgets'` | The key prefix of counts in the storage.                                                                                   |
 
-- **What counts.** `toolCalls` counts each call that reaches its tool. A call refused before its tool runs (by the
-  CodeCall policy, its input, an unknown name, or a rate or quota limit) doesn't count. `recordsChanged` counts what the
-  call's tool reports with `this.reportRecordsChanged(n)`, which reaches CodeCall with the call through the SDK, never
-  through the result: what a tool returns, or what a script or client sends, is never counted. Reports after the tool
-  returned, a remote tool's reports, and calls a client makes directly are not counted.
-- **Before each call.** Once the caller is at or over a budget's limit in the current window, the call doesn't run. It
-  gets the budget's answer at that call, as a review decision there would be, with or without `review` (with it, the
-  budgets answer first): `needs_approval` stops the run after the calls before it, and `denied` throws in the script,
-  which may catch it, and ends the run with `denied` when it doesn't. The finding (`budget-exceeded`) names the budget
-  and when its window resets. Budgets count per caller, not per run, so they carry across runs that resume.
+- **What counts.** `toolCalls` counts each call whose tool started: the SDK's tool flow tells CodeCall as the tool's
+  `execute()` starts, after every hook before it. A call refused before that (by the CodeCall policy, its input, an
+  unknown name, a rate or quota limit, or a hook that answered for the tool, such as a cache) doesn't count; a tool that
+  refuses its input from inside `execute()` does. `recordsChanged` counts what the call's tool reports with
+  `this.reportRecordsChanged(n)`, which reaches CodeCall with the call through the SDK, never through the result: what
+  a tool returns, or what a script or client sends, is never counted. Reports after the tool returned, a remote tool's
+  reports, and calls a client makes directly are not counted.
+- **Before each call, and again as it starts.** Once the caller is at or over a budget's limit in the current window,
+  the call doesn't run. It gets the budget's answer at that call, as a review decision there would be, with or without
+  `review` (with it, the budgets answer first): `needs_approval` stops the run after the calls before it, and `denied`
+  throws in the script, which may catch it, and ends the run with `denied` when it doesn't. The finding
+  (`budget-exceeded`) names the budget and when its window resets. As the tool starts, after the review and any wait
+  for a person, the budgets are checked again, the approvals the call needs are spent, and the call is counted; a call
+  the window filled up for in between fails there, with `RATE_LIMITED` and the budget's reason in a script, and with
+  the budget's answer from `codecall:invoke`. Budgets count per caller, not per run, so they carry across runs that
+  resume.
 - **Approving a call over a budget.** A budget's `needs_approval` carries an `approval` whose `id` covers this script,
-  this call's tool and arguments, and that budget; it has no `anyArgumentsId`. A person grants it as a review approval
-  ([Approvals](#approvals)): through the Approval plugin, or through elicitation, which asks in the same call. Each
-  grant lets exactly one call over the limit run, and that call is counted. Sending the same script again, or the same
-  call again, asks again, and a call over two budgets needs a grant for each. The call that spends an Approval plugin
-  grant sets a marker in `budgets.storage` (set only if absent, kept while the grant counts), so two runs, on one
-  instance or on several sharing the store, never spend one grant. A budget approval and a review approval never stand
-  for each other, so approving a destructive call never lifts a budget. A refused approval gives `denied`, and so does
-  a budget stop when nobody can approve it (no Approval plugin, and a client that can't elicit), as review answers a
-  destructive call. Until a run resumes from its journal (#1335), an approved script runs again from the start, so the
-  calls before the approved one run and count again, and each that is over the limit asks for its own approval.
+  this call's tool and arguments, its place in the run, and that budget; it has no `anyArgumentsId`. A person grants it
+  as a review approval ([Approvals](#approvals)): through the Approval plugin, or through elicitation, which asks in
+  the same call, for each budget the call is over. Each grant lets exactly one call over the limit run, spent as the
+  call's tool starts, and that call is counted. Sending the same script again, or the same call again, asks again, and
+  a call over two budgets needs a grant for each, spent together or not at all. The call that spends an Approval
+  plugin grant sets a marker in `budgets.storage` (set only if absent, kept while the grant counts, and refused once
+  the grant no longer counts), so two runs, on one instance or on several sharing the store, never spend one grant. A
+  budget approval and a review approval never stand for each other, so approving a destructive call never lifts a
+  budget. A refused approval gives `denied`, and so does a budget stop when nobody can approve it (no Approval plugin,
+  and a client that can't elicit), as review answers a destructive call. Until a run resumes from its journal (#1335),
+  an approved script runs again from the start, so the calls before the approved one run and count again, and each
+  that is over the limit asks for its own approval; an approval is bound to its place, so an earlier identical call
+  never spends it.
 - **The call that crosses the limit runs.** A call's records changed are known only once it ran, so the call that
   takes a caller past a `recordsChanged` limit runs, and the next one is stopped. Calls that start together, in a
   `parallel()` or in two scripts at once, are each checked before any of them is counted, and can go past a limit by

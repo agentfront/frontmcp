@@ -1,14 +1,17 @@
 // file: libs/plugins/src/codecall/tools/invoke.tool.ts
-import type { ReviewDecision } from '@enclave-vm/core/worker';
-
 import type { CallToolResult } from '@frontmcp/protocol';
 import { getCallSurface, Tool, ToolContext } from '@frontmcp/sdk';
 import { sha256Hex } from '@frontmcp/utils';
 
-import { budgetCallerOf, BudgetMeter } from '../budgets/budget-meter';
+import { budgetCallerOf, BudgetMeter, type BudgetVerdict } from '../budgets/budget-meter';
 import { CodeCallBudgetStoreToken } from '../budgets/budget-store';
 import CodeCallConfig from '../providers/code-call.config';
-import { approvalAnswerSchema, approvalQuestionOf, clientCanElicit } from '../review/approval-elicitation';
+import {
+  approvalAnswerSchema,
+  approvalQuestionOf,
+  clientCanElicit,
+  MAX_APPROVALS_ASKED,
+} from '../review/approval-elicitation';
 import { approvalsOf, createRunReview, reviewContextOf } from '../review/create-run-review';
 import { ApprovalServiceViewToken } from '../review/review-approvals';
 import { invocationScriptOf, reviewInvocation } from '../review/review-invocation';
@@ -46,12 +49,10 @@ interface InvocationBudgets {
   grantedByPerson: Set<string>;
 }
 
-/** The result for a budget's decision at the call, or undefined when it allows the call. */
-function refusalOf(decision: ReviewDecision, pending?: PendingApproval): CodeCallReviewResult | undefined {
+/** The result for the budgets' answer at the call, or undefined when they allow it. */
+function refusalOf({ decision, pending }: BudgetVerdict): CodeCallReviewResult | undefined {
   if (decision.decision === 'allow') return undefined;
-  const { decision: status, findings } = decision;
-  const reason = 'reason' in decision ? decision.reason : undefined;
-  return reviewResultOf({ status, reason, findings }, pending);
+  return reviewResultOf({ status: decision.decision, reason: decision.reason, findings: decision.findings }, pending);
 }
 
 /** A refusal of the review, with its result as structured content too. */
@@ -144,21 +145,28 @@ export default class InvokeTool extends ToolContext {
       },
     };
 
-    const budgetedCall = budgets?.meter.startCall();
+    const budgetedCall = budgets?.meter.startCall({ toolName, args: toolInput, callIndex: 0 });
     // The caller's surface goes along, so the flow judges the target for that caller as well. Marked as
     // CodeCall's own call, which may reach a tool CodeCall hides from a client's direct tools/call.
     const ctx = asCodeCallDispatch({
       authInfo: this.authInfo,
       surface,
-      onRecordsChanged: budgetedCall?.onRecordsChanged,
+      ...budgetedCall?.dispatch,
     });
 
     // runFlow returns CallToolResult directly - no transformation needed
-    const result = await this.scope.runFlow('tools:call-tool', { request, ctx }).catch(async (error: unknown) => {
-      await budgetedCall?.end(error);
-      throw error;
-    });
-    await budgetedCall?.end();
+    const result = await this.scope
+      .runFlow('tools:call-tool', { request, ctx })
+      .catch((error: unknown) => {
+        if (!budgetedCall?.refusal) throw error;
+        return undefined;
+      })
+      .finally(() => budgetedCall?.end());
+    const stoppedAtDispatch = budgetedCall?.refusal && refusalOf(budgetedCall.refusal);
+    if (stoppedAtDispatch) {
+      audit?.logSecurityAccessDenied(executionId, toolName, `budget: ${stoppedAtDispatch.status}`);
+      return buildReviewResult(stoppedAtDispatch);
+    }
 
     // Flow returns null if tool not found or other pre-execution errors
     if (!result) {
@@ -235,24 +243,28 @@ export default class InvokeTool extends ToolContext {
     toolInput: Record<string, unknown>,
   ): Promise<CodeCallReviewResult | undefined> {
     return this.askingApproval(grantedByPerson, async () => {
-      const decision = await meter.check(toolName, toolInput);
-      return { refusal: refusalOf(decision, meter.pendingApproval), pending: meter.pendingApproval };
+      const verdict = await meter.check({ toolName, args: toolInput, callIndex: 0 });
+      return { refusal: refusalOf(verdict), pending: verdict.pending };
     });
   }
 
-  /** What `decide` answers; when it waits for an approval the client can ask for, asked once and decided again. */
+  /** What `decide` answers, asking a client that can answer to approve each approval it waits for, until a decline. */
   private async askingApproval(
     approvedByPerson: Set<string>,
     decide: () => Promise<InvocationDecision>,
   ): Promise<CodeCallReviewResult | undefined> {
-    const first = await decide();
     const canElicit = clientCanElicit(this.scope, this.tryGetContext());
-    if (first.refusal?.status !== 'needs_approval' || !first.pending || !canElicit) return first.refusal;
-    const answer = await this.elicit(approvalQuestionOf(first.refusal.reason, first.pending), approvalAnswerSchema);
-    if (answer.status !== 'accept' || answer.content?.approve !== true) {
-      return { status: 'denied', reason: `${first.refusal.reason}; the person did not approve it` };
+    let decided = await decide();
+    for (let asked = 0; canElicit && asked < MAX_APPROVALS_ASKED; asked++) {
+      const { refusal, pending } = decided;
+      if (refusal?.status !== 'needs_approval' || !pending) break;
+      const answer = await this.elicit(approvalQuestionOf(refusal.reason, pending), approvalAnswerSchema);
+      if (answer.status !== 'accept' || answer.content?.approve !== true) {
+        return { status: 'denied', reason: `${refusal.reason}; the person did not approve it` };
+      }
+      approvedByPerson.add(pending.reference.id);
+      decided = await decide();
     }
-    approvedByPerson.add(first.pending.reference.id);
-    return (await decide()).refusal;
+    return decided.refusal;
   }
 }

@@ -94,7 +94,7 @@ describe('EnclaveService', () => {
 
       expect(result.success).toBe(true);
       expect(result.result).toEqual({ users: [{ id: '1', name: 'Alice' }] });
-      expect(mockEnvironment.callTool).toHaveBeenCalledWith('users:list', { limit: 10 });
+      expect(mockEnvironment.callTool).toHaveBeenCalledWith('users:list', { limit: 10 }, undefined, { callIndex: 0 });
     });
 
     it('should call multiple tools in sequence', async () => {
@@ -1984,7 +1984,7 @@ describe('EnclaveService', () => {
       const result = await service.execute(`return await acme.echo({ text: 'hello' });`, env);
       expect(result.success).toBe(true);
       expect(result.result).toBe('echo:hello');
-      expect(env.callTool).toHaveBeenCalledWith('acme.echo', { text: 'hello' });
+      expect(env.callTool).toHaveBeenCalledWith('acme.echo', { text: 'hello' }, undefined, { callIndex: 0 });
       expect(result.stats?.toolCallCount).toBe(1);
     });
 

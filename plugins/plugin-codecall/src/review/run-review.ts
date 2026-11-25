@@ -22,6 +22,8 @@ export interface CodeCallReviewOutcome {
   findings?: ReviewFinding[];
   /** Where a failed review failed: before the script (`script`), or at a call, after the calls before it ran. */
   phase?: ReviewRecord['phase'];
+  /** The place in the run of the call it stopped at. */
+  callIndex?: number;
 }
 
 export interface RunReviewOptions {
@@ -69,6 +71,7 @@ export function reviewOutcomeOf(
     status: refusal.decision as CodeCallReviewStatus,
     ...(refusal.reason !== undefined && { reason: refusal.reason }),
     ...(refusal.findings && { findings: refusal.findings }),
+    ...(refusal.callIndex !== undefined && { callIndex: refusal.callIndex }),
   };
 }
 
