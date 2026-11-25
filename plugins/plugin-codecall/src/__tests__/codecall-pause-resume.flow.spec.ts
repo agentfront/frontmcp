@@ -26,6 +26,7 @@ import { mkdtemp, rm, type StorageConfig } from '@frontmcp/utils';
 
 import CodeCallPlugin from '../codecall.plugin';
 import type { CodeCallPluginOptionsInput, CodeCallVmRuntime } from '../codecall.types';
+import { KeptValueCalls } from '../kept-values/kept-value-calls';
 import { callIdempotencyKey } from '../runs/call-idempotency-key';
 import { CodeCallRunStoreToken, type CodeCallRunRecord } from '../runs/run-record.types';
 
@@ -236,6 +237,27 @@ describe.each<CodeCallVmRuntime>(['node-vm', 'interpreter'])('pausing and resumi
   const options = (storage: StorageConfig = { type: 'memory' }): CodeCallPluginOptionsInput => ({
     vm: { preset: 'secure', runtime },
     runs: { storage },
+  });
+
+  it('answers a keep and a recall before the paused call from the record, and lists the name kept', async () => {
+    const client = await open(serverConfig(options()), `keep-${runtime}`);
+    const keptValueCalls = jest.spyOn(KeptValueCalls.prototype, 'call');
+    const script =
+      "await keep('order', { id: 'o1' });\n" +
+      "const kept = await recall('order');\n" +
+      "return await callTool('orders.refund', { id: kept.id, cents: -1 });";
+
+    const paused = await call(client, 'codecall:execute', { script });
+    expect(paused).toMatchObject({ status: 'tool_error', paused: { call: { position: 3, tool: 'orders.refund' } } });
+    expect(keptValueCalls).toHaveBeenCalledTimes(2);
+
+    const resumed = await call(client, 'codecall:resume', {
+      runId: paused.runId,
+      arguments: { id: 'o1', cents: 5 },
+    });
+
+    expect(resumed).toMatchObject({ status: 'ok', result: { refunded: 5 }, kept: ['order'] });
+    expect(keptValueCalls).toHaveBeenCalledTimes(2);
   });
 
   it('pauses before a call whose input is refused, and resumes it with corrected arguments, once', async () => {
