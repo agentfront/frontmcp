@@ -165,6 +165,7 @@ export async function createRunReview(
     hasApprovalChannel,
     effectsSoFar,
     canPause: caller.canPause,
+    replaysRecord: caller.journal?.replay?.replaysRun === true,
     reviewers: async () => (service.hasReviewers ? service.reviewersFor(reviewerToolsOf(caller)) : []),
     approvals,
     timeoutMs: options.timeoutMs,

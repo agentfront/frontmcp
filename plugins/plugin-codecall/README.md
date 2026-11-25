@@ -425,8 +425,8 @@ script is sent again.
 A run that cannot pause (without `runs.resume`, without an owner, on a runtime that cannot replay, or when its record
 would not fit) would run again from the start once approved. So when its call needs approval after a call to a tool
 without `readOnlyHint` has run (sending an email, say), the answer is `needs_changes`, not `needs_approval`: the
-finding (`approval-after-effects`) names those tools and asks for the call in a script of its own, or for the earlier
-calls in a separate script. No approval is asked for, by elicitation either.
+finding (`approval-after-effects`) names those tools, which already ran, and asks for the call and the calls after it
+in a script of their own. No approval is asked for, by elicitation either.
 
 ### Approvals
 
@@ -434,7 +434,8 @@ calls in a separate script. No approval is asked for, by elicitation either.
 plugin's record binds the caller (its session or user) and the expiry, and `review.approvalMaxAgeSeconds` caps the
 expiry. A changed script, other arguments or another policy ask again. `approval.anyArgumentsId` covers any
 arguments of that tool in that script, for as many calls per run as the grant's `metadata.maxCalls` allows; a
-resumed run counts the calls to that tool it made before it paused. When
+resumed run counts the calls to that tool it made before it paused, as its next call to the tool is made, and leaves
+the approvals of its script to its live calls, which are each checked as they come. When
 `provider` or `reviewer` asks for approval, `approval.id` covers the whole script. Enclave keeps their decisions by
 the script's SHA-256 for 5 minutes, so the same script sent again within that time gets the same answer without a new
 model call.

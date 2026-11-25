@@ -17,6 +17,8 @@ import { createToolCallError, TOOL_CALL_ERROR_CODES, type ToolCallErrorCode } fr
 import { effectsSoFarOf, type RunReviewCaller } from '../review/create-run-review';
 import { ReviewApprovals, type ApprovalRecordView } from '../review/review-approvals';
 import { RunJournal } from '../runs/run-journal';
+import { pausableSoFar } from '../runs/run-pause';
+import { RunReplay } from '../runs/run-replay';
 
 const HOUR = 3600;
 const MAX_AGE_MS = 3_600_000;
@@ -651,6 +653,36 @@ describe('a call stopped as it starts, with the run journal', () => {
 
     expect(call.refusal?.decision).toMatchObject({ decision: 'needs_approval' });
     expect(call.refusal?.pending?.reference.toolName).toBe(ARCHIVE.toolName);
+  });
+
+  it('does not take a call stopped as it starts for pausable once a later call of a parallel() ran with effects', async () => {
+    const replay = new RunReplay();
+    replay.appliedByRuntime(true);
+    const pausable = (laterCallRan: boolean) => {
+      journal = new RunJournal({ keepResults: true, replay });
+      journal.begin(ARCHIVE.toolName, ARCHIVE.args, 0);
+      if (laterCallRan) journal.begin('tickets.delete', { id: 1 }, 1).succeed({ deleted: 1 });
+      return new BudgetMeter(store, 'subject:ada', {
+        approvals: approvalsWith({}, Date.now()),
+        grantedByPerson: new Set(),
+        canApprove: true,
+        effectsSoFar: effectsSoFar(),
+        canPause: (callIndex) => pausableSoFar(journal, callIndex),
+      }).startCall({ ...ARCHIVE, callIndex: 0 });
+    };
+    const alone = pausable(false);
+    const beside = pausable(true);
+
+    await expect(alone.dispatch.beforeExecute()).rejects.toMatchObject({ code: 'RATE_LIMIT_EXCEEDED' });
+    await expect(beside.dispatch.beforeExecute()).rejects.toMatchObject({ code: 'RATE_LIMIT_EXCEEDED' });
+
+    expect(alone.refusal?.decision).toMatchObject({ decision: 'needs_approval' });
+    expect(beside.refusal?.decision).toMatchObject({
+      decision: 'needs_changes',
+      findings: [
+        expect.objectContaining({ rule: 'approval-after-effects', message: expect.stringContaining('tickets.delete') }),
+      ],
+    });
   });
 
   it('asks for changes when a tool with effects already reached its tool earlier in the run', async () => {

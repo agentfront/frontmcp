@@ -391,7 +391,7 @@ describe.each(RUNTIMES)('CodeCall review on the %s runtime', (runtime) => {
             rule: 'approval-after-effects',
             toolName: 'users.close',
             message: expect.stringContaining('but mail.send already ran in this script'),
-            suggestion: 'Call users.close in a script of its own, or run mail.send in a separate script first',
+            suggestion: 'mail.send already ran; send only users.close and the calls after it, in a script of their own',
           },
         ],
       });
@@ -434,6 +434,52 @@ describe.each(RUNTIMES)('CodeCall review on the %s runtime', (runtime) => {
         expect(executed).toEqual(['users.list', 'users.close:u1', 'users.close:u2']);
       },
     );
+
+    it('resumes a run whose literal calls a grant with limits covered, and still asks for the call past them', async () => {
+      const client = await open(setup);
+      const script =
+        "await callTool('users.close', { id: 'u1' });\nawait callTool('users.close', { id: 'u2' });\n" +
+        "await callTool('users.close', { id: 'u3' });\nreturn 'closed';";
+      const asked = await execute(client, script);
+      await grant(client, asked.approval?.anyArgumentsId as string, 2);
+      const limited = await execute(client, script);
+      expect(limited).toMatchObject({ status: 'needs_approval', paused: { call: { position: 3 } } });
+      const resume = async () =>
+        structuredOf<ExecuteOutcome>(
+          (await client.callTool('codecall:resume', { runId: limited.runId as string })) as CallToolResult,
+        );
+
+      const third = await resume();
+      expect(third).toMatchObject({ status: 'needs_approval', paused: { call: { position: 3, tool: 'users.close' } } });
+      await grant(client, third.approval?.id as string);
+
+      expect(await resume()).toMatchObject({ status: 'ok', result: 'closed' });
+      expect(executed).toEqual(['users.close:u1', 'users.close:u2', 'users.close:u3']);
+    });
+
+    it('runs the corrected arguments a person approved after the run paused again for them, never the first ones', async () => {
+      const client = await open(setup);
+      const script =
+        "const page = await callTool('users.list', { limit: 1 });\n" +
+        "await callTool('users.close', { id: page.items[0].id });\nreturn 'closed';";
+      const asked = await execute(client, script);
+      expect(asked).toMatchObject({ status: 'needs_approval', paused: { call: { position: 2 } } });
+
+      const corrected = structuredOf<ExecuteOutcome>(
+        (await client.callTool('codecall:resume', {
+          runId: asked.runId as string,
+          arguments: { id: 'u3' },
+        })) as CallToolResult,
+      );
+      expect(corrected).toMatchObject({ status: 'needs_approval', paused: { call: { position: 2 } } });
+      await grant(client, corrected.approval?.id as string);
+
+      const resumed = structuredOf<ExecuteOutcome>(
+        (await client.callTool('codecall:resume', { runId: asked.runId as string })) as CallToolResult,
+      );
+      expect(resumed).toMatchObject({ status: 'ok', result: 'closed' });
+      expect(executed).toEqual(['users.list', 'users.close:u3']);
+    });
   });
 
   describe('without an approval channel', () => {

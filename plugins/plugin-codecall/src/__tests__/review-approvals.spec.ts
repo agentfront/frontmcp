@@ -110,7 +110,7 @@ describe('ReviewApprovals', () => {
     expect(await approvals.stateOf(reference, true)).toBe('missing');
   });
 
-  it("counts a resumed run's calls to the tool before it paused against a grant's maxCalls", async () => {
+  it("counts a resumed run's calls to the tool before it paused against a grant's maxCalls only as a call consumes it", async () => {
     const reference = approvalsWith().referenceFor(CALL);
     const approvals = new ReviewApprovals({
       scriptHash: 'a'.repeat(64),
@@ -118,10 +118,10 @@ describe('ReviewApprovals', () => {
       maxAgeMs: HOUR_MS,
       service: serviceWith({ [reference.anyArgumentsId as string]: [approved({ metadata: { maxCalls: 2 } })] }),
       granted: new Set(),
-      callsBefore: (toolName) => (toolName === 'users.close' ? 1 : 0),
+      callsBefore: (toolName) => (toolName === 'users.close' ? 2 : 0),
     });
 
-    expect(await approvals.stateOf(reference, true)).toBe('approved');
+    expect(await approvals.stateOf(reference, false)).toBe('approved');
     expect(await approvals.stateOf(reference, true)).toBe('missing');
   });
 

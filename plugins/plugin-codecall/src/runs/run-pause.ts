@@ -49,12 +49,15 @@ export function pendingCallOf(status: CodeCallRunStatus, journal: RunJournal): C
 
 /**
  * Whether the run could pause at the call its call-phase hooks are asked about now, after every call so far; given its
- * `callIndex`, after the calls before it only, as when the call is stopped as it enters its tool.
+ * `callIndex`, after the calls before it only, as when the call is stopped as it enters its tool, and never while a
+ * later call already started, which would make it no longer the run's last.
  */
 export function pausableSoFar(journal: RunJournal, callIndex?: number): boolean {
   const { replay } = journal;
-  const entries = journal.entriesSoFar().filter((entry) => callIndex === undefined || entry.position <= callIndex);
-  return replay?.recordsReads === true && replayableInOrder(entries) && replay.replaysWithinDetectors(entries.length);
+  const entries = journal.entriesSoFar();
+  if (callIndex !== undefined && entries.some((entry) => entry.position > callIndex + 1)) return false;
+  const before = entries.filter((entry) => callIndex === undefined || entry.position <= callIndex);
+  return replay?.recordsReads === true && replayableInOrder(before) && replay.replaysWithinDetectors(before.length);
 }
 
 /**
