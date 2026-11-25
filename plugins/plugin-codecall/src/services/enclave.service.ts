@@ -334,13 +334,13 @@ export default class EnclaveService {
     // namespace methods alike. Failures are kept so a script a failing tool ended is a tool error.
     const toolFailures: ToolFailure[] = [];
     const maxResultValues = this.vmOptions.maxSanitizeProperties;
-    const toolHandler: ToolHandler = gate.guardToolHandler(async (toolName: string, args: Record<string, unknown>) => {
+    const toolHandler: ToolHandler = gate.guardToolHandler(async (toolName, args, place) => {
       const call = journal.begin(toolName, args);
       try {
         const result =
           keptValues && isKeptValueCall(toolName)
             ? await keptValues.call(toolName, args)
-            : await environment.callTool(toolName, args);
+            : await environment.callTool(toolName, args, undefined, place);
         const resultValues = countResultValues(result);
         if (resultValues > maxResultValues) {
           throw createPublicToolCallError(

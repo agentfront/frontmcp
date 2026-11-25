@@ -22,6 +22,8 @@ export interface CodeCallReviewOutcome {
   findings?: ReviewFinding[];
   /** Where a failed review failed: before the script (`script`), or at a call, after the calls before it ran. */
   phase?: ReviewRecord['phase'];
+  /** The place in the run of the call it stopped at. */
+  callIndex?: number;
 }
 
 export interface RunReviewOptions {
@@ -69,6 +71,7 @@ export function reviewOutcomeOf(
     status: refusal.decision as CodeCallReviewStatus,
     ...(refusal.reason !== undefined && { reason: refusal.reason }),
     ...(refusal.findings && { findings: refusal.findings }),
+    ...(refusal.callIndex !== undefined && { callIndex: refusal.callIndex }),
   };
 }
 
@@ -158,7 +161,7 @@ export class RunReview {
  * The answer for a call that needs approval after tools with effects ran: approving it would run the whole script, and
  * those tools, again, until a run resumes from its journal (#1335).
  */
-function needsOwnScript(toolName: string, repeated: readonly string[]): ReviewDecision {
+export function needsOwnScript(toolName: string, repeated: readonly string[]): ReviewDecision {
   const more = repeated.length - MAX_NAMED_TOOLS;
   const earlier = `${repeated.slice(0, MAX_NAMED_TOOLS).join(', ')}${more > 0 ? ` and ${more} more` : ''}`;
   return {

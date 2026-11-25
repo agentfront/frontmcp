@@ -43,6 +43,10 @@ export type ToolCallExtra = RequestHandlerExtra<Request, Notification> & {
    * invocations.
    */
   signal?: AbortSignal;
+  /** Set only by an in-process dispatcher: told each count the tool reports with `this.reportRecordsChanged(n)`. */
+  onRecordsChanged?: (count: number) => void;
+  /** Set only by an in-process dispatcher: awaited once as the tool's execute() starts; a throw stops the call there. */
+  beforeExecute?: () => Promise<void>;
 };
 
 export type ParsedToolResult = CallToolResult;

@@ -1072,6 +1072,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       context._jsonRpcRequestIdInternal = this.state.jsonRpcRequestId;
       // A hook that answers with `respond(value)` ends the call before validateOutput records the output
       context._onRespondInternal = (value) => this.state.set('rawOutput', value);
+      context._onRecordsChangedInternal = ctx.onRecordsChanged;
 
       // Wire transport to FrontMcpContext for elicitation support
       // The transport is stored in authInfo.transport by the local adapter
@@ -1321,6 +1322,8 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     // `getCallSurface()`, so what it does for the caller (CodeCall, the skill tools) is judged for it.
     const running = runOnSurface(callSurfaceOf(this.input.ctx), () =>
       runAsTool({ name: tool.name, fullName: tool.fullName }, async () => {
+        await this.input.ctx.beforeExecute?.();
+        if (toolContext.signal?.aborted) return;
         toolContext.output = await toolContext.execute(toolContext.input);
       }),
     );

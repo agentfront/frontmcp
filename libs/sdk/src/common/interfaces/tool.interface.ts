@@ -58,6 +58,8 @@ export abstract class ToolContext<
   _jsonRpcRequestIdInternal?: string | number;
   /** @internal Set by CallToolFlow: records the value `respond()` ends the call with as the tool's output */
   _onRespondInternal?: (value: Out) => void;
+  /** @internal Set by CallToolFlow: the dispatcher's `onRecordsChanged`, which validates and counts each report */
+  declare _onRecordsChangedInternal?: (count: number) => void;
 
   // ---- INPUT storages (backing fields)
   private _rawInput?: Partial<In> | any;
@@ -292,6 +294,11 @@ export abstract class ToolContext<
    */
   notifyResourceListChanged(): void {
     this.scope.notifications.broadcastNotification('notifications/resources/list_changed');
+  }
+
+  /** Adds `count` records this call changed for the in-process dispatcher that counts them (CodeCall's budgets). */
+  reportRecordsChanged(count: number): void {
+    this._onRecordsChangedInternal?.(count);
   }
 
   // ============================================

@@ -3,6 +3,9 @@ import type { FrontMcpContext, ScopeEntry } from '@frontmcp/sdk';
 
 import type { PendingApproval } from './run-review';
 
+/** How many times one CodeCall request asks a person, through elicitation, to approve what it stopped at. */
+export const MAX_APPROVALS_ASKED = 5;
+
 /** The form a person answers to approve a call or a script. */
 export const approvalAnswerSchema = z.object({ approve: z.boolean().describe('Allow it') });
 

@@ -510,7 +510,7 @@ describe('EnclaveService on the real interpreter runtime in Node', () => {
         success: true,
         result: { user: { id: 7, name: 'user-7' }, tool: 'a' },
       });
-      expect(callTool).toHaveBeenCalledWith('users.get', { id: 7 });
+      expect(callTool).toHaveBeenCalledWith('users.get', { id: 7 }, undefined, { callIndex: 0 });
     },
     REAL_ENCLAVE_TIMEOUT_MS,
   );

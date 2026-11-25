@@ -27,6 +27,7 @@ function unavailableGlobalsLine(): string {
 }
 
 const REVIEW_STATUSES = ' | needs_changes | needs_approval | denied | review_failed';
+const BUDGET_STATUSES = ' | needs_changes | needs_approval | denied';
 
 const REVIEW_LINE =
   '\nREVIEW: the server checks each script and call first. ' +
@@ -43,14 +44,26 @@ function keepLineOf(ttlSeconds: number): string {
   );
 }
 
+const BUDGET_LINE =
+  '\nBUDGETS: each caller has limits per time window, checked before each call; the calls before a stopped one ' +
+  'already ran, and a new script must not repeat the ones with effects. budget-exceeded: a budget is used up until ' +
+  'its window resets (the finding says when); with needs_approval a person may approve that one call, then send the ' +
+  'same script again; with denied, after the reset send the stopped call and the ones after it in a new script, ' +
+  'also when the reason says a person refused it. approval-after-effects (needs_changes): a tool with effects ' +
+  'already ran in this script, so send the stopped call in a script of its own. budget-unavailable: the budget store ' +
+  'failed, and a reset does not fix it; its finding names what already ran, and once the store answers you send ' +
+  'only the calls that did not run, in a new script. A call stopped as it starts fails with RATE_LIMITED and the ' +
+  "same advice. Other findings are the review's.";
+
 /**
- * The `codecall:execute` description for the server's resolved `vm` options, whether its `review` is on, and how long
- * kept values last while `keep` is on.
+ * The `codecall:execute` description for the server's resolved `vm` options, whether its `review` is on, how long
+ * kept values last while `keep` is on, and whether `budgets` are on.
  */
 export function buildExecuteToolDescription(
   vmOptions: ResolvedCodeCallVmOptions,
   reviewed = false,
   keepTtlSeconds?: number,
+  budgeted = false,
 ): string {
   const loops = vmOptions.allowLoops ? 'for, for-of' : 'for-of';
   const blockedLoops = vmOptions.allowLoops ? 'while, do-while' : 'while, do-while, for';
@@ -60,6 +73,8 @@ export function buildExecuteToolDescription(
   const maxToolCalls = maxToolCallsOf(vmOptions);
   const callsPerTool = rapidEnumerationThresholdOf(vmOptions);
   const blockedConsole = vmOptions.allowConsole ? '' : 'console (use mcpLog), ';
+  const decisionStatuses = reviewed ? REVIEW_STATUSES : budgeted ? BUDGET_STATUSES : '';
+  const decisionLines = `${reviewed ? REVIEW_LINE : ''}${budgeted ? BUDGET_LINE : ''}`;
   const consoleLine = vmOptions.allowConsole
     ? '\nLOGGING: console.log/info/warn/error/debug or mcpLog(level, message)'
     : '';
@@ -82,8 +97,8 @@ ALLOWED: ${loops}, arrow fn, map/filter/reduce/find, ${namespaces.join('')}if/el
 BLOCKED: ${blockedLoops}, ${blockedConsole}function decl, ${[...blockedNames].join(', ')}${unavailableGlobalsLine()}${consoleLine}${keepTtlSeconds === undefined ? '' : keepLineOf(keepTtlSeconds)}
 
 ERRORS: NOT_FOUND | VALIDATION | EXECUTION | TIMEOUT | ACCESS_DENIED | RATE_LIMITED | RESULT_TOO_LARGE
-STATUS: ok | syntax_error | illegal_access | runtime_error | tool_error | timeout${reviewed ? REVIEW_STATUSES : ''}
-LIMITS: ${MAX_ITERATIONS_PER_LOOP} iterations per loop, ${timeoutSeconds}s timeout, ${maxToolCalls} tool calls, ${callsPerTool} calls to one tool per 2s (parallel() included), ${vmOptions.maxSanitizeProperties} values (array items and object keys, at every depth) in each tool result and in the return value${reviewed ? REVIEW_LINE : ''}`;
+STATUS: ok | syntax_error | illegal_access | runtime_error | tool_error | timeout${decisionStatuses}
+LIMITS: ${MAX_ITERATIONS_PER_LOOP} iterations per loop, ${timeoutSeconds}s timeout, ${maxToolCalls} tool calls, ${callsPerTool} calls to one tool per 2s (parallel() included), ${vmOptions.maxSanitizeProperties} values (array items and object keys, at every depth) in each tool result and in the return value${decisionLines}`;
 }
 
 export const executeToolDescription = buildExecuteToolDescription(resolveVmOptions());

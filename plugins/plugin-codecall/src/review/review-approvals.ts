@@ -34,6 +34,12 @@ export interface CodeCallApprovalReference {
 
 export type CodeCallApprovalState = 'approved' | 'denied' | 'missing';
 
+/** A grant in the Approval plugin's store: its name, unique per grant, and when it stops counting here (epoch ms). */
+export interface RecordedGrant {
+  grantKey: string;
+  countsUntil: number;
+}
+
 export interface ReviewApprovalsOptions {
   scriptHash: string;
   policyVersion: string;
@@ -80,6 +86,22 @@ export class ReviewApprovals {
     };
   }
 
+  /** The reference for a call over a budget: that call at its place in the run, and that budget, apart from review's. */
+  budgetReferenceFor(
+    call: { toolName: string; args: unknown; callIndex?: number },
+    budget: string,
+  ): CodeCallApprovalReference {
+    const argumentsHash = argumentsHashOf(call.args);
+    const subject: Record<string, string> = {
+      scriptHash: this.options.scriptHash,
+      budget,
+      toolName: call.toolName,
+      argumentsHash,
+    };
+    if (call.callIndex !== undefined) subject['callIndex'] = String(call.callIndex);
+    return { id: approvalIdOf(subject), toolName: call.toolName, argumentsHash };
+  }
+
   /** Whether a person approved or refused the reference; `consume` counts the call against a grant with limits. */
   async stateOf(reference: CodeCallApprovalReference, consume: boolean): Promise<CodeCallApprovalState> {
     if (this.options.granted.has(reference.id)) return APPROVED;
@@ -94,6 +116,18 @@ export class ReviewApprovals {
     if (used >= maxCalls) return 'missing';
     if (consume) this.callsByGrant.set(reference.anyArgumentsId, used + 1);
     return APPROVED;
+  }
+
+  /** The Approval plugin's grants of exactly this reference that still count, or `denied` when a person refused it. */
+  async recordedGrantsOf(reference: CodeCallApprovalReference): Promise<RecordedGrant[] | typeof DENIED> {
+    const records = await this.recordsOf(reference.id);
+    if (records.some((record) => record.state === DENIED)) return DENIED;
+    return records
+      .filter((record) => record.state === APPROVED)
+      .map((record) => ({
+        grantKey: `${reference.id}:${record.grantedAt}`,
+        countsUntil: record.grantedAt + this.options.maxAgeMs,
+      }));
   }
 
   private async recordsOf(approvalId: string): Promise<ApprovalRecordView[]> {

@@ -22,10 +22,12 @@ import {
   type ToolEntry,
   type ToolType,
 } from '@frontmcp/sdk';
-import { createStorage } from '@frontmcp/utils';
+import { createStorage, type StorageConfig } from '@frontmcp/utils';
 
+import { CodeCallBudgetStore, CodeCallBudgetStoreToken } from './budgets/budget-store';
 import {
   codeCallPluginOptionsSchema,
+  type CodeCallBudgetsOptions,
   type CodeCallKeepOptions,
   type CodeCallMode,
   type CodeCallPluginOptions,
@@ -77,6 +79,16 @@ function runStoreProvider(runs: CodeCallRunsOptions): ProviderType {
   });
 }
 
+/** A store of the plugin as a browser build reads it: one on Redis or SQLite is refused there. */
+function browserStoreOf(option: 'runs' | 'keep' | 'budgets', storage: StorageConfig): PluginStoreInBrowser {
+  const opensServerStore = storage.type === 'redis' || storage.type === 'sqlite';
+  return {
+    plugin: 'CodeCallPlugin',
+    option: opensServerStore ? `${option}.storage: { type: '${storage.type}' }` : undefined,
+    memory: `${option}.storage: { type: 'memory' }`,
+  };
+}
+
 /** The store of kept values, opened when the server starts and closed when it stops. */
 function keptValueStoreProvider(keep: CodeCallKeepOptions): ProviderType {
   const { storage, namespace, ttlSeconds, maxBytes } = keep;
@@ -87,6 +99,18 @@ function keptValueStoreProvider(keep: CodeCallKeepOptions): ProviderType {
     inject: () => [] as const,
     useFactory: async () =>
       new KeptValueStore((await createStorage(storage)).namespace(namespace), { ttlSeconds, maxBytes }),
+  });
+}
+
+/** The store of budget counts, opened when the server starts and closed when it stops. */
+function budgetStoreProvider(budgets: CodeCallBudgetsOptions): ProviderType {
+  const { storage, namespace, limits } = budgets;
+  return storeProvider({
+    name: 'codecall:budgets',
+    provide: CodeCallBudgetStoreToken,
+    scope: ProviderScope.GLOBAL,
+    inject: () => [] as const,
+    useFactory: async () => new CodeCallBudgetStore((await createStorage(storage)).namespace(namespace), limits),
   });
 }
 
@@ -128,19 +152,14 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
     this.options = codeCallPluginOptionsSchema.parse(options);
   }
 
-  /** A `runs.storage` or `keep.storage` on Redis or SQLite, which a browser refuses at startup. */
+  /** A `runs.storage`, `keep.storage` or `budgets.storage` on Redis or SQLite, which a browser refuses at startup. */
   static override browserStores(options: CodeCallPluginOptionsInput): PluginStoreInBrowser[] {
-    const { runs, keep } = codeCallPluginOptionsSchema.parse(options);
-    return Object.entries({ runs, keep })
-      .filter(([, store]) => store.enabled)
-      .map(([option, { storage }]) => ({
-        plugin: 'CodeCallPlugin',
-        option:
-          storage.type === 'redis' || storage.type === 'sqlite'
-            ? `${option}.storage: { type: '${storage.type}' }`
-            : undefined,
-        memory: `${option}.storage: { type: 'memory' }`,
-      }));
+    const { runs, keep, budgets } = codeCallPluginOptionsSchema.parse(options);
+    return [
+      ...(runs.enabled ? [browserStoreOf('runs', runs.storage)] : []),
+      ...(keep.enabled ? [browserStoreOf('keep', keep.storage)] : []),
+      ...(budgets ? [browserStoreOf('budgets', budgets.storage)] : []),
+    ];
   }
 
   /**
@@ -202,6 +221,7 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
       ...(parsedOptions.runs.enabled ? [runStoreProvider(parsedOptions.runs)] : []),
       ...(parsedOptions.keep.enabled ? [keptValueStoreProvider(parsedOptions.keep)] : []),
       ...(parsedOptions.review ? [reviewServiceProvider(parsedOptions.review)] : []),
+      ...(parsedOptions.budgets ? [budgetStoreProvider(parsedOptions.budgets)] : []),
     ];
   }
 
@@ -224,6 +244,7 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
         config.resolvedVm,
         config.review !== undefined,
         config.keep.enabled ? config.keep.ttlSeconds : undefined,
+        config.budgets !== undefined,
       ),
       ConfiguredExecuteTool,
     );

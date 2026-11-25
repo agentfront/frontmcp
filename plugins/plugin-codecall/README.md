@@ -119,6 +119,7 @@ The plugin adds a `codecall` field to `@Tool`:
 | `keep`           | `{ enabled: true }`    | `keep(name, value)` and `recall(name)` in scripts, for values one script hands a later one. See [Keep and recall](#keep-and-recall).                            |
 | `trace`          | `{ level: 'failure' }` | The tool calls `codecall:execute` lists in its result, and the spans it sends. See [Trace](#trace).                                                             |
 | `review`         | off                    | Review each script and each call with the server's rules before it runs. See [Review](#review).                                                                 |
+| `budgets`        | off                    | Limit what each caller does across runs, such as records changed an hour. See [Budgets](#budgets).                                                              |
 
 ```ts
 CodeCallPlugin.init({
@@ -151,7 +152,8 @@ CodeCallPlugin.init({
 
 Each `codecall:execute` that has an owner (a session, or a signed-in caller) leaves a run record, and its result
 carries `runId`. The record holds the owner, the script's SHA-256, the status, the start and end times,
-`reviewDecision` (the [review](#review)'s status, `'allow'` when it let the script run, `null` with `review` off), the return value's size, and a journal with one entry per tool
+`reviewDecision` (the [review](#review)'s or a [budget](#budgets)'s status, `'allow'` when they let the script run,
+`null` with `review` and `budgets` off), the return value's size, and a journal with one entry per tool
 call: its position (in the order the host's tool handler was entered, on either runtime), the tool, a SHA-256 of the
 arguments, the outcome (`success`, `failure` or `unfinished`), the phase of a failure (`access`, `input`, `limit` or
 `execute`), the duration and the result's size. Results are kept only with `runs.resume: true`. A `keep` or `recall` is journaled
@@ -249,7 +251,7 @@ calls ran before a script failed:
 
 With observability on, each run is also a `codecall run` span with a `codecall call <tool>` child span per tool call,
 carrying the same position, outcome, phase, duration and size, and values only with `trace.values: true`. With
-`review` on, the run span also carries `codecall.review.decision` and the findings (`codecall.review.findings.count`,
+`review` or `budgets` on, the run span also carries `codecall.review.decision` and the findings (`codecall.review.findings.count`,
 `codecall.review.findings.rules`, and `codecall.review.findings` as JSON without suggestions, cut to 2,000
 characters). With observability off, CodeCall sends no spans.
 
@@ -298,7 +300,8 @@ the review's.
 | `review.timeoutMs`             | `30000` | How long one review may take; a review that takes longer fails.                                                |
 | `review.approvalMaxAgeSeconds` | `3600`  | How long an approval counts after it was granted.                                                              |
 
-With `review` on, `codecall:execute` has four more statuses, and its description lists them:
+With `review` on, `codecall:execute` has four more statuses, and its description lists them (with only
+[`budgets`](#budgets) on, it has `needs_approval` and `denied`, and its description says what a budget stop means):
 
 | `status`         | Payload                                                             | What the agent does                                                                                                                                                                                                   |
 | ---------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -349,6 +352,90 @@ Without either, a destructive call is `denied`, and the reason says why.
 `codecall:invoke` is reviewed as the one-call script it stands for, with the same rules, reviewers and approvals; a
 refusal is an error result whose structured content is the same payload. Tools a client calls directly (listed in
 `codecall_opt_in` or `metadata_driven`, or with `visibleInListTools: true`) are not reviewed yet.
+
+## Budgets
+
+Limits inside one script, such as `vm.maxToolCalls`, don't stop an agent that sends 40 scripts. A budget limits what
+each caller does across all of its scripts and `codecall:invoke` calls, in a fixed window. Here, once a caller has
+changed 200 records in the hour, each further call needs a person's approval until the hour ends. It is a threshold,
+not a hard maximum: the call that crosses it runs, so one call that changes 250 records goes through, and calls that
+start together can each go past it before any of them reports:
+
+```ts
+CodeCallPlugin.init({
+  budgets: {
+    limits: [{ name: 'records-per-hour', counts: 'recordsChanged', limit: 200, windowSeconds: 3600 }],
+    storage: { type: 'redis', redis: { url: process.env.REDIS_URL } },
+  },
+});
+```
+
+A tool that writes reports how many records it changed:
+
+```ts
+async execute({ ids }: { ids: string[] }) {
+  const archived = await this.get(TicketStore).archive(ids);
+  this.reportRecordsChanged(archived.length);
+  return { archived: archived.length };
+}
+```
+
+| Option                           | Default              | Description                                                                                                                |
+| -------------------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `budgets.limits[].name`          |                      | Names the budget in answers and in its keys: letters, digits, `_` and `-`, unique.                                         |
+| `budgets.limits[].counts`        |                      | `'toolCalls'` or `'recordsChanged'`.                                                                                       |
+| `budgets.limits[].limit`         |                      | The most a caller may use in one window.                                                                                   |
+| `budgets.limits[].windowSeconds` |                      | The window's length. Windows are fixed, from the Unix epoch: `3600` is each hour on the hour.                              |
+| `budgets.limits[].onExceeded`    | `'needs_approval'`   | What a call gets once its caller reached the limit: `'needs_approval'` (`'denied'` when nobody can approve) or `'denied'`. |
+| `budgets.storage`                | `{ type: 'auto' }`   | Where counts and spent-grant markers are kept, through `createStorage()`. Share it across instances.                       |
+| `budgets.namespace`              | `'codecall-budgets'` | The key prefix of counts in the storage.                                                                                   |
+
+- **What counts.** `toolCalls` counts each call whose tool started: the SDK's tool flow tells CodeCall as the tool's
+  `execute()` starts, after every hook before it. A call refused before that (by the CodeCall policy, its input, an
+  unknown name, a rate or quota limit, or a hook that answered for the tool, such as a cache) doesn't count; a tool that
+  refuses its input from inside `execute()` does. `recordsChanged` counts what the call's tool reports with
+  `this.reportRecordsChanged(n)`, which reaches CodeCall with the call through the SDK, never through the result: what
+  a tool returns, or what a script or client sends, is never counted. A report after the call ended, from a tool that
+  ran past its timeout, counts as it comes; a remote tool's reports, and calls a client makes directly, are not
+  counted.
+- **Before each call, and again as it starts.** Once the caller is at or over a budget's limit in the current window,
+  the call doesn't run. It gets the budget's answer at that call, as a review decision there would be, with or without
+  `review` (with it, the budgets answer first): `needs_approval` stops the run after the calls before it, and `denied`
+  throws in the script, which may catch it, and ends the run with `denied` when it doesn't. The finding
+  (`budget-exceeded`) names the budget and when its window resets. As the tool starts, after the review and any wait
+  for a person, the call is counted at once with an atomic increment of each `toolCalls` budget, and the approvals it
+  needs for the budgets it is then over are spent; when it lacks one, it is taken back off the count and fails there,
+  with `RATE_LIMITED` and the budget's reason in a script, and with the budget's answer from `codecall:invoke`. Budgets count per caller, not per run, so they carry across runs that
+  resume.
+- **Approving a call over a budget.** A budget's `needs_approval` carries an `approval` whose `id` covers this script,
+  this call's tool and arguments, its place in the run, and that budget; it has no `anyArgumentsId`. A person grants it
+  as a review approval ([Approvals](#approvals)): through the Approval plugin, or through elicitation, which asks in
+  the same call, for each budget the call is over. Each grant lets exactly one call over the limit run, spent as the
+  call's tool starts, and that call is counted. Sending the same script again, or the same call again, asks again, and
+  a call over two budgets needs a grant for each, spent together or not at all. The call that spends an Approval
+  plugin grant sets a marker in `budgets.storage` (set only if absent, kept while the grant counts, and refused once
+  the grant no longer counts), so two runs, on one instance or on several sharing the store, never spend one grant. A
+  budget approval and a review approval never stand for each other, so approving a destructive call never lifts a
+  budget. A refused approval gives `denied`, and so does a budget stop when nobody can approve it (no Approval plugin,
+  and a client that can't elicit), as review answers a destructive call. Until a run resumes from its journal (#1335),
+  an approved script runs again from the start, so once a tool without `readOnlyHint` ran in the script, a call over a
+  budget gets `needs_changes` (`approval-after-effects`), as review answers, rather than an approval that would run
+  that tool again. After read-only calls, the calls before the approved one run and count again, and each that is over
+  the limit asks for its own approval; an approval is bound to its place, so an earlier identical call never spends it.
+- **The call that crosses a `recordsChanged` limit runs.** A call's records changed are known only once it ran, so the
+  call that takes a caller past a `recordsChanged` limit runs, and the next one is stopped; calls that start together
+  can each run before any of them reports. A `toolCalls` limit holds for calls that start together, in a `parallel()`
+  or in two scripts at once, since each is counted before it runs.
+- **Who is a caller.** A signed-in user, or an API key in `static` auth, is one caller across its sessions. An
+  anonymous caller counts per verified session; anonymous calls without a session share one count.
+- **Shared counts.** Each count is one key per budget, caller (as a SHA-256) and window, added to with an atomic
+  increment and kept for at least the window. On Redis or SQLite every instance on the store counts together; in
+  memory each instance counts alone. CodeCall's reserved names are never counted.
+- **A store that fails closes.** When the budgets can't be checked (the counts or an approval can't be read), the call
+  is `denied` (`budget-unavailable`), and once a count couldn't be kept, or a refused call couldn't be taken back off
+  the count, the rest of that run is too. An approval wouldn't fix a store, so it isn't asked for. The finding names
+  the tools with effects that already ran in the script and tells the agent to send only the calls that did not run,
+  in a new script, once the store answers; a call stopped as it starts carries the same advice in its error.
 
 ## Runtime and process boundary
 

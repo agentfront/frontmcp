@@ -3,13 +3,21 @@ import type { CallToolResult } from '@frontmcp/protocol';
 import { getCallSurface, Tool, ToolContext } from '@frontmcp/sdk';
 import { sha256Hex } from '@frontmcp/utils';
 
+import { budgetCallerOf, BudgetMeter, type BudgetVerdict } from '../budgets/budget-meter';
+import { CodeCallBudgetStoreToken } from '../budgets/budget-store';
 import CodeCallConfig from '../providers/code-call.config';
-import { approvalAnswerSchema, approvalQuestionOf, clientCanElicit } from '../review/approval-elicitation';
-import { createRunReview, reviewContextOf } from '../review/create-run-review';
+import {
+  approvalAnswerSchema,
+  approvalQuestionOf,
+  clientCanElicit,
+  MAX_APPROVALS_ASKED,
+} from '../review/approval-elicitation';
+import { approvalsOf, createRunReview, reviewContextOf } from '../review/create-run-review';
 import { ApprovalServiceViewToken } from '../review/review-approvals';
 import { invocationScriptOf, reviewInvocation } from '../review/review-invocation';
-import type { CodeCallReviewResult } from '../review/review-result';
+import { reviewResultOf, type CodeCallReviewResult } from '../review/review-result';
 import CodeCallReviewService from '../review/review.service';
+import type { PendingApproval } from '../review/run-review';
 import { asCodeCallDispatch, checkCodeCallToolAccess, isBlockedSelfReference } from '../security';
 import { AuditLoggerService } from '../services/audit-logger.service';
 import {
@@ -27,6 +35,25 @@ function buildErrorResult(message: string): CallToolResult {
     content: [{ type: 'text', text: message }],
     isError: true,
   };
+}
+
+/** What a review or the budgets decided for the call: a refusal, and the approval it waits for. */
+interface InvocationDecision {
+  refusal?: CodeCallReviewResult;
+  pending?: PendingApproval;
+}
+
+/** The caller's budgets for one invocation, and the grants a person makes for it in this request. */
+interface InvocationBudgets {
+  meter: BudgetMeter;
+  grantedByPerson: Set<string>;
+}
+
+/** The result for the budgets' answer at the call, or undefined when they allow it. */
+function refusalOf({ decision, pending }: BudgetVerdict): CodeCallReviewResult | undefined {
+  if (decision.decision === 'allow') return undefined;
+  const reason = 'reason' in decision ? decision.reason : undefined;
+  return reviewResultOf({ status: decision.decision, reason, findings: decision.findings }, pending);
 }
 
 /** A refusal of the review, with its result as structured content too. */
@@ -96,6 +123,13 @@ export default class InvokeTool extends ToolContext {
     }
 
     const reviewService = this.tryGet(CodeCallReviewService);
+    const budgets = this.budgetsFor(toolName, toolInput, reviewService);
+    const budgetRefusal = budgets && (await this.budgetRefusal(budgets, toolName, toolInput));
+    if (budgetRefusal) {
+      audit?.logSecurityAccessDenied(executionId, toolName, `budget: ${budgetRefusal.status}`);
+      return buildReviewResult(budgetRefusal);
+    }
+
     const refusal = reviewService ? await this.review(reviewService, toolName, toolInput, surface) : undefined;
     if (refusal) {
       audit?.logSecurityAccessDenied(executionId, toolName, `review: ${refusal.status}`);
@@ -112,15 +146,28 @@ export default class InvokeTool extends ToolContext {
       },
     };
 
+    const budgetedCall = budgets?.meter.startCall({ toolName, args: toolInput, callIndex: 0 });
     // The caller's surface goes along, so the flow judges the target for that caller as well. Marked as
     // CodeCall's own call, which may reach a tool CodeCall hides from a client's direct tools/call.
     const ctx = asCodeCallDispatch({
       authInfo: this.authInfo,
       surface,
+      ...budgetedCall?.dispatch,
     });
 
     // runFlow returns CallToolResult directly - no transformation needed
-    const result = await this.scope.runFlow('tools:call-tool', { request, ctx });
+    const result = await this.scope
+      .runFlow('tools:call-tool', { request, ctx })
+      .catch((error: unknown) => {
+        if (!budgetedCall?.refusal) throw error;
+        return undefined;
+      })
+      .finally(() => budgetedCall?.end());
+    const stoppedAtDispatch = budgetedCall?.refusal && refusalOf(budgetedCall.refusal);
+    if (stoppedAtDispatch) {
+      audit?.logSecurityAccessDenied(executionId, toolName, `budget: ${stoppedAtDispatch.status}`);
+      return buildReviewResult(stoppedAtDispatch);
+    }
 
     // Flow returns null if tool not found or other pre-execution errors
     if (!result) {
@@ -147,7 +194,7 @@ export default class InvokeTool extends ToolContext {
     const code = invocationScriptOf(toolName, toolInput);
     const canElicit = clientCanElicit(this.scope, this.tryGetContext());
     const approvedByPerson = new Set<string>();
-    const reviewOnce = async () => {
+    return this.askingApproval(approvedByPerson, async () => {
       const runReview = await createRunReview(
         reviewService,
         {
@@ -164,14 +211,61 @@ export default class InvokeTool extends ToolContext {
       );
       const refusal = await reviewInvocation(runReview, code, reviewContextOf(this, surface));
       return { refusal, pending: runReview.pendingApproval };
+    });
+  }
+
+  /** The caller's budgets for the call, with the grants a person makes in this request, or undefined without `budgets`. */
+  private budgetsFor(
+    toolName: string,
+    toolInput: Record<string, unknown>,
+    reviewService: CodeCallReviewService | undefined,
+  ): InvocationBudgets | undefined {
+    const store = this.tryGet(CodeCallBudgetStoreToken);
+    if (!store) return undefined;
+    const grantedByPerson = new Set<string>();
+    const approvalService = this.tryGet(ApprovalServiceViewToken);
+    const scriptHash = sha256Hex(invocationScriptOf(toolName, toolInput));
+    const approval = {
+      approvals: approvalsOf(
+        { authInfo: this.authInfo, approvalService, granted: grantedByPerson },
+        scriptHash,
+        reviewService,
+      ),
+      grantedByPerson,
+      canApprove: approvalService !== undefined || clientCanElicit(this.scope, this.tryGetContext()),
     };
-    const first = await reviewOnce();
-    if (first.refusal?.status !== 'needs_approval' || !first.pending || !canElicit) return first.refusal;
-    const answer = await this.elicit(approvalQuestionOf(first.refusal.reason, first.pending), approvalAnswerSchema);
-    if (answer.status !== 'accept' || answer.content?.approve !== true) {
-      return { status: 'denied', reason: `${first.refusal.reason}; the person did not approve it` };
+    return { meter: new BudgetMeter(store, budgetCallerOf(this), approval, this.logger), grantedByPerson };
+  }
+
+  /** The budgets' answer for the call; a client that can answer is asked once to approve a call over a budget. */
+  private budgetRefusal(
+    { meter, grantedByPerson }: InvocationBudgets,
+    toolName: string,
+    toolInput: Record<string, unknown>,
+  ): Promise<CodeCallReviewResult | undefined> {
+    return this.askingApproval(grantedByPerson, async () => {
+      const verdict = await meter.check({ toolName, args: toolInput, callIndex: 0 });
+      return { refusal: refusalOf(verdict), pending: verdict.pending };
+    });
+  }
+
+  /** What `decide` answers, asking a client that can answer to approve each approval it waits for, until a decline. */
+  private async askingApproval(
+    approvedByPerson: Set<string>,
+    decide: () => Promise<InvocationDecision>,
+  ): Promise<CodeCallReviewResult | undefined> {
+    const canElicit = clientCanElicit(this.scope, this.tryGetContext());
+    let decided = await decide();
+    for (let asked = 0; canElicit && asked < MAX_APPROVALS_ASKED; asked++) {
+      const { refusal, pending } = decided;
+      if (refusal?.status !== 'needs_approval' || !pending) break;
+      const answer = await this.elicit(approvalQuestionOf(refusal.reason, pending), approvalAnswerSchema);
+      if (answer.status !== 'accept' || answer.content?.approve !== true) {
+        return { status: 'denied', reason: `${refusal.reason}; the person did not approve it` };
+      }
+      approvedByPerson.add(pending.reference.id);
+      decided = await decide();
     }
-    approvedByPerson.add(first.pending.reference.id);
-    return (await reviewOnce()).refusal;
+    return decided.refusal;
   }
 }
