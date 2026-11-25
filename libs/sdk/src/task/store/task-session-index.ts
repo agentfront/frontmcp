@@ -55,8 +55,8 @@ export type TaskIndexPage = { tasks: TaskRecord[]; endPosition: number; position
  * position whose task has none is gone for good), `index-count:{session}` the numbers used, `index-start:{session}`
  * the leading numbers whose tasks are gone, `index-skip:{session}:{n}` the last of the numbers after `n` whose tasks
  * are gone (both `{generation}:{number}`, for the count they were read under), `index-settled:{session}` a number
- * every position up to which had been written when the note was set, and `index-ready:{session}` that the session's
- * earlier tasks were indexed (`done:{generation}:{count}`).
+ * every position up to which had been written when the note was set (`{generation}:{number}`), and
+ * `index-ready:{session}` that the session's earlier tasks were indexed (`done:{generation}:{count}`).
  */
 export class TaskSessionIndex {
   private readonly positions: NamespacedStorage;
@@ -136,7 +136,7 @@ export class TaskSessionIndex {
       startPosition === 0 ? await this.ensureBackfilled(sessionId) : await this.generationOf(sessionId);
     if (startPosition === 0 && generation === undefined) return undefined;
     const positionsUsed = Number((await this.counts.get(sessionId)) ?? 0);
-    const writtenUpTo = await this.writtenUpTo(sessionId, positionsUsed);
+    const writtenUpTo = await this.writtenUpTo(sessionId, positionsUsed, generation);
     const tasks: TaskRecord[] = [];
     // A run of positions gone for good after the head or a live task is remembered, and later lists jump it
     let anchor = startPosition;
@@ -218,19 +218,21 @@ export class TaskSessionIndex {
   }
 
   /**
-   * The last position every write had finished by: the count a list noted at least {@link POSITION_WRITE_SECONDS} ago,
-   * the note's age read from its remaining TTL. A list notes the count it sees when there is no note or it is that old.
+   * The last position every write had finished by: the count a list noted under this generation of the count at least
+   * {@link POSITION_WRITE_SECONDS} ago, the note's age read from its remaining TTL. A list notes the count it sees when
+   * there is no such note or it is that old; a note from another generation counts as none.
    */
-  private async writtenUpTo(sessionId: string, positionsUsed: number): Promise<number> {
-    const noted = await this.settled.get(sessionId);
-    const remaining = noted === null ? null : await this.settled.ttl(sessionId);
+  private async writtenUpTo(sessionId: string, positionsUsed: number, generation: string | undefined): Promise<number> {
+    if (generation === undefined) return 0;
+    const [notedGeneration, notedPosition] = ((await this.settled.get(sessionId)) ?? '').split(':');
+    const noted = notedGeneration === generation ? Number(notedPosition) : undefined;
+    const remaining = noted === undefined ? null : await this.settled.ttl(sessionId);
     const age = remaining === null || remaining < 0 ? Infinity : SETTLED_NOTE_TTL_SECONDS - remaining;
     if (age < POSITION_WRITE_SECONDS) return 0;
-    const notedPosition = Number(noted ?? 0);
-    if (noted === null || positionsUsed > notedPosition) {
-      await this.settled.set(sessionId, String(positionsUsed), { ttlSeconds: SETTLED_NOTE_TTL_SECONDS });
+    if (noted === undefined || positionsUsed > noted) {
+      await this.settled.set(sessionId, `${generation}:${positionsUsed}`, { ttlSeconds: SETTLED_NOTE_TTL_SECONDS });
     }
-    return notedPosition;
+    return noted ?? 0;
   }
 
   /** Record the task's number: its `index-of` key first, so a position a list can see always has one while it lives. */
