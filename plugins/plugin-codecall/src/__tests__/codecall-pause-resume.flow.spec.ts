@@ -459,6 +459,7 @@ describe.each<CodeCallVmRuntime>(['node-vm', 'interpreter'])('resuming safely on
     const client = await open(serverConfig({ vm, runs: { storage: { type: 'memory' } } }), `needs-times-${runtime}`);
     const { runId } = await call(client, 'codecall:execute', { script: PAUSING_SCRIPT });
     jest.restoreAllMocks();
+    const replaysCallTimes = jest.spyOn(EnclaveService.prototype, 'replaysCallTimes').mockResolvedValue(false);
 
     const refused = await call(client, 'codecall:resume', { runId, arguments: { id: 'o1', cents: 1 } });
 
@@ -467,7 +468,7 @@ describe.each<CodeCallVmRuntime>(['node-vm', 'interpreter'])('resuming safely on
     });
     expect(await call(client, 'codecall:status', { runId })).toMatchObject({ status: 'paused' });
     expect(called('orders.refund')).toBe(0);
-    jest.spyOn(EnclaveService.prototype, 'replaysCallTimes').mockResolvedValue(true);
+    replaysCallTimes.mockResolvedValue(true);
     expect(await call(client, 'codecall:resume', { runId, arguments: { id: 'o1', cents: 1 } })).toMatchObject({
       status: 'ok',
     });
