@@ -174,7 +174,6 @@ export class ToolInstance<
       authInfo,
       progressToken,
       signal: ctx.signal,
-      idempotencyKey: ctx.idempotencyKey,
     };
     switch (this.record.kind) {
       case ToolKind.CLASS_TOKEN:

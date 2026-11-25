@@ -47,8 +47,6 @@ export type ToolCallExtra = RequestHandlerExtra<Request, Notification> & {
   onRecordsChanged?: (count: number) => void;
   /** Set only by an in-process dispatcher: awaited once as the tool's execute() starts; a throw stops the call there. */
   beforeExecute?: () => Promise<void>;
-  /** The call's idempotency key, which only an in-process dispatcher sets (see `withIdempotencyKey`). @internal */
-  idempotencyKey?: string;
 };
 
 export type ParsedToolResult = CallToolResult;

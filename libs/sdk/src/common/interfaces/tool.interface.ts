@@ -37,8 +37,6 @@ export type ToolCtorArgs<In> = ExecutionContextBaseArgs & {
    * `tasks/cancel` for task-augmented calls, MCP 2025-11-25 tasks spec).
    */
   signal?: AbortSignal;
-  /** The call's idempotency key, set by an in-process dispatcher that replays calls (CodeCall). */
-  idempotencyKey?: string;
 };
 
 export abstract class ToolContext<
@@ -89,7 +87,8 @@ export abstract class ToolContext<
   /**
    * A key for this call that stays the same each time the call is replayed, and differs for every other call: set for
    * a call a CodeCall script makes, from the run and the call's position in it, so a resumed run's call has the key
-   * its first try had. Undefined for a client's own `tools/call`, which cannot set it. Pass it to the system the tool
+   * its first try had. Undefined for a client's own `tools/call`, which cannot set it: only an in-process dispatcher
+   * sets it, as `idempotencyKey` on the call context it runs `tools:call-tool` with. Pass it to the system the tool
    * writes to, the way payment APIs take an `Idempotency-Key`, so a call that is sent again has its effect once.
    *
    * @example
@@ -99,7 +98,7 @@ export abstract class ToolContext<
    * }
    * ```
    */
-  readonly idempotencyKey?: string;
+  declare idempotencyKey?: string;
 
   constructor(args: ToolCtorArgs<In>) {
     const { metadata, input, providers, logger, progressToken, signal } = args;
@@ -114,7 +113,6 @@ export abstract class ToolContext<
     this.metadata = metadata;
     this._input = input;
     this._progressToken = progressToken;
-    this.idempotencyKey = args.idempotencyKey;
   }
 
   /** @internal The request's progress token, for flows the call is handed on to (the agent tool). */
