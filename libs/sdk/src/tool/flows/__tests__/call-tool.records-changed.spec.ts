@@ -19,6 +19,14 @@ class ArchiveTicketsTool extends ToolContext {
   }
 }
 
+@Tool({ name: 'timed_tickets', inputSchema: {}, timeout: { executeMs: 50 } })
+class TimedTicketsTool extends ToolContext {
+  async execute() {
+    heard.push('executed');
+    return { timed: true };
+  }
+}
+
 @Tool({ name: 'cached_tickets', inputSchema: {} })
 class CachedTicketsTool extends ToolContext {
   async execute() {
@@ -30,13 +38,19 @@ class CachedTicketsTool extends ToolContext {
 /** Dispatches a tool in process, as CodeCall does, and returns what its context's dispatcher members heard. */
 @Tool({
   name: 'dispatch',
-  inputSchema: { name: z.string(), counts: z.array(z.number()).optional(), refuse: z.boolean().optional() },
+  inputSchema: {
+    name: z.string(),
+    counts: z.array(z.number()).optional(),
+    refuse: z.boolean().optional(),
+    hang: z.boolean().optional(),
+  },
 })
 class DispatchTool extends ToolContext {
-  async execute({ name, counts, refuse }: { name: string; counts?: number[]; refuse?: boolean }) {
+  async execute({ name, counts, refuse, hang }: { name: string; counts?: number[]; refuse?: boolean; hang?: boolean }) {
     const beforeExecute = async () => {
       heard.push('started');
       if (refuse) throw new Error('refused before the tool ran');
+      if (hang) await new Promise(() => undefined);
     };
     const outcome = await this.scope
       .runFlow('tools:call-tool', {
@@ -45,7 +59,7 @@ class DispatchTool extends ToolContext {
       } as never)
       .then(
         () => 'ok',
-        (error: Error) => error.message,
+        (error: Error) => `${error.name}: ${error.message}`,
       );
     return { outcome, heard: [...heard] };
   }
@@ -59,7 +73,12 @@ class CacheProbe {
   }
 }
 
-@App({ id: 'desk', name: 'Desk', plugins: [CacheProbe], tools: [ArchiveTicketsTool, CachedTicketsTool, DispatchTool] })
+@App({
+  id: 'desk',
+  name: 'Desk',
+  plugins: [CacheProbe],
+  tools: [ArchiveTicketsTool, TimedTicketsTool, CachedTicketsTool, DispatchTool],
+})
 class DeskApp {}
 
 describe("a dispatcher's beforeExecute and onRecordsChanged", () => {
@@ -87,10 +106,22 @@ describe("a dispatcher's beforeExecute and onRecordsChanged", () => {
     expect(result.structuredContent).toEqual({ outcome: 'ok', heard: ['started', 'executed', '2', '0', '3'] });
   });
 
-  it('stops the call before the tool runs when beforeExecute throws', async () => {
+  it('stops the call before the tool runs when beforeExecute throws, failing it as the tool would', async () => {
     const result = await server.callTool('dispatch', { name: 'archive_tickets', counts: [5], refuse: true });
 
-    expect(result.structuredContent).toEqual({ outcome: 'refused before the tool ran', heard: ['started'] });
+    expect(result.structuredContent).toEqual({
+      outcome: 'ToolExecutionError: Tool "archive_tickets" execution failed: refused before the tool ran',
+      heard: ['started'],
+    });
+  });
+
+  it("holds a beforeExecute that never settles to the tool's timeout", async () => {
+    const result = await server.callTool('dispatch', { name: 'timed_tickets', hang: true });
+
+    expect(result.structuredContent).toEqual({
+      outcome: expect.stringMatching(/^ExecutionTimeoutError: /),
+      heard: ['started'],
+    });
   });
 
   it('is not told of a call a hook answered before execute()', async () => {

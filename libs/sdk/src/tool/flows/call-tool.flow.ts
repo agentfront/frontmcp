@@ -1312,7 +1312,6 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       return;
     }
     toolContext.mark('execute');
-    await this.input.ctx.beforeExecute?.();
 
     const { tool } = this.state.required;
     const timeoutMs =
@@ -1323,6 +1322,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     // `getCallSurface()`, so what it does for the caller (CodeCall, the skill tools) is judged for it.
     const running = runOnSurface(callSurfaceOf(this.input.ctx), () =>
       runAsTool({ name: tool.name, fullName: tool.fullName }, async () => {
+        await this.input.ctx.beforeExecute?.();
         toolContext.output = await toolContext.execute(toolContext.input);
       }),
     );
