@@ -268,6 +268,7 @@ export class AppLazyInstance extends AppEntry<LazyAppRecordMetadata> implements 
     const listedOutput = this.metadata.output;
     this.metadata.description ??= imported.description;
     this.metadata.output = imported.output;
+    this.metadata.input = imported.input;
     const changed = this.listed
       ? changedLists(recordedListsOf(this.listed), recorded, { listed: listedOutput, loaded: imported.output })
       : [];

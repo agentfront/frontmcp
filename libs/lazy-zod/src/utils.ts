@@ -12,9 +12,9 @@ export function isLazy(value: unknown): boolean {
 }
 
 /**
- * True when a schema runs a transform anywhere in its tree: `.transform()`, `z.preprocess()`,
- * `.pipe()` and codecs all parse through a pipe, so what the schema returns can differ in shape
- * from what it was given.
+ * True when what a schema returns can differ in shape from what it was given, anywhere in its tree:
+ * `.transform()`, `z.preprocess()`, `.pipe()` and codecs parse through a pipe, `z.transform()` is a
+ * transform of its own, and `.catch()` replaces a value it refuses with its fallback.
  */
 export function hasTransform(schema: unknown): boolean {
   return containsPipe(schema, new WeakSet<object>());
@@ -24,7 +24,7 @@ function containsPipe(value: unknown, seen: WeakSet<object>): boolean {
   const def = (value as { _zod?: { def?: Record<string, unknown> } } | null | undefined)?._zod?.def;
   if (!def || seen.has(def)) return false;
   seen.add(def);
-  if (def['type'] === 'pipe') return true;
+  if (def['type'] === 'pipe' || def['type'] === 'transform' || def['type'] === 'catch') return true;
   if (def['type'] === 'lazy') return containsPipe((def['getter'] as () => unknown)(), seen);
   return Object.entries(def).some(([key, child]) =>
     nestedSchemas(key, child).some((nested) => containsPipe(nested, seen)),

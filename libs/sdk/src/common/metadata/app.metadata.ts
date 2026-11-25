@@ -37,6 +37,7 @@ import {
 import { type AuthOptionsInput, type RawZodShape } from '../types';
 import { appFilterConfigSchema, type AppFilterConfig } from './app-filter.metadata';
 import { enabledOptionSchema, type EnabledOption } from './enabled.metadata';
+import { inputPolicySchema, type InputPolicy } from './input-policy';
 import { outputPolicySchema, type OutputPolicy } from './output-policy';
 import { type EsmOptions, type RemoteOptions } from './remote-primitive.metadata';
 import type { WidgetServingMode } from './tool-ui.metadata';
@@ -171,6 +172,12 @@ export interface LocalAppMetadata {
   output?: OutputPolicy;
 
   /**
+   * Input policy for this app's tools — overrides the server (`@FrontMcp`), overridden by `@Tool`.
+   * See `@FrontMcp({ input })` for the fields.
+   */
+  input?: InputPolicy;
+
+  /**
    * Tool UI defaults for this app's tools — override the server's `@FrontMcp({ ui })`, overridden
    * by each tool's own `ui`.
    */
@@ -239,6 +246,7 @@ export const frontMcpLocalAppMetadataSchema = z.looseObject({
     .optional(),
   auth: authOptionsSchema.optional(),
   output: outputPolicySchema.optional(),
+  input: inputPolicySchema.optional(),
   ui: z.object({ servingMode: widgetServingModeSchema.optional() }).optional(),
   standalone: z
     .union([z.literal('includeInParent'), z.boolean()])

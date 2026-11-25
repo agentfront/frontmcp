@@ -67,6 +67,7 @@ import { legacySessionOptionsSchema } from '../types/options/session/schema';
 import { packageLoaderSchema, type PackageLoader } from './app.metadata';
 import { channelsConfigSchema, type ChannelsConfigInput } from './channel.metadata';
 import { eventsConfigSchema, type EventsConfigOptions } from './event.metadata';
+import { inputPolicySchema, type InputPolicy } from './input-policy';
 import { MAX_JOB_TIMER_MS, timerLimitMessage } from './job.metadata';
 import { outputPolicySchema, type OutputPolicy } from './output-policy';
 import type { WidgetServingMode } from './tool-ui.metadata';
@@ -389,6 +390,16 @@ export interface FrontMcpBaseMetadata {
    * @default { allowNonFinite: false, schemaMode: 'definition' }
    */
   output?: OutputPolicy;
+
+  /**
+   * Input policy applied to every tool (overridable per `@App` / `@Tool`):
+   *
+   * - `undeclaredKeys`: what `tools/call` does with argument keys a tool's `inputSchema` does not
+   *   declare — `'strip'` drops them; `'warn'` drops them, logs a warning once per tool and key, and adds
+   *   a text block to the answer naming them; `'fail'` refuses the call with `INVALID_INPUT`. Default
+   *   `'warn'`, in every environment.
+   */
+  input?: InputPolicy;
 
   /**
    * Per-client answer shaping, keyed by a glob of the `clientInfo.name` a client sends at
@@ -777,6 +788,7 @@ export const frontMcpBaseSchema = z.object({
    * numeric output throws `InvalidOutputError`.
    */
   output: outputPolicySchema.optional(),
+  input: inputPolicySchema.optional(),
   clients: clientProfilesOptionsSchema.optional(),
   jobs: z
     .object({
@@ -1058,6 +1070,7 @@ const frontMcpLiteSchema = z.object({
   // Output-validation policy (see `frontMcpBaseSchema.output`). CLI mode
   // honors the same `allowNonFinite` switch as the full server.
   output: outputPolicySchema.optional(),
+  input: inputPolicySchema.optional(),
   session: checkedAsServer('session'),
   clients: checkedAsServer('clients'),
   observability: checkedAsServer('observability'),

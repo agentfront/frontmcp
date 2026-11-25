@@ -52,6 +52,7 @@ import {
   type Token,
 } from '../../common';
 import { callSurfaceOf, entryUnavailableError, isOfferedOnSurface } from '../../common/availability';
+import { resolveInputUndeclaredKeysPolicy } from '../../common/metadata/input-policy';
 import { normalizeToolAuthProviders, resolveToolVisibility } from '../../common/metadata/tool.metadata';
 import {
   lookupTool,
@@ -96,10 +97,11 @@ import { TaskNotifier } from '../../task/helpers/task-notifier';
 import { TASK_DEFAULTS, toWireShape, type TaskRecord } from '../../task/task.types';
 import { linkedAbortController } from '../../utils/abort.utils';
 import { appOwnerIdOf, hookOwnerIdOf, isServerEntryOwner } from '../../utils/lineage.utils';
-import { resolveStructuredContentValidation, toolOutputPolicies } from '../tool-output-policy';
+import { resolveStructuredContentValidation, toolInputPolicies, toolOutputPolicies } from '../tool-output-policy';
 import { asElicitationFallback, isReturnedCallToolResult } from '../tool.utils';
 import { toolServingMode } from '../ui/serving-mode-default';
 import { hasUIConfig, WIDGET_CALL_META_KEY } from '../ui/ui-shared';
+import { findUndeclaredArguments, formatKeyPath } from '../undeclared-arguments';
 import { askToOpenConnectPages, credentialsRequiredErrorOf, evaluateToolCredentialGate } from './tool-credentials.gate';
 
 /**
@@ -183,6 +185,8 @@ const stateSchema = z.object({
   uiResult: z.any().optional() as z.ZodType<ToolResponseContent | undefined>,
   // UI metadata from rendering (merged into _meta)
   uiMeta: z.record(z.string(), z.unknown()).optional(),
+  // Under input.undeclaredKeys 'warn': the line the answer ends with, naming the arguments that were ignored
+  undeclaredArgumentsNote: z.string().optional(),
   // Metadata hooks add to the result (e.g. the cache plugin's `cache: 'hit'`), merged into the
   // result's _meta; never merged into rawOutput, which is the tool's data
   resultMeta: z.record(z.string(), z.unknown()).optional(),
@@ -271,6 +275,9 @@ const reportedUndeclaredKeyPaths = new WeakMap<CallToolEntry, Set<string>>();
 
 /** Tools that returned a structuredContent off their outputSchema and had it sent, so it is logged once. */
 const reportedInvalidStructuredContent = new WeakSet<CallToolEntry>();
+
+/** The undeclared argument key paths already reported per tool, so `input.undeclaredKeys: 'warn'` logs each once. */
+const reportedUndeclaredArguments = new WeakMap<CallToolEntry, Set<string>>();
 
 /** Tools whose answer the budget left whole because a cut broke the outputSchema, so it is logged once. */
 const reportedUnfittedTools = new WeakSet<CallToolEntry>();
@@ -1248,7 +1255,6 @@ export default class CallToolFlow extends FlowBase<typeof name> {
 
     try {
       toolContext.input = tool.parseInput(input);
-      this.logger.verbose('validateInput:done');
     } catch (err) {
       if (err instanceof z.ZodError) {
         throw new InvalidInputError('Invalid tool input', err.issues);
@@ -1257,6 +1263,22 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       this.logger.error('validateInput: failed to parse input', err);
       throw new InvalidInputError('Unknown error occurred when trying to parse input');
     }
+    await this.applyInputPolicy(tool, input.arguments, toolContext.input);
+    this.logger.verbose('validateInput:done');
+  }
+
+  /** `input.undeclaredKeys` for the arguments the `inputSchema` does not declare, which parsing dropped. */
+  private async applyInputPolicy(tool: CallToolEntry, sent: unknown, parsed: unknown): Promise<void> {
+    const policy = resolveInputUndeclaredKeysPolicy(...toolInputPolicies(tool, this.scope));
+    if (policy === 'strip') return;
+    const keyPaths = findUndeclaredArguments(tool.inputSchema ?? {}, sent, parsed);
+    if (keyPaths.length === 0) return;
+    const messages = await import('../undeclared-arguments-message.js');
+    const declaredKeys = Object.keys(tool.inputSchema ?? {});
+    if (policy === 'fail') throw new InvalidInputError(messages.undeclaredArgumentsRefusal(keyPaths, declaredKeys));
+    this.state.set('undeclaredArgumentsNote', messages.undeclaredArgumentsNote(keyPaths, declaredKeys));
+    const newKeyPaths = unreportedKeyPaths(reportedUndeclaredArguments, tool, keyPaths.map(formatKeyPath));
+    if (newKeyPaths.length > 0) this.logger.warn(messages.undeclaredArgumentsWarning(tool.metadata.name, newKeyPaths));
   }
 
   @Stage('execute')
@@ -1760,7 +1782,8 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       }
     }
 
-    const result = parseResult.data;
+    // A copy: the parsed answer can be the tool's own CallToolResult, which may be cached or frozen
+    const result = { ...parseResult.data };
 
     // Preserve any _meta the tool returned itself
     // Runtime type guard to safely extract _meta from rawOutput
@@ -1796,6 +1819,11 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       if (uiMeta) {
         result._meta = { ...result._meta, ...uiMeta };
       }
+    }
+
+    const { undeclaredArgumentsNote } = this.state;
+    if (undeclaredArgumentsNote) {
+      result.content = [...result.content, { type: 'text', text: undeclaredArgumentsNote }];
     }
 
     // Log the final result being sent
@@ -1948,17 +1976,27 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   }
 
   private warnUndeclaredKeysOnce(tool: CallToolEntry, keyPaths: string[]): void {
-    const reportedKeyPaths = reportedUndeclaredKeyPaths.get(tool) ?? new Set<string>();
-    reportedUndeclaredKeyPaths.set(tool, reportedKeyPaths);
-    const roomLeft = MAX_REPORTED_UNDECLARED_KEY_PATHS - reportedKeyPaths.size;
-    const newKeyPaths = keyPaths.filter((keyPath) => !reportedKeyPaths.has(keyPath)).slice(0, roomLeft);
+    const newKeyPaths = unreportedKeyPaths(reportedUndeclaredKeyPaths, tool, keyPaths);
     if (newKeyPaths.length === 0) return;
-    newKeyPaths.forEach((keyPath) => reportedKeyPaths.add(keyPath));
     this.logger.warn(
       `Tool "${tool.metadata.name}" answered with keys its outputSchema does not declare, so they were stripped: ` +
         `${newKeyPaths.join(', ')}. Declare them, or set output.undeclaredKeys to 'strip', 'keep' or 'fail'.`,
     );
   }
+}
+
+/** The key paths not reported for `tool` yet, now recorded as reported, up to the most a tool reports. */
+function unreportedKeyPaths(
+  reported: WeakMap<CallToolEntry, Set<string>>,
+  tool: CallToolEntry,
+  keyPaths: readonly string[],
+): string[] {
+  const reportedKeyPaths = reported.get(tool) ?? new Set<string>();
+  reported.set(tool, reportedKeyPaths);
+  const roomLeft = MAX_REPORTED_UNDECLARED_KEY_PATHS - reportedKeyPaths.size;
+  const newKeyPaths = keyPaths.filter((keyPath) => !reportedKeyPaths.has(keyPath)).slice(0, roomLeft);
+  newKeyPaths.forEach((keyPath) => reportedKeyPaths.add(keyPath));
+  return newKeyPaths;
 }
 
 /**
