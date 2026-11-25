@@ -239,25 +239,34 @@ describe.each<CodeCallVmRuntime>(['node-vm', 'interpreter'])('pausing and resumi
     runs: { storage },
   });
 
-  it('answers a keep and a recall before the paused call from the record, and lists the name kept', async () => {
+  it('answers a keep and a recall before the paused call from the record, after the kept value changed', async () => {
     const client = await open(serverConfig(options()), `keep-${runtime}`);
     const keptValueCalls = jest.spyOn(KeptValueCalls.prototype, 'call');
     const script =
       "await keep('order', { id: 'o1' });\n" +
       "const kept = await recall('order');\n" +
-      "return await callTool('orders.refund', { id: kept.id, cents: -1 });";
+      "const refund = await callTool('orders.refund', { id: kept.id, cents: -1 });\n" +
+      'return { kept, refund };';
 
     const paused = await call(client, 'codecall:execute', { script });
     expect(paused).toMatchObject({ status: 'tool_error', paused: { call: { position: 3, tool: 'orders.refund' } } });
-    expect(keptValueCalls).toHaveBeenCalledTimes(2);
+    const keptAgain = "await keep('order', { id: 'o2' });\nreturn 1;";
+    expect(await call(client, 'codecall:execute', { script: keptAgain })).toMatchObject({ status: 'ok' });
+    keptValueCalls.mockClear();
 
     const resumed = await call(client, 'codecall:resume', {
       runId: paused.runId,
       arguments: { id: 'o1', cents: 5 },
     });
 
-    expect(resumed).toMatchObject({ status: 'ok', result: { refunded: 5 }, kept: ['order'] });
-    expect(keptValueCalls).toHaveBeenCalledTimes(2);
+    expect(resumed).toMatchObject({
+      status: 'ok',
+      result: { kept: { id: 'o1' }, refund: { refunded: 5 } },
+      kept: ['order'],
+    });
+    expect(keptValueCalls).not.toHaveBeenCalled();
+    const recalled = await call(client, 'codecall:execute', { script: "return await recall('order');" });
+    expect(recalled).toMatchObject({ status: 'ok', result: { id: 'o2' } });
   });
 
   it('pauses before a call whose input is refused, and resumes it with corrected arguments, once', async () => {
@@ -447,14 +456,25 @@ describe.each<CodeCallVmRuntime>(['node-vm', 'interpreter'])('resuming safely on
     });
 
     const first = call(client, 'codecall:resume', { runId, arguments: { id: 'o1', cents: 1 } });
-    while (called('orders.refund') === 0) await new Promise((resolve) => setTimeout(resolve, 5));
-    const status = await call(client, 'codecall:status', { runId });
-    const second = await call(client, 'codecall:resume', { runId, arguments: { id: 'o1', cents: 1 } });
-    release();
-    refundHeld = undefined;
+    let firstEnded = false;
+    void first.then(() => {
+      firstEnded = true;
+    });
+    try {
+      const deadline = Date.now() + 10_000;
+      while (called('orders.refund') === 0 && !firstEnded && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
+      expect(called('orders.refund')).toBe(1);
+      const status = await call(client, 'codecall:status', { runId });
+      const second = await call(client, 'codecall:resume', { runId, arguments: { id: 'o1', cents: 1 } });
 
-    expect(status).toMatchObject({ status: 'resuming' });
-    expect(second).toMatchObject({ error: { message: expect.stringContaining('is not paused: it is resuming') } });
+      expect(status).toMatchObject({ status: 'resuming' });
+      expect(second).toMatchObject({ error: { message: expect.stringContaining('is not paused: it is resuming') } });
+    } finally {
+      release();
+      refundHeld = undefined;
+    }
     expect(await first).toMatchObject({ status: 'ok' });
     expect(called('orders.refund')).toBe(1);
   });
