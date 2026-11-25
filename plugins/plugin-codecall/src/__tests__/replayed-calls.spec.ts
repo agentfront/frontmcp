@@ -1,6 +1,7 @@
 /**
  * Enclave's `replayedCalls` run option (2.21.1): a resumed run gives each runtime its recorded calls with when they first
- * reached the host, where the runtime takes it, and then needs no detector guard to pause; elsewhere the guard stays.
+ * reached the host, and when its paused call did (`replayedCallsResumeAtMs`), where the runtime takes them, and then
+ * needs no detector guard to pause; elsewhere the guard stays.
  */
 import CodeCallConfig from '../providers/code-call.config';
 import { argumentsHashOf } from '../runs/run-journal';
@@ -8,7 +9,7 @@ import type { CodeCallJournalEntry } from '../runs/run-record.types';
 import { RunReplay, type RunReplaySource } from '../runs/run-replay';
 import EnclaveService from '../services/enclave.service';
 import { AGENT_SCRIPT_RUNNER_EXPORT, createInterpreterRuntime } from '../services/runtime/interpreter.runtime';
-import { createNodeVmRuntime, replaysCallTimesOf } from '../services/runtime/node-vm.runtime';
+import { createNodeVmRuntime, runFeaturesOf } from '../services/runtime/node-vm.runtime';
 import type { CodeCallScriptRunSpec } from '../services/runtime/runtime.types';
 
 function entry(position: number, tool: string, arrivedAtMs?: number): CodeCallJournalEntry {
@@ -28,6 +29,10 @@ const replayedCalls = [
   { callIndex: 0, toolName: 'orders.list', elapsedMs: 10 },
   { callIndex: 1, toolName: 'mail.send', elapsedMs: 7_000 },
 ];
+const resumed: RunReplaySource = {
+  ...timed,
+  pending: { call: { position: 3, tool: 'mail.send', argumentsHash: argumentsHashOf({}), arrivedAtMs: 12_500 } },
+};
 
 function spec(overrides: Partial<CodeCallScriptRunSpec> = {}): CodeCallScriptRunSpec {
   return {
@@ -49,6 +54,14 @@ describe('the calls a resumed run replays', () => {
     expect(new RunReplay({ journal: [entry(1, 'orders.list', 10), entry(2, 'mail.send')] }).hooks).not.toHaveProperty(
       'replayedCalls',
     );
+  });
+
+  it('carry when the paused call first reached the host, never before the last replayed call', () => {
+    const early = { ...resumed, pending: { call: { ...resumed.pending!.call, arrivedAtMs: 6_000 } } };
+
+    expect(new RunReplay(resumed).hooks.replayedCallsResumeAtMs).toBe(12_500);
+    expect(new RunReplay(early).hooks.replayedCallsResumeAtMs).toBe(7_000);
+    expect(new RunReplay(timed).hooks).not.toHaveProperty('replayedCallsResumeAtMs');
   });
 
   it('let a run pause without the detector guard where the runtime takes them, counting only host function calls', () => {
@@ -113,15 +126,24 @@ describe('the interpreter runtime', () => {
     return { entry: { [AGENT_SCRIPT_RUNNER_EXPORT]: FakeRunner }, runs };
   }
   const base = ['validated-agentscript', 'host-functions', 'rapid-enumeration', 'replay'];
-  const withReplay = new RunReplay(timed).hooks;
+  const withReplay = new RunReplay(resumed).hooks;
 
-  it("passes the replayed calls to a runner with 'replayed-calls'", async () => {
+  it("passes the replayed calls and the paused call's time to a runner with 'replayed-calls-resume'", async () => {
+    const { entry: loaded, runs } = runnerEntry([...base, 'replayed-calls', 'replayed-calls-resume', 'refused-call']);
+    const runner = await createInterpreterRuntime(async () => loaded).createRunner(spec(withReplay));
+    await runner.run('return 1;');
+
+    expect(runner).toMatchObject({ replaysCallTimes: true, reportsRefusals: true });
+    expect(runs).toEqual([expect.objectContaining({ replayedCalls, replayedCallsResumeAtMs: 12_500 })]);
+  });
+
+  it("passes only the replayed calls to a runner with 'replayed-calls' alone", async () => {
     const { entry: loaded, runs } = runnerEntry([...base, 'replayed-calls']);
     const runner = await createInterpreterRuntime(async () => loaded).createRunner(spec(withReplay));
     await runner.run('return 1;');
 
-    expect(runner.replaysCallTimes).toBe(true);
-    expect(runs).toEqual([expect.objectContaining({ replayedCalls })]);
+    expect(runner).toMatchObject({ replaysCallTimes: true, reportsRefusals: false });
+    expect(runs).toEqual([{ reviewContext: undefined, replayedCalls }]);
   });
 
   it('passes none to a runner without it, which then keeps the guard', async () => {
@@ -136,9 +158,14 @@ describe('the interpreter runtime', () => {
 
 describe('the node-vm runtime', () => {
   it.each([
-    ['with replayed-calls in its run features', ['replayed-calls'], true],
-    ['without run features, as 2.21.0', undefined, false],
-  ])('on an Enclave %s, passes the replayed calls: %s', async (_, features, passed) => {
+    [
+      'with every run feature, as 2.21.1',
+      ['replayed-calls', 'replayed-calls-resume', 'refused-call'],
+      { reviewContext: undefined, replayedCalls, replayedCallsResumeAtMs: 12_500 },
+    ],
+    ['with replayed-calls alone', ['replayed-calls'], { reviewContext: undefined, replayedCalls }],
+    ['without run features, as 2.21.0', undefined, { reviewContext: undefined }],
+  ])('on an Enclave %s, passes what it takes', async (_, features, runOptions) => {
     const run = jest.fn().mockResolvedValue({ success: true, value: 1, stats: {} });
     class Enclave {
       run = run;
@@ -147,20 +174,19 @@ describe('the node-vm runtime', () => {
     const runtime = createNodeVmRuntime(
       async () => ({ Enclave, REVIEW_ERROR_CODES: {}, ENCLAVE_RUN_FEATURES: features }) as never,
     );
-    const runner = await runtime.createRunner(spec(new RunReplay(timed).hooks));
+    const runner = await runtime.createRunner(spec(new RunReplay(resumed).hooks));
     await runner.run('return 1;');
 
-    expect(runner.replaysCallTimes).toBe(passed);
-    expect(await runtime.replaysCallTimes?.()).toBe(passed);
-    expect(run.mock.calls[0][2]).toEqual(
-      passed ? expect.objectContaining({ replayedCalls }) : { reviewContext: undefined },
-    );
+    const replaysCallTimes = features !== undefined;
+    expect(runner).toMatchObject({ replaysCallTimes, reportsRefusals: features?.includes('refused-call') === true });
+    expect(await runtime.replaysCallTimes?.()).toBe(replaysCallTimes);
+    expect(run.mock.calls[0][2]).toStrictEqual(runOptions);
   });
 
   it('reads the run features as the Enclave exports them, and none from one it cannot load', async () => {
-    expect(replaysCallTimesOf({ ENCLAVE_RUN_FEATURES: Object.freeze(['replayed-calls']) })).toBe(true);
-    expect(replaysCallTimesOf({ ENCLAVE_RUN_FEATURES: 'replayed-calls' as never })).toBe(false);
-    expect(replaysCallTimesOf(undefined)).toBe(false);
+    expect(runFeaturesOf({ ENCLAVE_RUN_FEATURES: Object.freeze(['replayed-calls']) })).toEqual(['replayed-calls']);
+    expect(runFeaturesOf({ ENCLAVE_RUN_FEATURES: 'replayed-calls' as never })).toEqual([]);
+    expect(runFeaturesOf(undefined)).toEqual([]);
     expect(await createNodeVmRuntime(() => Promise.reject(new Error('x'))).replaysCallTimes?.()).toBe(false);
   });
 });

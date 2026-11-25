@@ -21,7 +21,6 @@ import { CodeCallRuntimeError } from './runtime.errors';
 import {
   CODECALL_ENCLAVE_SECURITY_LEVEL,
   runOptionsOf,
-  type CodeCallReplayedCall,
   type CodeCallScriptRunner,
   type CodeCallScriptRunSpec,
   type CodeCallScriptRuntime,
@@ -35,7 +34,7 @@ export interface NodeVmModule {
   Enclave: new (options: CreateEnclaveOptions) => Pick<Enclave, 'run' | 'dispose'>;
   /** Exported since 2.21, whose `review` option runs its hooks and whose `run()` takes `preloadReferences`. */
   REVIEW_ERROR_CODES?: unknown;
-  /** What `run()` takes since Enclave 2.21.1: `replayed-calls` for the `replayedCalls` option. */
+  /** What `run()` takes and reports since Enclave 2.21.1: `replayed-calls`, `replayed-calls-resume`, `refused-call`. */
   ENCLAVE_RUN_FEATURES?: readonly string[];
 }
 
@@ -130,10 +129,10 @@ function createEnclave(module: NodeVmModule, options: CreateEnclaveOptions): Pic
   }
 }
 
-/** Whether the loaded Enclave judges replayed calls by their recorded times: its run features name `replayed-calls`. */
-export function replaysCallTimesOf(module: Pick<NodeVmModule, 'ENCLAVE_RUN_FEATURES'> | undefined): boolean {
+/** The run features the loaded Enclave names, none for one before 2.21.1 or one that cannot load. */
+export function runFeaturesOf(module: Pick<NodeVmModule, 'ENCLAVE_RUN_FEATURES'> | undefined): readonly unknown[] {
   const features: unknown = module?.ENCLAVE_RUN_FEATURES;
-  return Array.isArray(features) && features.includes('replayed-calls');
+  return Array.isArray(features) ? features : [];
 }
 
 /** The `node-vm` runtime. */
@@ -141,7 +140,9 @@ export function createNodeVmRuntime(loader: NodeVmModuleLoader = loadNodeVmModul
   return {
     name: 'node-vm',
     async replaysCallTimes(): Promise<boolean> {
-      return !isCloudflareWorkersRuntime() && replaysCallTimesOf(await loader().catch(() => undefined));
+      return (
+        !isCloudflareWorkersRuntime() && runFeaturesOf(await loader().catch(() => undefined)).includes('replayed-calls')
+      );
     },
     async createRunner(spec: CodeCallScriptRunSpec): Promise<CodeCallScriptRunner> {
       if (isCloudflareWorkersRuntime()) {
@@ -181,16 +182,20 @@ export function createNodeVmRuntime(loader: NodeVmModuleLoader = loadNodeVmModul
       }
       const enclave = createEnclave(module, toEnclaveOptions(spec));
       const replays = spec.clock !== undefined;
-      const replaysCallTimes = replays && replaysCallTimesOf(module);
-      const runOptions: EnclaveRunOptions & { replayedCalls?: readonly CodeCallReplayedCall[] } = {
+      const features = runFeaturesOf(module);
+      const replaysCallTimes = replays && features.includes('replayed-calls');
+      const resumesAtPausedCall = replaysCallTimes && features.includes('replayed-calls-resume');
+      const runOptions: EnclaveRunOptions = {
         ...runOptionsOf(spec),
         ...(replaysCallTimes && spec.replayedCalls && { replayedCalls: spec.replayedCalls }),
+        ...(resumesAtPausedCall && spec.replayedCalls && { replayedCallsResumeAtMs: spec.replayedCallsResumeAtMs }),
       };
       return {
         run: (code) => enclave.run<unknown>(code, undefined, runOptions),
         dispose: () => enclave.dispose(),
         replays,
         replaysCallTimes,
+        reportsRefusals: features.includes('refused-call'),
       };
     },
   };

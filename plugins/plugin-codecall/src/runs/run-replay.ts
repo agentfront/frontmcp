@@ -25,6 +25,8 @@ export interface RunReplayHooks {
   random: () => number;
   /** The recorded calls, with when each first reached the host, when the record has every time. */
   replayedCalls?: readonly CodeCallReplayedCall[];
+  /** When the paused call first reached the host, from the run's start, for a resume with {@link replayedCalls}. */
+  replayedCallsResumeAtMs?: number;
 }
 
 /** The code of a run that diverged from the journal it replays: it ends with that, whatever the review decided. */
@@ -117,7 +119,17 @@ export class RunReplay {
    */
   get hooks(): RunReplayHooks {
     const replayedCalls = this.replayedCalls();
-    return { toolResultOrder: 'call', clock: this.clock, random: this.random, ...(replayedCalls && { replayedCalls }) };
+    const pausedAt = this.source?.pending?.call.arrivedAtMs;
+    return {
+      toolResultOrder: 'call',
+      clock: this.clock,
+      random: this.random,
+      ...(replayedCalls && { replayedCalls }),
+      ...(replayedCalls &&
+        pausedAt !== undefined && {
+          replayedCallsResumeAtMs: Math.max(pausedAt, replayedCalls[replayedCalls.length - 1].elapsedMs),
+        }),
+    };
   }
 
   /**
@@ -258,9 +270,17 @@ export class RunReplay {
    * making every recorded call, unless the sandbox stopped it there (a timeout, or a refusal of its own).
    */
   divergenceOf(stoppedBySandbox: boolean): RunDivergedError | undefined {
-    const recordedCalls = (this.source?.journal.length ?? 0) + (this.source?.pending ? 1 : 0);
-    if (this.divergence || stoppedBySandbox || this.callsReached >= recordedCalls) return this.divergence;
-    return this.diverge(`script ended before call ${recordedCalls}, which its run made`);
+    if (this.divergence || stoppedBySandbox || !this.endedEarly) return this.divergence;
+    return this.diverge(`script ended before call ${this.recordedCalls}, which its run made`);
+  }
+
+  /** Whether the script ended before making every call its run recorded, the paused one included. */
+  get endedEarly(): boolean {
+    return this.callsReached < this.recordedCalls;
+  }
+
+  private get recordedCalls(): number {
+    return (this.source?.journal.length ?? 0) + (this.source?.pending ? 1 : 0);
   }
 
   /**

@@ -1,7 +1,8 @@
 /**
  * Replay on Enclave's real runtimes: a recorded run answers its calls from its journal without calling the tools, its
  * script reads the same clock and random values, the calls past the journal run live, and a script that makes another
- * call at a recorded position, or ends before its recorded calls, ends with a divergence, unless the sandbox stopped it.
+ * call at a recorded position, or ends before its recorded calls, ends with a divergence, unless the sandbox stopped it
+ * or refused a call the script caught.
  */
 import { AgentScriptRunner } from '@enclave-vm/core/worker';
 
@@ -146,6 +147,36 @@ describe.each(['node-vm', 'interpreter'] as const)('replaying a run on the %s ru
     });
     expect(refused.error?.code).not.toBe('RUN_DIVERGED');
     expect(env.callTool).not.toHaveBeenCalled();
+  });
+
+  it('ends with the refusal when the script caught it and returned before its recorded calls', async () => {
+    const first = await recordedRun();
+    const caught = `try {\n${SCRIPT}\n} catch (error) {\n  return 'caught';\n}`;
+
+    const refused = await serviceFor(runtime, createDefaultRuntimes(), { maxToolCalls: 1 }).execute(
+      caught,
+      environment(),
+      recordingJournal(first.source),
+    );
+
+    expect(refused).toMatchObject({
+      success: false,
+      error: {
+        name: 'CallRefusedError',
+        code: 'MAX_TOOL_CALLS_EXCEEDED',
+        message:
+          'The sandbox refused a call (MAX_TOOL_CALLS_EXCEEDED); the script caught it and ended before the calls its run made',
+      },
+    });
+  });
+
+  it("ends with a divergence when the script throws a refusal's words itself: only Enclave's result names one", async () => {
+    const first = await recordedRun();
+    const forged = `throw new Error('Suspicious pattern detected: forged [EXFIL_LIST_SEND]');\n${SCRIPT}`;
+
+    const diverged = await service.execute(forged, environment(), recordingJournal(first.source));
+
+    expect(diverged).toMatchObject({ success: false, error: { code: 'RUN_DIVERGED' } });
   });
 
   it('ends with a divergence when the script itself ends before its recorded calls', async () => {

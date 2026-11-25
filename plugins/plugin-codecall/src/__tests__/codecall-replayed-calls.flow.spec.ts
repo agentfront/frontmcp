@@ -1,7 +1,8 @@
 /**
  * Enclave's `replayedCalls` (2.21.1) through a real server, on both runtimes: runs that the detector guard would not
- * have let pause (one that took more than 5 s, one with more than 30 calls to one tool, one with more than 100 calls)
- * pause, and resume with their recorded calls passed to Enclave, without their handlers running again.
+ * have let pause (one that took more than 5 s, one with more than 30 calls to one tool, one with more than 100 calls,
+ * one whose list and paused send are more than 5 s apart) pause, and resume with their recorded calls and the paused
+ * call's time passed to Enclave, without their handlers running again.
  */
 import 'reflect-metadata';
 
@@ -37,6 +38,14 @@ function readingTool(name: string, delayMs: number) {
   return ReadingTool;
 }
 
+@Tool({ name: 'stock.send', description: 'Sends a stock report', inputSchema: { units: z.number().int().positive() } })
+class SendTool extends ToolContext {
+  async execute({ units }: { units: number }) {
+    calls.push('stock.send');
+    return { reserved: units };
+  }
+}
+
 @Tool({
   name: 'stock.reserve',
   description: 'Reserves stock for the replayed-calls spec',
@@ -50,10 +59,12 @@ class ReserveTool extends ToolContext {
 }
 
 const tools = [
+  readingTool('stock.list', 0),
   readingTool('stock.wait', 5_200),
   readingTool('stock.count', 200),
   ...['stock.a', 'stock.b', 'stock.c', 'stock.d'].map((name) => readingTool(name, 12)),
   ReserveTool,
+  SendTool,
 ];
 
 function serverConfig(runtime: CodeCallVmRuntime) {
@@ -98,9 +109,10 @@ function range(length: number): string {
 }
 
 describe('replayed calls are supported', () => {
-  it('by the installed Enclave, on both runtimes', () => {
-    expect(ENCLAVE_RUN_FEATURES).toContain('replayed-calls');
-    expect(AgentScriptRunner.capabilities).toContain('replayed-calls');
+  it("by the installed Enclave, on both runtimes, with the paused call's time and the refused call", () => {
+    for (const features of [ENCLAVE_RUN_FEATURES, AgentScriptRunner.capabilities]) {
+      expect(features).toEqual(expect.arrayContaining(['replayed-calls', 'replayed-calls-resume', 'refused-call']));
+    }
   });
 });
 
@@ -126,7 +138,7 @@ describe.each<CodeCallVmRuntime>(['node-vm', 'interpreter'])('replayed calls on 
     jest.restoreAllMocks();
   });
 
-  async function pauseAndResume(script: string, recordedCalls: number) {
+  async function pauseAndResume(script: string, recordedCalls: number, pausedTool = 'stock.reserve') {
     const paused = await call(client, 'codecall:execute', { script });
     expect(paused).toMatchObject({ status: 'tool_error', paused: { call: { position: recordedCalls + 1 } } });
     const before = [...calls];
@@ -134,14 +146,27 @@ describe.each<CodeCallVmRuntime>(['node-vm', 'interpreter'])('replayed calls on 
     const resumed = await call(client, 'codecall:resume', { runId: paused.runId, arguments: { units: 2 } });
 
     expect(resumed).toMatchObject({ status: 'ok', result: { reserved: 2 } });
-    expect(calls).toEqual([...before, 'stock.reserve']);
-    const replayedCalls = (runOptions.mock.calls.at(-1)?.[2] as { replayedCalls?: unknown[] }).replayedCalls;
-    expect(replayedCalls).toHaveLength(recordedCalls);
+    expect(calls).toEqual([...before, pausedTool]);
+    const options = runOptions.mock.calls.at(-1)?.[2] as {
+      replayedCalls?: unknown[];
+      replayedCallsResumeAtMs?: number;
+    };
+    expect(options.replayedCalls).toHaveLength(recordedCalls);
+    expect(options.replayedCallsResumeAtMs).toEqual(expect.any(Number));
+    return options;
   }
 
   it('pauses a run that reached its paused call after more than 5 s, and resumes it', async () => {
     await pauseAndResume(`await callTool('stock.wait', { n: 1 });\n${RESERVE}`, 1);
     expect(called('stock.wait')).toBe(1);
+  });
+
+  it('resumes a run whose list and paused send were more than 5 s apart, clear of the read-then-send detector', async () => {
+    const script =
+      "await callTool('stock.list', { n: 1 });\nawait callTool('stock.wait', { n: 1 });\n" +
+      "return await callTool('stock.send', { units: -1 });";
+    const options = await pauseAndResume(script, 2, 'stock.send');
+    expect(options.replayedCallsResumeAtMs).toBeGreaterThanOrEqual(5_200);
   });
 
   it('pauses a run with more than 30 calls to one tool, and resumes it', async () => {

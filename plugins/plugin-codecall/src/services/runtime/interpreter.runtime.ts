@@ -62,7 +62,11 @@ export type AgentScriptRunnerCapability =
   /** `toolResultOrder: 'call'` and the host's `clock` and `random`, which a replayed run needs. */
   | 'replay'
   /** The `replayedCalls` run option: Enclave's detectors judge replayed calls by when they first reached the host. */
-  | 'replayed-calls';
+  | 'replayed-calls'
+  /** The `replayedCallsResumeAtMs` run option: when the paused call first reached the host maps to now. */
+  | 'replayed-calls-resume'
+  /** The result's `refusedCall`: the first call Enclave refused. */
+  | 'refused-call';
 
 /** The options CodeCall gives the runner. */
 export interface AgentScriptRunnerOptions {
@@ -101,6 +105,7 @@ export interface AgentScriptRunnerInstance {
       reviewContext?: ReviewContext;
       preloadReferences?: readonly ReferenceEntry[];
       replayedCalls?: readonly CodeCallReplayedCall[];
+      replayedCallsResumeAtMs?: number;
     },
   ): Promise<ExecutionResult<T>>;
   dispose(): void;
@@ -227,9 +232,11 @@ export function createInterpreterRuntime(loader: WorkerEntryLoader = loadWorkerE
       }
       const replays = spec.clock !== undefined && Runner.capabilities.includes('replay');
       const replaysCallTimes = replays && Runner.capabilities.includes('replayed-calls');
+      const resumesAtPausedCall = replaysCallTimes && Runner.capabilities.includes('replayed-calls-resume');
       const runOptions = {
         ...runOptionsOf(spec),
         ...(replaysCallTimes && spec.replayedCalls && { replayedCalls: spec.replayedCalls }),
+        ...(resumesAtPausedCall && spec.replayedCalls && { replayedCallsResumeAtMs: spec.replayedCallsResumeAtMs }),
       };
       // A runner without 'replay' runs the script as before, and the run cannot be replayed
       const runner = createRunner(Runner, toRunnerOptions(replays ? spec : { ...spec, clock: undefined }));
@@ -238,6 +245,7 @@ export function createInterpreterRuntime(loader: WorkerEntryLoader = loadWorkerE
         dispose: () => runner.dispose(),
         replays,
         replaysCallTimes,
+        reportsRefusals: Runner.capabilities.includes('refused-call'),
       };
     },
   };

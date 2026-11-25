@@ -112,6 +112,8 @@ export interface CodeCallScriptRunSpec {
   random?: () => number;
   /** The calls a resumed run answers from its record, with when each first reached the host, for Enclave's detectors. */
   replayedCalls?: readonly CodeCallReplayedCall[];
+  /** When the run a resumed run continues first reached its paused call, in ms from its start: Enclave maps it to now. */
+  replayedCallsResumeAtMs?: number;
 }
 
 /** A call Enclave's detectors judge by when it first reached the host: Enclave's `ReplayedCall`. */
@@ -134,6 +136,8 @@ export interface CodeCallScriptRunner {
   readonly replays?: boolean;
   /** Whether the runner gives Enclave's detectors the spec's `replayedCalls` (Enclave 2.21.1 and later). */
   readonly replaysCallTimes?: boolean;
+  /** Whether its result names the first call Enclave refused (`refusedCall`), which no script can forge. */
+  readonly reportsRefusals?: boolean;
 }
 
 /** A runtime CodeCall can execute scripts in. */
