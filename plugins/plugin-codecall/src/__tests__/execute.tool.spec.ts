@@ -1107,6 +1107,7 @@ describe('ExecuteTool', () => {
         undefined,
       );
       expect(keep).toHaveBeenCalledWith(tool, {
+        runId: expect.stringMatching(/^[0-9a-f-]{36}$/),
         scriptHash: expect.stringMatching(/^[0-9a-f]{64}$/),
         status: 'ok',
         startedAt: expect.any(String),

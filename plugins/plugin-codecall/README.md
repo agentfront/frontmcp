@@ -231,6 +231,25 @@ is logged as a warning, and the `keep` or `recall` fails with `EXECUTION`. A `ke
 value releases what it reserved. One whose write fails keeps the reservation, since the write may have been applied,
 and the value it would have replaced stays kept and counted.
 
+## Idempotency keys
+
+Each call a script makes has an idempotency key, which the tool reads as `this.idempotencyKey`: a SHA-256 of the
+run's id and the call's position in the run. A run that is run again from its journal gives each call the key it had
+the first time, and every other call has another key. A client's own `tools/call` and `codecall:invoke` have none,
+and nothing a client sends can set one.
+
+A tool that writes to another system passes the key on, the way payment APIs take an `Idempotency-Key`, so a call
+sent again after a crash or a timeout has its effect once:
+
+```ts
+@Tool({ name: 'charge_card', inputSchema: { customerId: z.string(), cents: z.number().int() } })
+class ChargeCardTool extends ToolContext {
+  async execute({ customerId, cents }: { customerId: string; cents: number }) {
+    return payments.charges.create({ customerId, cents }, { idempotencyKey: this.idempotencyKey });
+  }
+}
+```
+
 ## Trace
 
 `codecall:execute` returns a short `trace` from the run's journal, one line per tool call, so the agent sees which

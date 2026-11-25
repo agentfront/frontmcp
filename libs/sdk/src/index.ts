@@ -285,6 +285,9 @@ export type { CallSurface } from './common/availability';
 // Tool change events for subscription
 export type { ToolChangeEvent, ToolChangeKind, ToolChangeScope } from './tool/tool.events';
 
+// The idempotency key an in-process dispatcher gives the tool it calls (`this.idempotencyKey`)
+export { withIdempotencyKey } from './tool/tool-idempotency-key';
+
 // Tool registry / instance / provider registry — exposed so plugins can
 // register synthetic tools at runtime (e.g. plugin-skilled-openapi's
 // internal-tool adapter for OpenAPI operations).

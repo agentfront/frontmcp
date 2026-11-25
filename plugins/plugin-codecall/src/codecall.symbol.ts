@@ -3,6 +3,7 @@
 import { type CodeCallVmPreset, type CodeCallVmRuntime } from './codecall.types';
 import type { CallToolOptions, ToolCallResult } from './errors';
 import type { KeptValueCalls } from './kept-values/kept-value-calls';
+import type { ScriptToolCall } from './runs/call-idempotency-key';
 
 export interface CodeCallAstValidationIssue {
   kind: 'IllegalBuiltinAccess' | 'DisallowedGlobal' | 'DisallowedLoop' | 'ParseError';
@@ -88,7 +89,8 @@ export interface CodeCallVmEnvironment {
    *                               The sandbox calls it without options: it applies a script's
    *                               `{ throwOnError: false }` itself, for `callTool()` and
    *                               namespace methods alike, so it needs the throw.
-   * @param call - The call's place in the run, as the sandbox numbered it (its review hooks' `callIndex`)
+   * @param call - The call's place in the run, as the sandbox numbered it (its review hooks' `callIndex`), which its
+   *               idempotency key is derived from
    *
    * SECURITY NOTES:
    * - Cannot call 'codecall:*' tools (self-reference blocked)
@@ -99,7 +101,7 @@ export interface CodeCallVmEnvironment {
     name: string,
     input: TInput,
     options?: CallToolOptions,
-    call?: { callIndex: number },
+    call?: ScriptToolCall,
   ) => Promise<TResult | ToolCallResult<TResult>>;
 
   /**

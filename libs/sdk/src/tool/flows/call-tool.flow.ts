@@ -97,6 +97,7 @@ import { TaskNotifier } from '../../task/helpers/task-notifier';
 import { TASK_DEFAULTS, toWireShape, type TaskRecord } from '../../task/task.types';
 import { linkedAbortController } from '../../utils/abort.utils';
 import { appOwnerIdOf, hookOwnerIdOf, isServerEntryOwner } from '../../utils/lineage.utils';
+import { idempotencyKeyOf } from '../tool-idempotency-key';
 import { resolveStructuredContentValidation, toolInputPolicies, toolOutputPolicies } from '../tool-output-policy';
 import { asElicitationFallback, isReturnedCallToolResult } from '../tool.utils';
 import { isAppOnlyTool, knownPlatformOf, rendersAppPages } from '../ui/app-only-tools';
@@ -1058,6 +1059,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
           progressToken,
           contextProviders,
           signal: executionAbort.signal,
+          idempotencyKey: idempotencyKeyOf(ctx),
         }),
       );
       // `authorities.pipes` may be async: run them before any hook or execute() reads `this.auth`.
