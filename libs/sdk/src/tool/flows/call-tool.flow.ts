@@ -1397,6 +1397,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
           // no `tools/call` resolves.
           toolName: tool.fullName,
           toolInput: this.state.required.input.arguments,
+          idempotencyKey: toolContext.idempotencyKey,
           elicitMessage: error.elicitMessage,
           elicitSchema: error.schema,
           createdAt: Date.now(),

@@ -161,6 +161,9 @@ export interface PendingElicitFallback {
   /** Original input arguments passed to the tool */
   toolInput: unknown;
 
+  /** The call's idempotency key, which the re-run keeps (see `ToolContext.idempotencyKey`) */
+  idempotencyKey?: string;
+
   /** Message displayed to the user */
   elicitMessage: string;
 

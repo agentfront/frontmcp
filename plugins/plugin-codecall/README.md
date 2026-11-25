@@ -234,12 +234,13 @@ and the value it would have replaced stays kept and counted.
 ## Idempotency keys
 
 Each call a script makes has an idempotency key, which the tool reads as `this.idempotencyKey`: a SHA-256 of the
-run's id and the call's position in the run. A run that is run again from its journal gives each call the key it had
-the first time, and every other call has another key. A client's own `tools/call` and `codecall:invoke` have none,
-and nothing a client sends can set one.
+run's id and the call's position in the run. Only the same call of the same run gets the same key again: when that
+run's script runs again (resuming it, or after an approval) or the tool is run again for an elicitation's answer.
+Every other call, and every new `codecall:execute` of the same script, has another key. A client's own `tools/call`
+and `codecall:invoke` have none, and nothing a client sends can set one.
 
-A tool that writes to another system passes the key on, the way payment APIs take an `Idempotency-Key`, so a call
-sent again after a crash or a timeout has its effect once:
+A tool that writes to another system passes the key on, the way payment APIs take an `Idempotency-Key`, so that the
+same call sent again has its effect once:
 
 ```ts
 @Tool({ name: 'charge_card', inputSchema: { customerId: z.string(), cents: z.number().int() } })
@@ -249,6 +250,9 @@ class ChargeCardTool extends ToolContext {
   }
 }
 ```
+
+It does not cover a new run: the run id is only in the result the agent gets, and a run's journal is saved with its
+record when the run ends, which needs an owner (a session or a signed-in caller) and `runs` on.
 
 ## Trace
 
