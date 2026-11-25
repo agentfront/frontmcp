@@ -75,7 +75,7 @@ describe('CodeCallPlugin', () => {
         storage: { type: 'redis' as const, redis: { url: 'redis://127.0.0.1:6379' } },
       };
 
-      expect(CodeCallPlugin.browserStores({ runs: { enabled: false }, budgets })).toEqual([
+      expect(CodeCallPlugin.browserStores({ runs: { enabled: false }, keep: { enabled: false }, budgets })).toEqual([
         {
           plugin: 'CodeCallPlugin',
           option: "budgets.storage: { type: 'redis' }",

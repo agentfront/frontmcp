@@ -345,6 +345,23 @@ describe('CodeCall budgets', () => {
     expect(executed).toEqual(['tickets.reject', 'tickets.reject', 'tickets.reject']);
   });
 
+  it('never stops or counts keep and recall, and still counts every real tool call', async () => {
+    const oneCallPerHour = { ...threeCallsPerHour(), limits: [{ ...threeCallsPerHour().limits[0], limit: 1 }] };
+    const ada = await open(serverConfig({ budgets: oneCallPerHour }), 'ada');
+
+    const outcome = await execute(
+      ada,
+      "await keep('seen', 4);\nconst ticket = await callTool('tickets.get', { id: await recall('seen') });\n" +
+        "await keep('last', ticket.id);\nreturn await recall('last');",
+    );
+
+    expect(outcome).toMatchObject({ status: 'ok', result: 4 });
+    expect(await execute(ada, "return await callTool('tickets.get', { id: 5 });")).toMatchObject({
+      status: 'needs_approval',
+    });
+    expect(executed).toEqual(['tickets.get:4']);
+  });
+
   it('records the decision of a budget with review off, and says in the description what a budget stop means', async () => {
     const ada = await open(serverConfig({ budgets: threeCallsPerHour() }), 'ada');
 
