@@ -482,6 +482,7 @@ export type {
   ChangeFeed,
   ChangeFeedKind,
   ChangeFeedOptions,
+  PublishOptions,
 } from './storage';
 
 // LLM platform tool call processing (cross-platform: Node.js and browser)

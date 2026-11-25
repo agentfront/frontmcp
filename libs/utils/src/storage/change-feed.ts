@@ -22,10 +22,16 @@ export interface ChangeFeedOptions {
   onError?: (error: unknown) => void;
 }
 
+/** How one publish is kept. */
+export interface PublishOptions {
+  /** Seconds a `poll` feed keeps the topic's counter after this publish, for a topic that ends; others keep it. */
+  ttlSeconds?: number;
+}
+
 export interface ChangeFeed {
   readonly kind: ChangeFeedKind;
   /** Tell the topic's listeners, here and in the other processes, that it changed. */
-  publish(topic: string): Promise<void>;
+  publish(topic: string, options?: PublishOptions): Promise<void>;
   /**
    * Call `listener` when `topic` changes, and when it may have changed unheard (after a pub/sub reconnect); returns
    * the function that stops it.
@@ -48,7 +54,7 @@ abstract class TopicFeed implements ChangeFeed {
 
   constructor(protected readonly options: ChangeFeedOptions) {}
 
-  abstract publish(topic: string): Promise<void>;
+  abstract publish(topic: string, options?: PublishOptions): Promise<void>;
 
   /** Start following `topic` in the backend; called when it gets its first listener. */
   protected abstract watch(topic: string): void;
@@ -179,8 +185,9 @@ class PollingChangeFeed extends TopicFeed {
     pollingFeeds.add(this);
   }
 
-  async publish(topic: string): Promise<void> {
+  async publish(topic: string, options: PublishOptions = {}): Promise<void> {
     const count = String(await this.storage.incr(TOPIC_PREFIX + topic));
+    if (options.ttlSeconds !== undefined) await this.storage.expire(TOPIC_PREFIX + topic, options.ttlSeconds);
     if (this.seen.has(topic)) this.seen.set(topic, count);
     const counterKey = this.storage.prefix + TOPIC_PREFIX + topic;
     for (const feed of pollingFeeds) feed.published(counterKey);

@@ -6,7 +6,7 @@ import { DEFAULT_ELICIT_TTL, type ElicitOptions, type ElicitResult, type Persist
 import { type ElicitHelperDeps } from '../helpers/elicit.helper';
 import { questionSubjectOf } from './question-subject';
 import { QuestionPendingError, QuestionSupersededError } from './question.errors';
-import { QUESTIONS_TOPIC, type QuestionOutcome, type QuestionRequest, type QuestionStore } from './question.store';
+import { type QuestionOutcome, type QuestionRequest, type QuestionStore } from './question.store';
 
 /** How often a waiting call reads its question even without a change notification. */
 const RECHECK_MS = 5_000;
@@ -140,7 +140,7 @@ export async function askPersistentQuestion<S extends ZodType>(
     const onAbort = () => pending();
     const timer = setTimeout(giveUp, options.waitMs);
     const poll = setInterval(check, RECHECK_MS);
-    const stop = store.subscribe(QUESTIONS_TOPIC, check);
+    const stop = store.subscribeToQuestion(subject, options.key, check);
     if (signal?.aborted) return onAbort();
     signal?.addEventListener('abort', onAbort, { once: true });
     check();
