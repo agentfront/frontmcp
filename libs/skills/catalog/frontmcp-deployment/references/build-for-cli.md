@@ -86,9 +86,10 @@ deployments: [
   verified claims are the caller (`this.auth`, and the roles and permissions
   `authorities` rules read through `claimsMapping`), and a token the server rejects
   fails the command (exit 1, `The server's auth did not accept the auth token`).
-  The token is verified as one sent to `http://localhost<entryPath>`, so set
-  `auth.expectedAudience` (or `FRONTMCP_PUBLIC_URL`) when your IdP puts the
-  server's public URL in `aud`. A public server verifies no opaque token, so the
+  Without `auth.expectedAudience` (or `FRONTMCP_PUBLIC_URL`), a token that names
+  an audience is accepted only for the server's loopback address on its
+  `http.port` when `NODE_ENV` is `development` or `test`, and not at all
+  otherwise, so set one when your IdP puts the server's public URL in `aud`. A public server verifies no opaque token, so the
   tools just receive it as `this.context.authInfo.token`. Up to 1.11.0 the token
   only reached `authInfo.token`, and authorization saw an anonymous caller.
 - The top-level `build` block applies to the cli bundles too: `build.esbuild` (`external`, `define`, `target`,

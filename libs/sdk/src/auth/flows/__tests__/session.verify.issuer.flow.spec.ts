@@ -44,6 +44,7 @@ async function runVerify(opts: {
   auth['issuer'] = CONFIGURED_ISSUER;
   auth['options'] = {
     mode: 'transparent',
+    expectedAudience: `http://${VICTIM_HOST}`,
     providerConfig: {
       id: 'idp',
       jwks: opts.providerJwks,

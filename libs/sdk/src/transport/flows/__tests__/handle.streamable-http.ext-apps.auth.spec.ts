@@ -14,6 +14,7 @@ import { App, LogLevel, Tool, ToolContext } from '../../../common';
 import { FrontMcpInstance } from '../../../front-mcp/front-mcp';
 
 const IDP = 'https://idp.example.com';
+const AUDIENCE = 'desk-ext-apps';
 
 @Tool({ name: 'whoami', inputSchema: {} })
 class WhoAmITool extends ToolContext {
@@ -53,6 +54,7 @@ describe('ui/callServerTool caller', () => {
       auth: {
         mode: 'transparent',
         provider: IDP,
+        expectedAudience: AUDIENCE,
         providerConfig: { jwks: { keys: [jwk] } },
         allowAnonymous: true,
         publicAccess: { tools: [] },
@@ -65,7 +67,7 @@ describe('ui/callServerTool caller', () => {
     token = await new SignJWT({ sub: 'nour', scope: 'tickets:read' })
       .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
       .setIssuer(IDP)
-      .setAudience(base)
+      .setAudience(AUDIENCE)
       .setExpirationTime('10m')
       .sign(privateKey);
   });

@@ -28,7 +28,6 @@ import {
   buildInsufficientScopeHeader,
   buildInvalidTokenHeader,
   buildUnauthorizedHeader,
-  deriveExpectedAudience,
   deriveTypedUser,
   encryptJson,
   extractBearerToken,
@@ -47,6 +46,7 @@ import { detectPlatformFromUserAgent } from '../../notification/notification.ser
 import { detectSkillsOnlyMode } from '../../skill/skill-mode.utils';
 import { type LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
 import { decryptPublicSession, parseSessionHeader } from '../session/utils/session-id.utils';
+import { transparentTokenAudiences } from '../transparent-audience';
 
 const inputSchema = httpRequestInputSchema.extend({
   /**
@@ -668,13 +668,11 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       // LocalPrimaryAuth.verifyGatewayToken above (#269): a server started with
       // the same JWT_SECRET signs with the same key.
       if (isTransparentMode(authOptions)) {
-        const configuredAudience = (authOptions as TransparentAuthOptions).expectedAudience;
-        // Without `expectedAudience`: the pinned `FRONTMCP_PUBLIC_URL`, else the request host (`RemotePrimaryAuth` warns).
-        const expectedAudiences = configuredAudience
-          ? Array.isArray(configuredAudience)
-            ? configuredAudience
-            : [configuredAudience]
-          : deriveExpectedAudience(this.state.required.baseUrl);
+        const expectedAudiences = transparentTokenAudiences(
+          authOptions as TransparentAuthOptions,
+          this.state.required.baseUrl,
+          this.scope,
+        );
         const audResult = validateAudience(result.payload?.['aud'] as string | string[] | undefined, {
           expectedAudiences,
           // By default accept tokens with no `aud` claim: many IdPs omit it, and
@@ -686,7 +684,14 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
           allowNoAudience: (authOptions as TransparentAuthOptions).requireAudience !== true,
         });
         if (!audResult.valid) {
-          this.logger.warn('verifyIfJwt: audience validation failed', { error: audResult.error });
+          this.logger.warn(
+            expectedAudiences.length > 0
+              ? 'verifyIfJwt: audience validation failed'
+              : 'verifyIfJwt: no token audience is configured, so a token with an aud claim is refused: set ' +
+                  'auth.expectedAudience (or FRONTMCP_PUBLIC_URL, or allowed hosts), or ' +
+                  'auth.audienceFromRequestHost: true while migrating',
+            { error: audResult.error },
+          );
           this.respond({
             kind: 'unauthorized',
             prmMetadataHeader: buildInvalidTokenHeader(
