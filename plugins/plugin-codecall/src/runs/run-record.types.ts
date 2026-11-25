@@ -16,6 +16,13 @@ export type CodeCallCallPhase = 'access' | 'input' | 'limit' | 'execute';
 /** A call CodeCall answers itself under a reserved name: `keep(name, value)` or `recall(name)`, never a tool call. */
 export type CodeCallKeptValueCallKind = 'keep' | 'recall';
 
+/** A failed call's error as the script got it, kept to replay the call. */
+export interface CodeCallScriptError {
+  name?: string;
+  code?: string;
+  message: string;
+}
+
 /** One tool call of a run. */
 export interface CodeCallJournalEntry {
   /** The call's place in the run, from 1: the order in which the host's tool handler was entered. */
@@ -35,6 +42,8 @@ export interface CodeCallJournalEntry {
   resultBytes?: number;
   /** The result itself, only with `runs.resume`. */
   result?: unknown;
+  /** The error the script got for a failed call, only with `runs.resume`. */
+  error?: CodeCallScriptError;
 }
 
 /** What one `codecall:execute` did, kept for its owner until `runs.ttlSeconds` runs out. */
@@ -56,6 +65,10 @@ export interface CodeCallRunRecord {
   journal: CodeCallJournalEntry[];
   /** Journal entries left out because the record reached `runs.maxRecordBytes`. */
   omittedEntries?: number;
+  /** What the script's `Date` read, in order, with `runs.resume` on a runtime that replays runs. */
+  clock?: number[];
+  /** What the script's `Math.random()` returned, in order, with `runs.resume` on a runtime that replays runs. */
+  random?: number[];
 }
 
 /** The store of run records: `this.get(CodeCallRunStoreToken)`, registered while `runs.enabled` is true. */

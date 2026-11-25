@@ -95,6 +95,9 @@ export function toEnclaveOptions(spec: CodeCallScriptRunSpec): CreateEnclaveOpti
     // with its tool-call cap, rate limit, suspicious-sequence checks and `throwOnError`.
     toolNamespaces: spec.toolNamespaces,
     review: spec.review,
+    toolResultOrder: spec.toolResultOrder,
+    clock: spec.clock,
+    random: spec.random,
     doubleVm: {
       parentValidation: {
         ...(threshold !== undefined && { rapidEnumerationThreshold: threshold }),
@@ -168,6 +171,7 @@ export function createNodeVmRuntime(loader: NodeVmModuleLoader = loadNodeVmModul
       return {
         run: (code) => enclave.run<unknown>(code, undefined, runOptionsOf(spec)),
         dispose: () => enclave.dispose(),
+        replays: spec.clock !== undefined,
       };
     },
   };

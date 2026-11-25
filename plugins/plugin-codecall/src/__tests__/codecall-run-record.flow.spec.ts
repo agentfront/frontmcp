@@ -160,6 +160,7 @@ describe.each(RUNTIMES)('codecall:execute run records on the %s runtime', (runti
           outcome: 'success',
           durationMs: expect.any(Number),
           resultBytes: jsonBytes({ id, name: `user-${id}` }),
+          result: { id, name: `user-${id}` },
         })),
       );
 
@@ -167,6 +168,19 @@ describe.each(RUNTIMES)('codecall:execute run records on the %s runtime', (runti
       const otherCaller = await open(config, 'owner-session', 'mallory');
       expect(await readRun(otherSession, outcome.runId ?? '')).toBeNull();
       expect(await readRun(otherCaller, outcome.runId ?? '')).toBeNull();
+    });
+
+    it("keeps each call's result and what the script read from the clock and Math.random()", async () => {
+      const owner = await open(config, 'reads-session');
+      const outcome = await execute(
+        owner,
+        "const at = Date.now();\nconst user = await callTool('users.get', { id: Math.floor(Math.random() * 3) + 1 });\nreturn [at, user.id];",
+      );
+
+      const record = await readRun(owner, outcome.runId ?? '');
+      const [at, id] = outcome.result as [number, number];
+      expect(record).toMatchObject({ clock: [at], random: [expect.any(Number)] });
+      expect(record?.journal[0].result).toEqual({ id, name: `user-${id}` });
     });
 
     it('forgets a record after its TTL', async () => {

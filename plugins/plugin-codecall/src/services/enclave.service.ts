@@ -12,6 +12,7 @@ import { isKeptValueCall } from '../kept-values/kept-value-script';
 import type CodeCallConfig from '../providers/code-call.config';
 import { extractionThresholdOf, MAX_ITERATIONS_PER_LOOP } from '../providers/code-call.config';
 import { RunJournal } from '../runs/run-journal';
+import { replayedEnvironment, type RunDivergedError, type RunReplay } from '../runs/run-replay';
 import { findScriptPolicyIssues } from '../security/script-policy';
 import { toSandboxToolNamespaces } from '../utils/build-tool-namespaces';
 import { withScriptLines } from '../utils/script-lines';
@@ -320,6 +321,8 @@ export default class EnclaveService {
       throw error;
     }
 
+    const { replay } = journal;
+    if (replay) environment = replayedEnvironment(environment, replay);
     const { keptValues } = environment;
     const { script, preloadReferences } = keptValues
       ? await keptValues.prepare(code)
@@ -395,7 +398,7 @@ export default class EnclaveService {
       toolHandler,
       hostFunctions,
       // Scripts get `console` only with it; the sandbox bounds each script's console calls and bytes.
-      consoleHandler: this.consoleHandler,
+      consoleHandler: replay ? replay.quiet(this.consoleHandler) : this.consoleHandler,
       // Tool namespaces (`acme.getUser()` for a tool named `acme.getUser`) are built by the sandbox
       // itself: a method call is exactly `callTool('acme.getUser', args, options)`, with the
       // sandbox's tool-call cap, rate limit, suspicious-sequence checks and `throwOnError`.
@@ -407,6 +410,7 @@ export default class EnclaveService {
         ...(rapidEnumerationOverrides !== undefined && { overrides: rapidEnumerationOverrides }),
       },
       ...(review && { review: review.hooks, reviewContext: review.context }),
+      ...replay?.hooks,
     };
 
     let runner: CodeCallScriptRunner;
@@ -418,10 +422,19 @@ export default class EnclaveService {
       throw error;
     }
 
+    replay?.appliedByRuntime(runner.replays === true);
+    if (replay?.replaysRun && !runner.replays) {
+      gate.close();
+      runner.dispose();
+      return replayRefusal(settings.runtime, logs);
+    }
+
     try {
       const result = await runner.run(script);
       const { pendingToolCalls } = gate.close();
       const mapped = this.mapEnclaveResult(result, logs, toolFailures, script, pendingToolCalls);
+      const divergence = replay?.divergenceOf(mapped.timedOut);
+      if (divergence) return divergedResult(divergence, mapped);
       return result.review ? { ...mapped, review: result.review } : mapped;
     } finally {
       gate.close();
@@ -576,6 +589,28 @@ export default class EnclaveService {
       stats,
     };
   }
+}
+
+/** A replayed run whose script did not make the calls its journal recorded: whatever it returned, it ends with the divergence. */
+function divergedResult(divergence: RunDivergedError, mapped: EnclaveExecutionResult): EnclaveExecutionResult {
+  const { name, message, code } = divergence;
+  return { success: false, error: { name, message, code }, logs: mapped.logs, timedOut: false, stats: mapped.stats };
+}
+
+/** A run that replays another, refused before any of it ran: the runtime cannot replay a run's clock, random and call order. */
+function replayRefusal(runtime: string, logs: string[]): EnclaveExecutionResult {
+  return {
+    success: false,
+    error: {
+      name: 'CodeCallRuntimeError',
+      code: 'RUNTIME_FEATURE_UNSUPPORTED',
+      message: `CodeCall vm.runtime '${runtime}' cannot replay a run with the installed @enclave-vm/core; the run was not resumed.`,
+      runtime,
+    },
+    logs,
+    timedOut: false,
+    stats: { duration: 0, toolCallCount: 0, iterationCount: 0 },
+  };
 }
 
 /**

@@ -461,8 +461,8 @@ export const codeCallRunsOptionsSchema = z
       .int()
       .min(1024)
       .default(256 * 1024),
-    /** Keep each call's result in its journal entry, for resuming a run (false by default). */
-    resume: z.boolean().default(false),
+    /** Keep each call's result, and what the script read from the clock and `Math.random()`, for resuming a run (true by default). */
+    resume: z.boolean().default(true),
     /** Where records are kept, through `createStorage()` from `@frontmcp/utils` ({ type: 'auto' }, 1000 at most in memory). */
     storage: storageOptionSchema,
     /** The key prefix of run records in the storage ('codecall-runs'). */

@@ -57,7 +57,9 @@ export type AgentScriptRunnerCapability =
   /** Review hooks before the run and each tool call. */
   | 'review'
   /** Sidecar entries an earlier run kept, which the run starts with. */
-  | 'kept-references';
+  | 'kept-references'
+  /** `toolResultOrder: 'call'` and the host's `clock` and `random`, which a replayed run needs. */
+  | 'replay';
 
 /** The options CodeCall gives the runner. */
 export interface AgentScriptRunnerOptions {
@@ -82,6 +84,9 @@ export interface AgentScriptRunnerOptions {
   sidecar?: ReferenceSidecarOptions;
   rapidEnumeration: { threshold?: number; overrides?: Record<string, number> };
   review?: ReviewOptions;
+  toolResultOrder?: 'call';
+  clock?: () => number;
+  random?: () => number;
 }
 
 /** One runner per execution. */
@@ -144,6 +149,7 @@ export function toRunnerOptions(spec: CodeCallScriptRunSpec): AgentScriptRunnerO
     sidecar: spec.sidecar,
     rapidEnumeration: { ...spec.rapidEnumeration },
     ...(spec.review && { review: spec.review }),
+    ...(spec.clock && { toolResultOrder: spec.toolResultOrder, clock: spec.clock, random: spec.random }),
   };
 }
 
@@ -205,10 +211,13 @@ export function createInterpreterRuntime(loader: WorkerEntryLoader = loadWorkerE
             '@enclave-vm/core; the script was not run. Change the configuration or the runtime.',
         );
       }
-      const runner = createRunner(Runner, toRunnerOptions(spec));
+      const replays = spec.clock !== undefined && Runner.capabilities.includes('replay');
+      // A runner without 'replay' runs the script as before, and the run cannot be replayed
+      const runner = createRunner(Runner, toRunnerOptions(replays ? spec : { ...spec, clock: undefined }));
       return {
         run: (code) => runner.run<unknown>(code, undefined, runOptionsOf(spec)),
         dispose: () => runner.dispose(),
+        replays,
       };
     },
   };

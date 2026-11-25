@@ -1086,7 +1086,7 @@ describe('ExecuteTool', () => {
   describe('Run records', () => {
     function withRunStore(keep: jest.Mock, enclaveResult?: Partial<EnclaveExecutionResult>) {
       const created = createExecuteTool({ enclaveResult });
-      const runs = { keepsResults: false, keep };
+      const runs = { keepsResultsOf: () => false, keep };
       const warn = jest.fn();
       created.tool._setDependency(CodeCallRunStoreToken, runs);
       created.tool.logger = { warn };

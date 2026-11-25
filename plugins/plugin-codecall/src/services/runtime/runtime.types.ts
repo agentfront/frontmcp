@@ -104,6 +104,12 @@ export interface CodeCallScriptRunSpec {
   review?: ReviewOptions;
   /** What the review hooks of this run receive as `context`: the caller. */
   reviewContext?: ReviewContext;
+  /** `'call'` delivers tool results in call order, for a run that may be replayed. */
+  toolResultOrder?: 'call';
+  /** What the script's `Date` reads, for a run that may be replayed. */
+  clock?: () => number;
+  /** What the script's `Math.random()` returns, for a run that may be replayed. */
+  random?: () => number;
 }
 
 /** The outcome of one run, in Enclave's `ExecutionResult` shape. */
@@ -114,6 +120,8 @@ export interface CodeCallScriptRunner {
   /** Run raw AgentScript. The runtime validates and transforms it before anything executes. */
   run(code: string): Promise<CodeCallRunResult>;
   dispose(): void;
+  /** Whether the runner applies the spec's `toolResultOrder`, `clock` and `random`, which a replayed run needs. */
+  readonly replays?: boolean;
 }
 
 /** A runtime CodeCall can execute scripts in. */

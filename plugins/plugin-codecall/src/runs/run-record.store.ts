@@ -44,6 +44,12 @@ export class CodeCallRunStore implements OnShutdown {
     return this.options.resume;
   }
 
+  /** Whether the caller's runs are kept with their calls' results, which needs `runs.resume` and an owner. */
+  keepsResultsOf(caller: CodeCallRunCaller): boolean {
+    const owner = resultOwnerOf(caller);
+    return this.options.resume && (owner.session !== undefined || owner.caller !== undefined);
+  }
+
   /** Keeps `run` for the caller and returns its id; none without an owner, and a RangeError for metadata over the limit. */
   async keep(
     caller: CodeCallRunCaller,
