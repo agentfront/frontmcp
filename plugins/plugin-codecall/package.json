@@ -52,8 +52,8 @@
     }
   },
   "dependencies": {
-    "@enclave-vm/ast": "2.21.1-rc.2",
-    "@enclave-vm/core": "2.21.1-rc.2",
+    "@enclave-vm/ast": "^2.21.1",
+    "@enclave-vm/core": "^2.21.1",
     "@frontmcp/plugin-result-handles": "1.12.3",
     "@frontmcp/protocol": "1.12.3",
     "@frontmcp/utils": "1.12.3",
