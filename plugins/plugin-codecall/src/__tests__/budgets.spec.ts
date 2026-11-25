@@ -13,7 +13,9 @@ import {
 } from '../budgets/budget-meter';
 import { CodeCallBudgetStore } from '../budgets/budget-store';
 import { codeCallBudgetsOptionsSchema, type CodeCallBudget } from '../codecall.types';
+import { effectsSoFarOf, type RunReviewCaller } from '../review/create-run-review';
 import { ReviewApprovals, type ApprovalRecordView } from '../review/review-approvals';
+import { RunJournal } from '../runs/run-journal';
 
 const HOUR = 3600;
 const MAX_AGE_MS = 3_600_000;
@@ -605,6 +607,61 @@ describe('budget approvals', () => {
       reason: expect.stringContaining('nobody can approve it here'),
     });
     expect(verdict.pending).toBeUndefined();
+  });
+});
+
+describe('a call stopped as it starts, with the run journal', () => {
+  let store: CodeCallBudgetStore;
+  let journal: RunJournal;
+
+  beforeEach(async () => {
+    store = new CodeCallBudgetStore(await sharedStorage(), [CALLS_PER_HOUR]);
+    await useCalls(meterFor(store, 'subject:ada'), 0, 2);
+    journal = new RunJournal();
+  });
+
+  const effectsSoFar = () => effectsSoFarOf({ journal } as unknown as RunReviewCaller, () => false);
+  const meterWithJournal = () =>
+    new BudgetMeter(store, 'subject:ada', {
+      approvals: approvalsWith({}, Date.now()),
+      grantedByPerson: new Set(),
+      canApprove: true,
+      effectsSoFar: effectsSoFar(),
+    });
+
+  it("asks for an approval for the run's first call, whose own unfinished entry is not an earlier effect", async () => {
+    journal.begin(ARCHIVE.toolName, ARCHIVE.args);
+    const call = meterWithJournal().startCall(ARCHIVE);
+
+    await expect(call.dispatch.beforeExecute()).rejects.toMatchObject({ code: 'RATE_LIMIT_EXCEEDED' });
+
+    expect(call.refusal?.decision).toMatchObject({ decision: 'needs_approval' });
+    expect(call.refusal?.pending?.reference.toolName).toBe(ARCHIVE.toolName);
+  });
+
+  it('asks for changes when a tool with effects already reached its tool earlier in the run', async () => {
+    journal.begin('tickets.delete', { id: 1 }).succeed({ deleted: 1 });
+    journal.begin(ARCHIVE.toolName, ARCHIVE.args);
+    const call = meterWithJournal().startCall(ARCHIVE);
+
+    await expect(call.dispatch.beforeExecute()).rejects.toMatchObject({ code: 'RATE_LIMIT_EXCEEDED' });
+
+    expect(call.refusal?.decision).toMatchObject({
+      decision: 'needs_changes',
+      findings: [
+        expect.objectContaining({ rule: 'approval-after-effects', message: expect.stringContaining('tickets.delete') }),
+      ],
+    });
+    expect(call.refusal?.pending).toBeUndefined();
+  });
+
+  it('leaves out only the starting call, not an identical call running beside it', () => {
+    journal.begin(ARCHIVE.toolName, ARCHIVE.args);
+    journal.begin(ARCHIVE.toolName, ARCHIVE.args);
+
+    expect(effectsSoFar()(ARCHIVE)).toEqual([ARCHIVE.toolName]);
+    journal.close();
+    expect(effectsSoFar()()).toEqual([ARCHIVE.toolName]);
   });
 });
 

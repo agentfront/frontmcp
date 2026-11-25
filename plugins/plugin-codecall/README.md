@@ -356,8 +356,10 @@ refusal is an error result whose structured content is the same payload. Tools a
 ## Budgets
 
 Limits inside one script, such as `vm.maxToolCalls`, don't stop an agent that sends 40 scripts. A budget limits what
-each caller does across all of its scripts and `codecall:invoke` calls, in a fixed window. Each caller may change at
-most 200 records an hour:
+each caller does across all of its scripts and `codecall:invoke` calls, in a fixed window. Here, once a caller has
+changed 200 records in the hour, each further call needs a person's approval until the hour ends. It is a threshold,
+not a hard maximum: the call that crosses it runs, so one call that changes 250 records goes through, and calls that
+start together can each go past it before any of them reports:
 
 ```ts
 CodeCallPlugin.init({

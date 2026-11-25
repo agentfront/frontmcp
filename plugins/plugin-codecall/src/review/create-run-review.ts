@@ -4,7 +4,7 @@ import type { ToolEntry } from '@frontmcp/sdk';
 
 import { DEFAULT_APPROVAL_MAX_AGE_SECONDS } from '../codecall.types';
 import type CodeCallConfig from '../providers/code-call.config';
-import type { RunJournal } from '../runs/run-journal';
+import { argumentsHashOf, type RunJournal } from '../runs/run-journal';
 import type { CodeCallJournalEntry } from '../runs/run-record.types';
 import {
   checkCodeCallToolAccess,
@@ -98,13 +98,39 @@ function isReadOnlyTool(caller: RunReviewCaller, name: string): boolean {
   return access.allowed && access.entry.metadata.annotations?.readOnlyHint === true;
 }
 
-/** The tools without `readOnlyHint` whose calls reached the tool in the run so far, in the order they first ran. */
+/** A call as the journal recorded it: its tool and its arguments. */
+export interface JournaledCall {
+  toolName: string;
+  args: unknown;
+}
+
+/** The entries of the run so far, without the one unfinished entry of `call`, the call that is starting. */
+function entriesBefore(journal: RunJournal | undefined, call?: JournaledCall): CodeCallJournalEntry[] {
+  const entries = [...(journal?.entriesSoFar() ?? [])];
+  if (!call) return entries;
+  const argumentsHash = argumentsHashOf(call.args);
+  for (let index = entries.length - 1; index >= 0; index--) {
+    const entry = entries[index];
+    if (entry.outcome !== 'unfinished' || entry.tool !== call.toolName || entry.argumentsHash !== argumentsHash)
+      continue;
+    entries.splice(index, 1);
+    break;
+  }
+  return entries;
+}
+
+/**
+ * The tools without `readOnlyHint` whose calls reached the tool in the run so far, in the order they first ran; given
+ * the call that is starting, its own entry is left out.
+ */
 export function effectsSoFarOf(
   caller: RunReviewCaller,
   isReadOnly = (name: string) => isReadOnlyTool(caller, name),
-): () => string[] {
-  return () => {
-    const ranTools = (caller.journal?.entriesSoFar() ?? []).filter(reachedTool).map((entry) => entry.tool);
+): (starting?: JournaledCall) => string[] {
+  return (starting) => {
+    const ranTools = entriesBefore(caller.journal, starting)
+      .filter(reachedTool)
+      .map((entry) => entry.tool);
     return [...new Set(ranTools)].filter((name) => !isReadOnly(name));
   };
 }

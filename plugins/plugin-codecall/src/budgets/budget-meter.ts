@@ -3,7 +3,7 @@ import type { ReviewDecision, ReviewOptions } from '@enclave-vm/core/worker';
 import { PublicMcpError, type FrontMcpLogger } from '@frontmcp/sdk';
 
 import type { CodeCallBudget } from '../codecall.types';
-import type { ReviewCallerContext } from '../review/create-run-review';
+import type { JournaledCall, ReviewCallerContext } from '../review/create-run-review';
 import type { CodeCallApprovalReference, ReviewApprovals } from '../review/review-approvals';
 import { NO_APPROVAL_CHANNEL } from '../review/review-rules';
 import { needsOwnScript, type PendingApproval } from '../review/run-review';
@@ -105,7 +105,7 @@ export interface BudgetApprovals {
   /** Whether a person can approve: the Approval plugin is installed, or the client can answer an elicitation. */
   canApprove: boolean;
   /** The tools with effects that already ran in this run, which approving a later call would run again. */
-  effectsSoFar?: () => readonly string[];
+  effectsSoFar?: (starting?: JournaledCall) => readonly string[];
 }
 
 /** Gives a spent grant back. */
@@ -227,13 +227,13 @@ export class BudgetMeter {
       const reference = this.approval.approvals.budgetReferenceFor(call, over.budget.name);
       const claim = await this.unspentGrantOf(reference);
       if (claim === 'denied') return { decision: exceededDecision(over, call.toolName, REFUSED_BY_PERSON) };
-      if (!claim) return this.waitForApproval(over, reference, call, claimed === undefined);
+      if (!claim) return this.waitForApproval(over, reference, call, claimed !== undefined);
       grants.push({ over, reference, claim });
     }
     if (!claimed) return { decision: ALLOW };
     for (const { over, reference, claim } of grants) {
       const release = await claim();
-      if (!release) return this.waitForApproval(over, reference, call, false);
+      if (!release) return this.waitForApproval(over, reference, call, true);
       claimed.push(release);
     }
     return { decision: ALLOW };
@@ -244,9 +244,9 @@ export class BudgetMeter {
     over: ExceededBudget,
     reference: CodeCallApprovalReference,
     call: BudgetCall,
-    beforeTheCall: boolean,
+    atDispatch: boolean,
   ): BudgetVerdict {
-    const repeated = beforeTheCall ? (this.approval.effectsSoFar?.() ?? []) : [];
+    const repeated = this.approval.effectsSoFar?.(atDispatch ? call : undefined) ?? [];
     if (repeated.length > 0) return { decision: needsOwnScript(call.toolName, repeated) };
     const pending = { reference, call: { toolName: call.toolName, args: call.args } };
     this.pendingByCallIndex.set(call.callIndex, pending);

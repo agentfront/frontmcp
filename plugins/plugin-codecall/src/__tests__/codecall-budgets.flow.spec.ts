@@ -432,7 +432,9 @@ describe('CodeCall budgets', () => {
     expect((await readRun(ada, ran.runId as string))?.reviewDecision).toBe('allow');
     expect((await readRun(ada, stopped.runId as string))?.reviewDecision).toBe('needs_approval');
     const description = await executeDescriptionOf(ada);
-    expect(description).toContain('| timeout | needs_approval | denied\n');
+    expect(description).toContain('| timeout | needs_changes | needs_approval | denied\n');
+    expect(description).toContain('approval-after-effects (needs_changes)');
+    expect(description).toContain('send the stopped call in a script of its own');
     expect(description).toContain('BUDGETS: ');
     expect(description).toContain('the calls before a stopped one already ran');
     expect(description).toContain('budget-unavailable: the budget store failed; a reset does not fix it');
