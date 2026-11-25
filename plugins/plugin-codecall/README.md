@@ -202,8 +202,9 @@ replayable either.
 
 With `runs.resume` (on by default), a run that stops **before** a call ran is kept `paused`, with its journal and the
 call it stopped before, instead of failing: a call-phase decision refused that call (the review's `needs_approval`, or
-an uncaught `needs_changes` or `denied`, and a budget's decision of the same shape), or the call flow refused its
-input, uncaught. The answer keeps its status (`needs_approval`, `tool_error`, ...) and adds `paused`:
+an uncaught `needs_changes` or `denied`, and a budget's decision of the same shape), or the call flow refused it,
+uncaught, before its tool ran: its input, or a [budget](#budgets) as the tool started. The answer keeps its status
+(`needs_approval`, `tool_error`, ...) and adds `paused`:
 
 ```json
 {
@@ -514,8 +515,9 @@ async execute({ ids }: { ids: string[] }) {
   (`budget-exceeded`) names the budget and when its window resets. As the tool starts, after the review and any wait
   for a person, the call is counted at once with an atomic increment of each `toolCalls` budget, and the approvals it
   needs for the budgets it is then over are spent; when it lacks one, it is taken back off the count and fails there,
-  with `RATE_LIMITED` and the budget's reason in a script, and with the budget's answer from `codecall:invoke`. Budgets count per caller, not per run, so they carry across runs that
-  resume.
+  with `RATE_LIMITED` and the budget's reason in a script, and with the budget's answer from `codecall:invoke`.
+  Budgets count per caller, not per run, so they carry across runs that resume; the calls a resumed run answers from
+  its record are neither checked nor counted again.
 - **Approving a call over a budget.** A budget's `needs_approval` carries an `approval` whose `id` covers this script,
   this call's tool and arguments, its place in the run, and that budget; it has no `anyArgumentsId`. A person grants it
   as a review approval ([Approvals](#approvals)): through the Approval plugin, or through elicitation, which asks in
@@ -526,11 +528,15 @@ async execute({ ids }: { ids: string[] }) {
   the grant no longer counts), so two runs, on one instance or on several sharing the store, never spend one grant. A
   budget approval and a review approval never stand for each other, so approving a destructive call never lifts a
   budget. A refused approval gives `denied`, and so does a budget stop when nobody can approve it (no Approval plugin,
-  and a client that can't elicit), as review answers a destructive call. Until a run resumes from its journal (#1335),
-  an approved script runs again from the start, so once a tool without `readOnlyHint` ran in the script, a call over a
-  budget gets `needs_changes` (`approval-after-effects`), as review answers, rather than an approval that would run
-  that tool again. After read-only calls, the calls before the approved one run and count again, and each that is over
-  the limit asks for its own approval; an approval is bound to its place, so an earlier identical call never spends it.
+  and a client that can't elicit), as review answers a destructive call.
+- **A stopped run pauses.** With `runs.resume`, a run a budget stopped, before the call or as its tool started, is kept
+  [paused](#pause-and-resume) at that call where it can be: once a person approves it, the window resets or the store
+  answers, `codecall:resume` runs it from that call, and the calls before it are answered from the record. The
+  findings say so. Where the run can't pause, an approved script runs again from the start, so once a tool without
+  `readOnlyHint` ran in the script, a call over a budget gets `needs_changes` (`approval-after-effects`), as review
+  answers, rather than an approval that would run that tool again. After read-only calls, the calls before the
+  approved one run and count again, and each that is over the limit asks for its own approval; an approval is bound to
+  its place, so an earlier identical call never spends it.
 - **The call that crosses a `recordsChanged` limit runs.** A call's records changed are known only once it ran, so the
   call that takes a caller past a `recordsChanged` limit runs, and the next one is stopped; calls that start together
   can each run before any of them reports. A `toolCalls` limit holds for calls that start together, in a `parallel()`
@@ -544,7 +550,8 @@ async execute({ ids }: { ids: string[] }) {
   is `denied` (`budget-unavailable`), and once a count couldn't be kept, or a refused call couldn't be taken back off
   the count, the rest of that run is too. An approval wouldn't fix a store, so it isn't asked for. The finding names
   the tools with effects that already ran in the script and tells the agent to send only the calls that did not run,
-  in a new script, once the store answers; a call stopped as it starts carries the same advice in its error.
+  in a new script, once the store answers, or to resume a run that paused there; a call stopped as it starts carries
+  the same advice in its error.
 
 ## Runtime and process boundary
 

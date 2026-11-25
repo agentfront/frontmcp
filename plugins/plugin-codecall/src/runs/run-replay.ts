@@ -2,7 +2,7 @@ import type { PostReviewAction, ReviewDecision, ReviewOptions } from '@enclave-v
 
 import type { CodeCallVmEnvironment } from '../codecall.symbol';
 import type { ScriptToolCall } from './call-idempotency-key';
-import { isInputRefusal } from './call-stage';
+import { isRefusedBeforeTool } from './call-stage';
 import { argumentsHashOf, journalToolNameOf, type RunJournal } from './run-journal';
 import type { CodeCallJournalEntry, CodeCallPendingCall, CodeCallRunRecord } from './run-record.types';
 
@@ -83,7 +83,7 @@ export class RunReplay {
   private startedAt = Date.now();
   private firstOperationAt?: number;
   private operations = 0;
-  private readonly inputRefusals = new Set<number>();
+  private readonly refusalsBeforeTool = new Set<number>();
   private callsReached = 0;
   private divergence?: RunDivergedError;
   private applied = false;
@@ -213,12 +213,12 @@ export class RunReplay {
 
   /** Records that the live call at `callIndex` failed with `error`, and whether it was refused before its tool ran. */
   failedLive(callIndex: number, error: unknown): void {
-    if (isInputRefusal(error)) this.inputRefusals.add(callIndex);
+    if (isRefusedBeforeTool(error)) this.refusalsBeforeTool.add(callIndex);
   }
 
-  /** Whether the call at `callIndex` failed input validation, which the call flow reported before the tool ran. */
-  refusedInputAt(callIndex: number): boolean {
-    return this.inputRefusals.has(callIndex);
+  /** Whether the call at `callIndex` was refused before its tool ran: its input validation failed, or a budget. */
+  refusedBeforeToolAt(callIndex: number): boolean {
+    return this.refusalsBeforeTool.has(callIndex);
   }
 
   /** The divergence the run ends with, also when it ended, without timing out, before making every recorded call. */

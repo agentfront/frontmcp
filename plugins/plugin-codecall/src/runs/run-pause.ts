@@ -29,9 +29,10 @@ function replayableInOrder(entries: readonly CodeCallJournalEntry[]): boolean {
 
 /**
  * The call a run stopped before, when the run can pause there: a call-phase decision (`needs_approval`, or an uncaught
- * `needs_changes` or `denied`) refused it, or the call flow refused its input, uncaught; it is the run's last call;
- * every call before it is recorded and settled, none of them another `needs_approval` (a `parallel()` that asked for
- * two); and replaying them stays clear of Enclave's detectors. Nothing the tool or its error says decides it.
+ * `needs_changes` or `denied`) refused it, or the call flow refused it uncaught before its tool ran (its input, or a
+ * budget as it entered the tool); it is the run's last call; every call before it is recorded and settled, none of them
+ * another `needs_approval` (a `parallel()` that asked for two); and replaying them stays clear of Enclave's detectors.
+ * Nothing the tool or its error says decides it.
  */
 export function pendingCallOf(status: CodeCallRunStatus, journal: RunJournal): CodeCallJournalEntry | undefined {
   const { replay } = journal;
@@ -39,17 +40,20 @@ export function pendingCallOf(status: CodeCallRunStatus, journal: RunJournal): C
   const last = entries.at(-1);
   if (!replay?.recordsReads || !last) return undefined;
   const refused = DECISION_STATUSES.has(status) && last.decision?.decision === status;
-  const inputRefused = status === 'tool_error' && !last.decision && replay.refusedInputAt(last.position - 1);
-  if (!refused && !inputRefused) return undefined;
+  const refusedBeforeTool = status === 'tool_error' && !last.decision && replay.refusedBeforeToolAt(last.position - 1);
+  if (!refused && !refusedBeforeTool) return undefined;
   const before = entries.slice(0, -1);
   const pausable = last.position === entries.length && replayableInOrder(before);
   return pausable && replay.replaysWithinDetectors(last.position - 1) ? last : undefined;
 }
 
-/** Whether the run could pause at the call its call-phase hooks are asked about now, after every call so far. */
-export function pausableSoFar(journal: RunJournal): boolean {
+/**
+ * Whether the run could pause at the call its call-phase hooks are asked about now, after every call so far; given its
+ * `callIndex`, after the calls before it only, as when the call is stopped as it enters its tool.
+ */
+export function pausableSoFar(journal: RunJournal, callIndex?: number): boolean {
   const { replay } = journal;
-  const entries = journal.entriesSoFar();
+  const entries = journal.entriesSoFar().filter((entry) => callIndex === undefined || entry.position <= callIndex);
   return replay?.recordsReads === true && replayableInOrder(entries) && replay.replaysWithinDetectors(entries.length);
 }
 

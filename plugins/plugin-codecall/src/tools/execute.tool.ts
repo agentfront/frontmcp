@@ -37,7 +37,7 @@ import { reviewDecisionOf, reviewResultOf, unpausedResultOf } from '../review/re
 import CodeCallReviewService from '../review/review.service';
 import { reviewOutcomeOf, type PendingApproval, type RunReview } from '../review/run-review';
 import { withCallIdempotencyKey, type ScriptToolCall } from '../runs/call-idempotency-key';
-import { markInputRefusal, trackCallStage } from '../runs/call-stage';
+import { markRefusedBeforeTool, trackCallStage } from '../runs/call-stage';
 import { journalMetadataOf, jsonBytes, RunJournal } from '../runs/run-journal';
 import { pausableSoFar, pausedAnswerOf, pausedRunOf, retrySourceOf, type PausedRun } from '../runs/run-pause';
 import type { CodeCallRunInput, CodeCallRunStore } from '../runs/run-record.store';
@@ -80,6 +80,8 @@ interface ReviewedAttempt {
   journal: RunJournal;
   review?: RunReview;
   budgets?: BudgetMeter;
+  /** The tools that are not read-only and reached their tool in the run, in the order they first did. */
+  effectsSoFar: () => readonly string[];
 }
 
 /** The approval a stopped run waits for: the one its result names, from its budgets or its review. */
@@ -176,7 +178,7 @@ export abstract class CodeCallScriptTool extends ToolContext {
         ...(answer.status === 'ok' && { resultBytes: jsonBytes(answer.result) }),
         journal: journalMetadataOf(journal.close()),
       });
-      const unpaused = unpausedResultOf(ended, review?.pendingApproval, review?.effectsSoFar() ?? []);
+      const unpaused = unpausedResultOf(ended, pendingApprovalOf(attempt), attempt.effectsSoFar());
       const paused = runs && this.pausedRunOf(runs, runOf(ended), ended.status, journal, input, resumed?.source);
       run = paused?.run ?? runOf(unpaused);
       runId = runs ? await this.keepRun(runs, run, paused?.ttlSeconds) : undefined;
@@ -275,10 +277,11 @@ export abstract class CodeCallScriptTool extends ToolContext {
       grantedByPerson: approvedByPerson,
       canApprove: caller.approvalService !== undefined || canElicit,
       effectsSoFar: effectsSoFarOf(caller),
+      canPause: (callIndex?: number) => pausableSoFar(journal, callIndex),
     };
     const budgets = budgetMeterOf(this.tryGet(CodeCallBudgetStoreToken), this, approval, this.logger);
     const result = await this.runScript(input, journal, review, budgets);
-    return { result, journal, review, budgets };
+    return { result, journal, review, budgets, effectsSoFar: () => approval.effectsSoFar() };
   }
 
   /** The run's spans while observability traces requests, else none. */
@@ -480,7 +483,7 @@ export abstract class CodeCallScriptTool extends ToolContext {
           // ============================================================
 
           const sanitizedError = toolCallErrorOf(error, name);
-          if (failedInputValidation()) markInputRefusal(sanitizedError);
+          if (failedInputValidation() || budgetedCall?.refusal) markRefusedBeforeTool(sanitizedError);
 
           audit?.logToolCallFailure(executionId, name, callDepth, Date.now() - toolCallStartedAt, sanitizedError.code);
 

@@ -250,7 +250,6 @@ describe('RunReview', () => {
 
     expect(decision.decision).toBe('needs_approval');
     expect(review.pendingApproval).toMatchObject({ call: { toolName: 'users.close', args: { id: 'u1' } } });
-    expect(review.effectsSoFar()).toEqual(['mail.send']);
   });
 
   it('names at most ten earlier tools', async () => {

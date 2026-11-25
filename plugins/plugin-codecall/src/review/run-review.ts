@@ -90,11 +90,6 @@ export class RunReview {
 
   constructor(private readonly options: RunReviewOptions) {}
 
-  /** The tools that are not read-only and reached their tool in the run so far, in the order they first did. */
-  effectsSoFar(): readonly string[] {
-    return this.options.effectsSoFar?.() ?? [];
-  }
-
   /** How long one review hook may take, in ms. */
   get timeoutMs(): number {
     return this.options.timeoutMs ?? DEFAULT_REVIEW_TIMEOUT_MS;

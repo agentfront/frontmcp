@@ -55,6 +55,10 @@ const BUDGET_LINE =
   'only the calls that did not run, in a new script. A call stopped as it starts fails with RATE_LIMITED and the ' +
   "same advice. Other findings are the review's.";
 
+const BUDGET_PAUSED_LINE =
+  ' A budget stop whose result has "paused" needs none of that: once a person approves, the window resets or the ' +
+  'store answers, codecall:resume the run.';
+
 const PAUSED_LINE =
   '\nPAUSED: a result with "paused" (any status) stopped before that call, which did not run; the calls before it ran once. ' +
   'Fix the cause (a person approves, or correct its arguments), then codecall:resume { runId, arguments? }: ' +
@@ -80,7 +84,8 @@ export function buildExecuteToolDescription(
   const callsPerTool = rapidEnumerationThresholdOf(vmOptions);
   const blockedConsole = vmOptions.allowConsole ? '' : 'console (use mcpLog), ';
   const decisionStatuses = reviewed ? REVIEW_STATUSES : budgeted ? BUDGET_STATUSES : '';
-  const decisionLines = `${reviewed ? REVIEW_LINE : ''}${budgeted ? BUDGET_LINE : ''}`;
+  const budgetLines = budgeted ? `${BUDGET_LINE}${pausing ? BUDGET_PAUSED_LINE : ''}` : '';
+  const decisionLines = `${reviewed ? REVIEW_LINE : ''}${budgetLines}`;
   const consoleLine = vmOptions.allowConsole
     ? '\nLOGGING: console.log/info/warn/error/debug or mcpLog(level, message)'
     : '';

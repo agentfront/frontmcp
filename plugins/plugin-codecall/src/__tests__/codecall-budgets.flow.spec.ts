@@ -20,6 +20,7 @@ import {
 import { mkdtemp, rm } from '@frontmcp/utils';
 
 import { BUDGET_EXCEEDED_RULE } from '../budgets/budget-meter';
+import { CodeCallBudgetStore } from '../budgets/budget-store';
 import CodeCallPlugin from '../codecall.plugin';
 import type { CodeCallPluginOptionsInput, CodeCallVmRuntime } from '../codecall.types';
 import { CodeCallRunStoreToken, type CodeCallRunRecord } from '../runs/run-record.types';
@@ -126,6 +127,7 @@ class ReadRunTool extends ToolContext {
 
 interface ExecuteOutcome {
   status: string;
+  paused?: { call: { position: number; tool: string } };
   runId?: string;
   result?: unknown;
   reason?: string;
@@ -406,9 +408,9 @@ describe('CodeCall budgets', () => {
     expect(executed).toHaveLength(1);
   });
 
-  it('asks for changes, not an approval, for a call over a budget after a tool with effects ran in the script', async () => {
+  it('asks for changes, not an approval, for a call over a budget after a tool with effects ran, where runs do not pause', async () => {
     const oneCallPerHour = { ...threeCallsPerHour(), limits: [{ ...threeCallsPerHour().limits[0], limit: 1 }] };
-    const ada = await open(serverConfig({ budgets: oneCallPerHour }), 'ada');
+    const ada = await open(serverConfig({ budgets: oneCallPerHour, runs: { resume: false } }), 'ada');
 
     const outcome = await execute(
       ada,
@@ -421,6 +423,72 @@ describe('CodeCall budgets', () => {
     });
     expect(outcome).not.toHaveProperty('approval');
     expect(executed).toEqual(['tickets.archive:1']);
+  });
+
+  it('pauses a run over a budget after a tool with effects ran, and resumes it once approved, without that tool', async () => {
+    const oneCallPerHour = { ...threeCallsPerHour(), limits: [{ ...threeCallsPerHour().limits[0], limit: 1 }] };
+    const ada = await open(serverConfig({ budgets: oneCallPerHour }), 'ada');
+
+    const paused = await execute(
+      ada,
+      "await callTool('tickets.archive', { ids: ['t1'] });\nreturn await callTool('tickets.get', { id: 1 });",
+    );
+    expect(paused).toMatchObject({
+      status: 'needs_approval',
+      approval: { toolName: 'tickets.get' },
+      paused: { call: { position: 2, tool: 'tickets.get' } },
+    });
+    expect(paused.findings?.[0]).toMatchObject({ suggestion: expect.stringContaining('codecall:resume') });
+    await ada.callTool('approvals.grant', { id: paused.approval?.id as string });
+
+    const resumed = structuredOf<ExecuteOutcome>(
+      (await ada.callTool('codecall:resume', { runId: paused.runId as string })) as CallToolResult,
+    );
+
+    expect(resumed).toMatchObject({ status: 'ok', result: { id: 1 } });
+    expect(executed).toEqual(['tickets.archive:1', 'tickets.get:1']);
+  });
+
+  it('pauses a run a budget stopped as its tool started, and resumes it from that call', async () => {
+    const ada = await open(serverConfig({ budgets: threeCallsPerHour() }), 'ada');
+    await execute(ada, THREE_GETS);
+    jest.spyOn(CodeCallBudgetStore.prototype, 'exceededOf').mockResolvedValueOnce([]);
+
+    const stopped = await execute(ada, "return await callTool('tickets.get', { id: 4 });");
+    expect(stopped).toMatchObject({ status: 'tool_error', paused: { call: { position: 1, tool: 'tickets.get' } } });
+    jest.restoreAllMocks();
+
+    const resume = async () =>
+      structuredOf<ExecuteOutcome>(
+        (await ada.callTool('codecall:resume', { runId: stopped.runId as string })) as CallToolResult,
+      );
+    const asked = await resume();
+    expect(asked).toMatchObject({ status: 'needs_approval', paused: { call: { position: 1 } } });
+    await ada.callTool('approvals.grant', { id: asked.approval?.id as string });
+
+    expect(await resume()).toMatchObject({ status: 'ok', result: { id: 4 } });
+    expect(executed).toEqual(['tickets.get:1', 'tickets.get:2', 'tickets.get:3', 'tickets.get:4']);
+  });
+
+  it('neither checks nor counts again the calls a resumed run answers from its record', async () => {
+    const ada = await open(serverConfig({ budgets: threeCallsPerHour() }), 'ada');
+
+    const paused = await execute(
+      ada,
+      "await callTool('tickets.get', { id: 1 });\nawait callTool('tickets.get', { id: 2 });\n" +
+        "return await callTool('tickets.archive', { ids: 't3' });",
+    );
+    expect(paused).toMatchObject({ status: 'tool_error', paused: { call: { position: 3 } } });
+
+    const resumed = structuredOf<ExecuteOutcome>(
+      (await ada.callTool('codecall:resume', {
+        runId: paused.runId as string,
+        arguments: { ids: ['t3'] },
+      })) as CallToolResult,
+    );
+
+    expect(resumed).toMatchObject({ status: 'ok', result: { archived: 1 } });
+    expect(executed).toEqual(['tickets.get:1', 'tickets.get:2', 'tickets.archive:1']);
   });
 
   it('records the decision of a budget with review off, and says in the description what a budget stop means', async () => {
@@ -439,6 +507,7 @@ describe('CodeCall budgets', () => {
     expect(description).toContain('the calls before a stopped one already ran');
     expect(description).toContain('budget-unavailable: the budget store failed, and a reset does not fix it');
     expect(description).toContain('send only the calls that did not run, in a new script');
+    expect(description).toContain('A budget stop whose result has "paused" needs none of that');
   });
 });
 
