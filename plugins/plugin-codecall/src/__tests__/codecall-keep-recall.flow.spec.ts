@@ -236,10 +236,8 @@ describe.each(RUNTIMES)('keep and recall on the %s runtime', (runtime) => {
       const read = structuredOf<{ record: CodeCallRunRecord }>(
         (await client.callTool('runs.read', { runId: second.runId ?? '' })) as CallToolResult,
       );
-      expect(read.record.journal[0]).toMatchObject({
-        kind: 'recall',
-        result: expect.stringMatching(/^__REF_[0-9a-f-]{36}__$/),
-      });
+      expect(read.record.journal[0]).toMatchObject({ kind: 'recall', outcome: 'success' });
+      expect(read.record.journal[0].resultBytes).toBeLessThan(100);
     });
   });
 });
