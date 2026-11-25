@@ -39,8 +39,9 @@ function countedKeyOf(owner: ResultOwner, window: number): string {
  * Values scripts keep: each encrypted in a {@link ResultHandleStore} under keys of its name and owner, readable by that
  * owner until `ttlSeconds` runs out. What an owner keeps counts against `maxBytes` in atomic counters, one per window
  * of `ttlSeconds`: a value counts in the window it was kept in, the current and the previous windows count together,
- * so a value counts at most twice its TTL. Bytes are reserved before the value is written and released if it isn't;
- * the value a keep replaces leaves room for it, and releases what it counted once the new one is written.
+ * so a value counts at most twice its TTL. Bytes are reserved before the value is written, released by a keep refused
+ * before the write, and kept by one whose write fails; the value a keep replaces leaves room for it while those
+ * counters hold its bytes, and releases them once the new one is written.
  */
 export class KeptValueStore implements OnShutdown {
   private readonly handles: ResultHandleStore;
@@ -68,19 +69,19 @@ export class KeptValueStore implements OnShutdown {
       await this.storage.expire(counter, 2 * this.options.ttlSeconds);
       previous = await this.storedValueOf(owner, name);
       const before = Number(await this.storage.get(countedKeyOf(owner, window - 1))) || 0;
-      const counted = Math.max(reserved, 0) + Math.max(before, 0) - (previous?.bytes ?? 0);
+      const counted = Math.max(reserved, 0) + Math.max(before, 0) - this.creditOf(previous, window);
       if (counted > this.options.maxBytes) {
         throw new RangeError(
           `Keeping "${name}" (${bytes} bytes) would bring what this session and caller keep to ${counted} bytes, ` +
             `over the ${this.options.maxBytes}-byte limit. Keep less, or let earlier values expire.`,
         );
       }
-      await this.handles.save(handleOf(name), { kept, bytes, window, slot: randomUUID() }, owner);
     } catch (error: unknown) {
       await this.storage.incrBy(counter, -bytes);
       throw error;
     }
-    // A value left counted only counts until its window passes; the new value is kept either way.
+    // A write that fails keeps its reservation: it may have been applied, and counting too much heals with the window.
+    await this.handles.save(handleOf(name), { kept, bytes, window, slot: randomUUID() }, owner);
     if (previous) await this.releaseOnce(owner, previous).catch(() => undefined);
   }
 
@@ -102,6 +103,11 @@ export class KeptValueStore implements OnShutdown {
 
   private async storedValueOf(owner: ResultOwner, name: string): Promise<StoredValue | undefined> {
     return (await this.handles.read(handleOf(name), owner))?.value as StoredValue | undefined;
+  }
+
+  /** The bytes of the value a keep replaces, while the counters it checks in `window` hold them. */
+  private creditOf(previous: StoredValue | undefined, window: number): number {
+    return previous && (previous.window === window || previous.window === window - 1) ? previous.bytes : 0;
   }
 
   /** Releases what a replaced value counted, once, however many keeps replaced it at the same time. */

@@ -200,7 +200,11 @@ return overdue.filter((invoice) => invoice.amount > 1000);
   and restarts its time. What one owner keeps counts against `keep.maxBytes`; a `keep` past it fails with
   `RESULT_TOO_LARGE` and keeps nothing. The bytes are reserved in an atomic counter before the value is written, so
   keeps that run at the same time, on any server instance, each count; a value counts for at most twice
-  `keep.ttlSeconds`, and a value kept again under its name stops counting the one it replaced.
+  `keep.ttlSeconds`, and a value kept again under its name stops counting the one it replaced. `keep.maxBytes` is a
+  soft limit: keeps that run at the same time can go past it by what is in flight, and a storage failure or a race
+  can count too much until the window passes. Two keeps of the same new name at the same time both count, for
+  example, so a later `keep` can be refused early; counting too much heals within twice `keep.ttlSeconds`. One owner's
+  keeps never count against another's.
 - **Large strings.** With the [sidecar](#options) on, a string of at least `sidecar.extractionThreshold` bytes is kept
   as a sidecar reference. A later script that recalls it by a literal name (`recall('doc')`) starts with that
   reference, and `recall` returns its token: the script can pass it to a tool, which receives the whole string, but the
@@ -221,8 +225,9 @@ return overdue.filter((invoice) => invoice.amount > 1000);
 
 Kept values are stored like run records: each one encrypted under keys derived from its name and its owner. The
 bytes an owner keeps are counted with `incrBy`, which every built-in storage has but Cloudflare KV. A store that fails
-is logged as a warning, and the `keep` or `recall` fails with `EXECUTION`; a `keep` that fails releases what it
-reserved, and the value it would have replaced stays kept and counted.
+is logged as a warning, and the `keep` or `recall` fails with `EXECUTION`. A `keep` refused before it writes the
+value releases what it reserved. One whose write fails keeps the reservation, since the write may have been applied,
+and the value it would have replaced stays kept and counted.
 
 ## Trace
 

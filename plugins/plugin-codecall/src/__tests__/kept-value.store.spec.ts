@@ -103,6 +103,7 @@ describe('KeptValueStore limits', () => {
     await expect(store.keep(alice, 'second', { value: 'b'.repeat(600) })).rejects.toBeInstanceOf(RangeError);
     expect(await store.recall(alice, 'second')).toBeUndefined();
     expect(await store.recall(alice, 'first')).toEqual(first);
+    await expect(store.keep(alice, 'small', { value: 'c'.repeat(300) })).resolves.toBeUndefined();
   });
 
   it('counts only the newest value of a name, each owner on its own', async () => {
@@ -139,16 +140,52 @@ describe('KeptValueStore limits', () => {
     expect(await store.recall(alice, 'b')).toEqual({ value: 'b'.repeat(400) });
   });
 
-  it('releases what a keep reserved when its value cannot be written, and still counts the value it would replace', async () => {
+  it('releases what a keep reserved when it fails before writing the value', async () => {
     const { storage, store } = await memoryStore(1024);
     await store.keep(alice, 'report', { value: 'a'.repeat(400) });
-    jest.spyOn(storage, 'set').mockRejectedValueOnce(new Error('storage down'));
+    jest.spyOn(storage, 'get').mockRejectedValueOnce(new Error('storage down'));
 
-    await expect(store.keep(alice, 'report', { value: 'b'.repeat(400) })).rejects.toThrow('storage down');
+    await expect(store.keep(alice, 'other', { value: 'b'.repeat(400) })).rejects.toThrow('storage down');
+
+    await expect(store.keep(alice, 'other', { value: 'c'.repeat(400) })).resolves.toBeUndefined();
+  });
+
+  it('keeps counting a keep whose value write fails, which may have been applied, and the value it would replace', async () => {
+    const { storage, store } = await memoryStore(1024);
+    await store.keep(alice, 'report', { value: 'a'.repeat(400) });
+    jest.spyOn(storage, 'set').mockRejectedValueOnce(new Error('connection lost'));
+
+    await expect(store.keep(alice, 'report', { value: 'b'.repeat(400) })).rejects.toThrow('connection lost');
 
     expect(await store.recall(alice, 'report')).toEqual({ value: 'a'.repeat(400) });
-    await expect(store.keep(alice, 'other', { value: 'c'.repeat(400) })).resolves.toBeUndefined();
-    await expect(store.keep(alice, 'third', { value: 'd'.repeat(400) })).rejects.toBeInstanceOf(RangeError);
+    await expect(store.keep(alice, 'other', { value: 'c'.repeat(400) })).rejects.toBeInstanceOf(RangeError);
+  });
+
+  describe('with a fixed clock', () => {
+    const MINUTE = 60_000;
+    const windowStart = (window: number) => 1000 * MINUTE + window * MINUTE;
+
+    it('gives a replacement room for the value it replaces while the counters checked hold its bytes', async () => {
+      const { store } = await memoryStore(1024);
+      jest.spyOn(Date, 'now').mockReturnValue(windowStart(0) + 30_000);
+      await store.keep(alice, 'report', { value: 'a'.repeat(600) });
+
+      jest.spyOn(Date, 'now').mockReturnValue(windowStart(1) + 10_000);
+      await expect(store.keep(alice, 'report', { value: 'b'.repeat(600) })).resolves.toBeUndefined();
+    });
+
+    it('gives no room for a value whose bytes count in a window no longer checked', async () => {
+      const { store } = await memoryStore(1024);
+      jest
+        .spyOn(Date, 'now')
+        .mockReturnValueOnce(windowStart(0) + 59_900)
+        .mockReturnValue(windowStart(1) + 100);
+      await store.keep(alice, 'report', { value: 'a'.repeat(600) });
+
+      jest.spyOn(Date, 'now').mockReturnValue(windowStart(2) + 50);
+      expect(await store.recall(alice, 'report')).toEqual({ value: 'a'.repeat(600) });
+      await expect(store.keep(alice, 'report', { value: 'b'.repeat(1400) })).rejects.toBeInstanceOf(RangeError);
+    });
   });
 
   it('keeps values encrypted, under keys that name neither the value nor its owner', async () => {
