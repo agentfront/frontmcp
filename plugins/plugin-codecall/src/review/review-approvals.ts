@@ -51,6 +51,8 @@ export interface ReviewApprovalsOptions {
   approvalContext?: { type: string; identifier: string };
   /** Approval ids a person approved during this request, through elicitation. */
   granted: ReadonlySet<string>;
+  /** Calls to a tool a resumed run already made before it paused, which count against a grant's `maxCalls`. */
+  callsBefore?: (toolName: string) => number;
 }
 
 const APPROVAL_ID_PREFIX = 'codecall:approval:';
@@ -112,7 +114,8 @@ export class ReviewApprovals {
     const limited = await this.recordsOf(reference.anyArgumentsId);
     if (limited.some((record) => record.state === DENIED)) return DENIED;
     const maxCalls = Math.max(0, ...limited.filter((record) => record.state === APPROVED).map(maxCallsOf));
-    const used = this.callsByGrant.get(reference.anyArgumentsId) ?? 0;
+    const used =
+      this.callsByGrant.get(reference.anyArgumentsId) ?? this.options.callsBefore?.(reference.toolName ?? '') ?? 0;
     if (used >= maxCalls) return 'missing';
     if (consume) this.callsByGrant.set(reference.anyArgumentsId, used + 1);
     return APPROVED;

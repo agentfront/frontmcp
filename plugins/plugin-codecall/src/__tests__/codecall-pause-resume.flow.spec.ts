@@ -483,6 +483,24 @@ describe.each<CodeCallVmRuntime>(['node-vm', 'interpreter'])('resuming safely on
     expect(await first).toMatchObject({ status: 'ok' });
     expect(called('orders.refund')).toBe(1);
   });
+
+  it('resumes an approval asked through elicitation from the attempt that stopped, not from the paused record', async () => {
+    const onElicitation = jest.fn(async () => ({ action: 'accept' as const, content: { approve: true } }));
+    const config = serverConfig({ vm, runs: { storage: { type: 'memory' } }, review: {} }, true);
+    const client = await open(config, `elicited-${runtime}`, { onElicitation });
+    const script =
+      "const order = await callTool('orders.lookup', { number: -1 });\n" +
+      "const seen = await callTool('orders.peek', { id: order.id });\n" +
+      "return await callTool('orders.void', { id: 'o' + seen.id.length });";
+    const paused = await call(client, 'codecall:execute', { script });
+    expect(paused).toMatchObject({ paused: { call: { position: 1, tool: 'orders.lookup' } } });
+
+    const resumed = await call(client, 'codecall:resume', { runId: paused.runId, arguments: { number: 7 } });
+
+    expect(resumed).toMatchObject({ status: 'ok', result: { voided: 'o2' } });
+    expect(onElicitation).toHaveBeenCalledTimes(1);
+    expect([called('orders.lookup'), called('orders.peek'), called('orders.void')]).toEqual([1, 1, 1]);
+  });
 });
 
 describe('resuming on another instance that shares the storage', () => {

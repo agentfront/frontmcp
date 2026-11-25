@@ -120,6 +120,11 @@ export class RunReplay {
 
   readonly random = (): number => this.read(this.randomReads, this.source?.random, Math.random);
 
+  /** How many recorded calls to `tool` the call-phase hooks let through, which count against an approval's calls. */
+  recordedCallsTo(tool: string): number {
+    return [...this.recorded.values()].filter((entry) => entry.tool === tool && !entry.decision).length;
+  }
+
   /** Whether the call at `callIndex` is one of the calls the replayed run recorded. */
   replays(callIndex: number): boolean {
     return this.recorded.has(callIndex);

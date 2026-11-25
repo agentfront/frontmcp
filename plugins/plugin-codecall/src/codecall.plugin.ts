@@ -252,6 +252,7 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
       buildSearchToolDescription(config.topK),
       ConfiguredSearchTool,
     );
+    const pausing = config.runs.enabled && config.runs.resume;
     Reflect.defineMetadata(
       FrontMcpToolTokens.description,
       buildExecuteToolDescription(
@@ -259,10 +260,10 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
         config.review !== undefined,
         config.keep.enabled ? config.keep.ttlSeconds : undefined,
         config.budgets !== undefined,
+        pausing,
       ),
       ConfiguredExecuteTool,
     );
-    const pausing = config.runs.enabled && config.runs.resume;
     return [
       ConfiguredSearchTool,
       SearchSkillsTool,

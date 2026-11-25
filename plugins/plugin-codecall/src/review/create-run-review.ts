@@ -38,6 +38,8 @@ export interface RunReviewCaller {
   journal?: RunJournal;
   /** Only the server's reviewers, not the built-in rules: for a call the run's own review checks with the rules. */
   reviewersOnly?: boolean;
+  /** Whether the run can pause at the call asked about now, so an approval resumes it from there. */
+  canPause?: () => boolean;
 }
 
 /** The tool context a review runs for: the call it serves, and who made it. */
@@ -72,7 +74,7 @@ function reviewerToolsOf(caller: RunReviewCaller): ReviewerTool[] {
 
 /** The approvals people granted this caller for this script, which the review and the budgets read. */
 export function approvalsOf(
-  caller: Pick<RunReviewCaller, 'authInfo' | 'approvalService' | 'granted'>,
+  caller: Pick<RunReviewCaller, 'authInfo' | 'approvalService' | 'granted' | 'journal'>,
   scriptHash: string,
   service?: CodeCallReviewService,
 ): ReviewApprovals {
@@ -83,6 +85,7 @@ export function approvalsOf(
     service: caller.approvalService,
     approvalContext: approvalContextOf(caller.authInfo),
     granted: caller.granted,
+    callsBefore: (toolName) => caller.journal?.replay?.recordedCallsTo(toolName) ?? 0,
   });
 }
 
@@ -161,6 +164,7 @@ export async function createRunReview(
     rules,
     hasApprovalChannel,
     effectsSoFar,
+    canPause: caller.canPause,
     reviewers: async () => (service.hasReviewers ? service.reviewersFor(reviewerToolsOf(caller)) : []),
     approvals,
     timeoutMs: options.timeoutMs,

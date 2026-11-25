@@ -407,7 +407,7 @@ With `review` on, `codecall:execute` has four more statuses, and its description
 | `status`         | Payload                                                             | What the agent does                                                                                                                                                                                                   |
 | ---------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `needs_changes`  | `findings`: `rule`, `message`, `location`, `suggestion`, `toolName` | Fixes the script and sends it again.                                                                                                                                                                                  |
-| `needs_approval` | `reason`, `approval`, `findings?`                                   | Waits for a person to approve, then sends the same script again.                                                                                                                                                      |
+| `needs_approval` | `reason`, `approval`, `findings?`, `paused?`                        | Waits for a person to approve, then resumes the run with `codecall:resume` when it has `paused`, or sends the same script again.                                                                                      |
 | `denied`         | `reason`, `findings?`                                               | Doesn't retry.                                                                                                                                                                                                        |
 | `review_failed`  | `error.message`                                                     | Reads the message: a review that failed before the script ran nothing, and the same script can be sent again; one that failed at a call stopped the run after the calls before it, whose effects are not rolled back. |
 
@@ -415,19 +415,25 @@ A refused script runs no statement. A call the rules refuse while the script run
 type, a computed tool name) throws in the script, which may catch it; uncaught, it ends the run with that status. A
 call that needs approval stops the run, after the calls before it ran.
 
-An approved script runs again from the start. So when a call needs approval after a call to a tool without
-`readOnlyHint` has run in the same script (sending an email, say), the answer is `needs_changes`, not
-`needs_approval`: the finding (`approval-after-effects`) names those tools and asks for the call in a script of its
-own, or for the earlier calls in a separate script. No approval is asked for, by elicitation either. A call that needs
-approval after read-only calls only, or before the script runs, asks as usual. Resuming a run from its journal (#1335)
-will lift this.
+A call that needs approval while the script runs [pauses](#pause-and-resume) the run before it: the answer is
+`needs_approval` with `runId` and `paused`, and once a person approves, `codecall:resume` runs that call, and the rest
+of the script, without running the calls before it again; the call is reviewed again then, with its approval, and the
+calls before it are not. A call that needs approval before the script runs asks as usual: nothing ran, and the same
+script is sent again.
+
+A run that cannot pause (without `runs.resume`, without an owner, on a runtime that cannot replay, or when its record
+would not fit) would run again from the start once approved. So when its call needs approval after a call to a tool
+without `readOnlyHint` has run (sending an email, say), the answer is `needs_changes`, not `needs_approval`: the
+finding (`approval-after-effects`) names those tools and asks for the call in a script of its own, or for the earlier
+calls in a separate script. No approval is asked for, by elicitation either.
 
 ### Approvals
 
 `approval.id` covers this script (its SHA-256), the call's arguments and the review policy version. The Approval
 plugin's record binds the caller (its session or user) and the expiry, and `review.approvalMaxAgeSeconds` caps the
 expiry. A changed script, other arguments or another policy ask again. `approval.anyArgumentsId` covers any
-arguments of that tool in that script, for as many calls per run as the grant's `metadata.maxCalls` allows. When
+arguments of that tool in that script, for as many calls per run as the grant's `metadata.maxCalls` allows; a
+resumed run counts the calls to that tool it made before it paused. When
 `provider` or `reviewer` asks for approval, `approval.id` covers the whole script. Enclave keeps their decisions by
 the script's SHA-256 for 5 minutes, so the same script sent again within that time gets the same answer without a new
 model call.
@@ -435,7 +441,8 @@ model call.
 A person approves through one of two channels:
 
 - **The Approval plugin** (`@frontmcp/plugin-approval`), installed on the server or CodeCall's app. Your code grants
-  the id with any of its scopes, and the agent sends the same script again:
+  the id with any of its scopes, and the agent resumes the paused run (or sends the same script again when nothing
+  ran yet):
 
   ```ts
   await this.approval.grantSessionApproval(approval.id);
@@ -445,8 +452,9 @@ A person approves through one of two channels:
   A denial recorded for the id gives `denied`.
 
 - **Elicitation**, with `elicitation: { enabled: true }` on the server and a client that declares it. CodeCall asks
-  the person, showing the tool and its arguments; once they approve, it runs the same script again in the same call
-  (up to 5 approvals), and a decline gives `denied`.
+  the person, showing the tool and its arguments; once they approve, it resumes the run from that call in the same
+  request (up to 5 approvals), or runs the same script again when it could not pause there, and a decline gives
+  `denied`.
 
 Without either, a destructive call is `denied`, and the reason says why.
 

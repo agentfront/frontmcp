@@ -32,7 +32,7 @@ const BUDGET_STATUSES = ' | needs_changes | needs_approval | denied';
 const REVIEW_LINE =
   '\nREVIEW: the server checks each script and call first. ' +
   'needs_changes: fix what the findings say and send again. ' +
-  'needs_approval: a person approves, then send the same script again. ' +
+  'needs_approval: a person approves, then codecall:resume the run if the result has "paused", else send the same script again. ' +
   'denied: do not retry. review_failed: its message says whether anything ran.';
 
 /** How a script keeps values for the caller's later scripts, for `keep.ttlSeconds`. */
@@ -55,15 +55,21 @@ const BUDGET_LINE =
   'only the calls that did not run, in a new script. A call stopped as it starts fails with RATE_LIMITED and the ' +
   "same advice. Other findings are the review's.";
 
+const PAUSED_LINE =
+  '\nPAUSED: a result with "paused" (any status) stopped before that call, which did not run; the calls before it ran once. ' +
+  'Fix the cause (a person approves, or correct its arguments), then codecall:resume { runId, arguments? }: ' +
+  'the earlier calls are not run again. Do not send the script again. codecall:cancel drops the run.';
+
 /**
  * The `codecall:execute` description for the server's resolved `vm` options, whether its `review` is on, how long
- * kept values last while `keep` is on, and whether `budgets` are on.
+ * kept values last while `keep` is on, whether `budgets` are on, and whether runs pause (`runs.resume`).
  */
 export function buildExecuteToolDescription(
   vmOptions: ResolvedCodeCallVmOptions,
   reviewed = false,
   keepTtlSeconds?: number,
   budgeted = false,
+  pausing = false,
 ): string {
   const loops = vmOptions.allowLoops ? 'for, for-of' : 'for-of';
   const blockedLoops = vmOptions.allowLoops ? 'while, do-while' : 'while, do-while, for';
@@ -98,7 +104,7 @@ BLOCKED: ${blockedLoops}, ${blockedConsole}function decl, ${[...blockedNames].jo
 
 ERRORS: NOT_FOUND | VALIDATION | EXECUTION | TIMEOUT | ACCESS_DENIED | RATE_LIMITED | RESULT_TOO_LARGE
 STATUS: ok | syntax_error | illegal_access | runtime_error | tool_error | timeout${decisionStatuses}
-LIMITS: ${MAX_ITERATIONS_PER_LOOP} iterations per loop, ${timeoutSeconds}s timeout, ${maxToolCalls} tool calls, ${callsPerTool} calls to one tool per 2s (parallel() included), ${vmOptions.maxSanitizeProperties} values (array items and object keys, at every depth) in each tool result and in the return value${decisionLines}`;
+LIMITS: ${MAX_ITERATIONS_PER_LOOP} iterations per loop, ${timeoutSeconds}s timeout, ${maxToolCalls} tool calls, ${callsPerTool} calls to one tool per 2s (parallel() included), ${vmOptions.maxSanitizeProperties} values (array items and object keys, at every depth) in each tool result and in the return value${decisionLines}${pausing ? PAUSED_LINE : ''}`;
 }
 
 export const executeToolDescription = buildExecuteToolDescription(resolveVmOptions());

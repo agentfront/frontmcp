@@ -31,6 +31,7 @@ function reviewWith(options: {
   rules?: boolean;
   timeoutMs?: number;
   effectsSoFar?: () => readonly string[];
+  canPause?: () => boolean;
   hasApprovalChannel?: boolean;
 }): RunReview {
   const rules = options.rules
@@ -47,6 +48,7 @@ function reviewWith(options: {
     timeoutMs: options.timeoutMs,
     hasApprovalChannel: options.hasApprovalChannel ?? true,
     effectsSoFar: options.effectsSoFar,
+    canPause: options.canPause,
   });
 }
 
@@ -233,6 +235,24 @@ describe('RunReview', () => {
       ],
     });
     expect(review.pendingApproval).toBeUndefined();
+  });
+
+  it('asks for the approval after tools with effects ran in a run that can pause there, naming them on it', async () => {
+    const review = reviewWith({ rules: true, effectsSoFar: () => ['mail.send'], canPause: () => true });
+
+    const decision = await review.pre({
+      phase: 'call',
+      toolName: 'users.close',
+      args: { id: 'u1' },
+      callIndex: 1,
+      analysis: analyzeScript('return 1;'),
+    });
+
+    expect(decision.decision).toBe('needs_approval');
+    expect(review.pendingApproval).toMatchObject({
+      call: { toolName: 'users.close', args: { id: 'u1' } },
+      effectsBefore: ['mail.send'],
+    });
   });
 
   it('names at most ten earlier tools', async () => {

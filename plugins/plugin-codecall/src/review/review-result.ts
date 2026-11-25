@@ -5,7 +5,7 @@ import type {
   CodeCallNeedsChangesResult,
   CodeCallReviewFailedResult,
 } from '../tools/execute.schema';
-import type { CodeCallReviewOutcome, PendingApproval } from './run-review';
+import { approvalAfterEffectsFindings, type CodeCallReviewOutcome, type PendingApproval } from './run-review';
 
 /** A `codecall:execute` result the review gave. */
 export type CodeCallReviewResult =
@@ -43,6 +43,18 @@ export function reviewResultOf(outcome: CodeCallReviewOutcome, pending?: Pending
     case 'denied':
       return { status: 'denied', reason, ...(findings.length > 0 && { findings }) };
   }
+}
+
+/**
+ * A run's result once it is known whether it was kept paused: a `needs_approval` after calls with effects, in a run
+ * that was not, asks for the call in a script of its own, since approving it would run those calls again.
+ */
+export function unpausedResultOf(result: CodeCallExecuteResult, pending?: PendingApproval): CodeCallExecuteResult {
+  if (result.status !== 'needs_approval' || !pending?.call || !pending.effectsBefore?.length) return result;
+  return {
+    status: 'needs_changes',
+    findings: approvalAfterEffectsFindings(pending.call.toolName, pending.effectsBefore),
+  };
 }
 
 /** The run record's `reviewDecision` for a reviewed run: its review status, or `allow`. */

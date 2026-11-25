@@ -33,13 +33,13 @@ import {
   type RunReviewCaller,
 } from '../review/create-run-review';
 import { ApprovalServiceViewToken } from '../review/review-approvals';
-import { reviewDecisionOf, reviewResultOf } from '../review/review-result';
+import { reviewDecisionOf, reviewResultOf, unpausedResultOf } from '../review/review-result';
 import CodeCallReviewService from '../review/review.service';
 import { reviewOutcomeOf, type PendingApproval, type RunReview } from '../review/run-review';
 import { withCallIdempotencyKey, type ScriptToolCall } from '../runs/call-idempotency-key';
 import { markInputRefusal, trackCallStage } from '../runs/call-stage';
 import { journalMetadataOf, jsonBytes, RunJournal } from '../runs/run-journal';
-import { pausedAnswerOf, pausedRunOf, retrySourceOf, type PausedRun } from '../runs/run-pause';
+import { pausableSoFar, pausedAnswerOf, pausedRunOf, retrySourceOf, type PausedRun } from '../runs/run-pause';
 import type { CodeCallRunInput, CodeCallRunStore } from '../runs/run-record.store';
 import { CodeCallRunStoreToken } from '../runs/run-record.types';
 import { RUN_DIVERGED, RunReplay, type RunReplaySource } from '../runs/run-replay';
@@ -165,20 +165,22 @@ export abstract class CodeCallScriptTool extends ToolContext {
     let runId: string | undefined;
     try {
       attempt = await this.runApproved(input, scriptHash, newJournal, resumed?.source);
-      const { result, journal, review, budgets } = attempt;
-      run = {
+      const { result: ended, journal, review, budgets } = attempt;
+      const runOf = (answer: CodeCallExecuteResult): CodeCallRunInput => ({
         scriptHash,
-        status: result.status,
+        status: answer.status,
         startedAt: startedAt.toISOString(),
         endedAt: new Date().toISOString(),
         runId: this.scriptRunId,
-        reviewDecision: review || budgets ? reviewDecisionOf(result) : null,
-        ...(result.status === 'ok' && { resultBytes: jsonBytes(result.result) }),
+        reviewDecision: review || budgets ? reviewDecisionOf(answer) : null,
+        ...(answer.status === 'ok' && { resultBytes: jsonBytes(answer.result) }),
         journal: journalMetadataOf(journal.close()),
-      };
-      const paused = runs && this.pausedRunOf(runs, run, result.status, journal, input, resumed?.source);
-      run = paused?.run ?? run;
+      });
+      const unpaused = unpausedResultOf(ended, review?.pendingApproval);
+      const paused = runs && this.pausedRunOf(runs, runOf(ended), ended.status, journal, input, resumed?.source);
+      run = paused?.run ?? runOf(unpaused);
       runId = runs ? await this.keepRun(runs, run, paused?.ttlSeconds) : undefined;
+      const result = paused && runId ? ended : unpaused;
       const traceLines = traceOf(result.status, journal, trace);
       if ((review || budgets) && 'findings' in result && result.findings) spans?.recordFindings(result.findings);
       const kept = keptNamesOf(run.journal);
@@ -265,6 +267,7 @@ export abstract class CodeCallScriptTool extends ToolContext {
       canElicit,
       granted: approvedByPerson,
       journal,
+      canPause: () => pausableSoFar(journal),
     };
     const review = reviewService ? await createRunReview(reviewService, caller, scriptHash) : undefined;
     const approval = {

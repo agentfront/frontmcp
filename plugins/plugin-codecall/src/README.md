@@ -867,10 +867,14 @@ on both runtimes. The code lives in `src/review/`:
   budget); at `phase: 'call'` they read the real arguments. `input-schema-check.ts` checks arguments against the
   tool's JSON Schema (type, enum, `anyOf`/`oneOf`, required names).
 - `run-review.ts`: the `pre` hook of one run. The rules answer first; a destructive call goes through the approvals;
-  then the server's reviewers (`reviewer`, then `provider`) review the script. A call that needs approval after a
-  tool without `readOnlyHint` reached its tool in the run (`effectsSoFar`, from the run's journal) gets
-  `needs_changes` (`approval-after-effects`) instead, with no pending approval: an approval runs the whole script
-  again, until #1335 resumes a run from its journal. `reviewOutcomeOf` reads
+  then the server's reviewers (`reviewer`, then `provider`) review the script. A call that needs approval pauses the
+  run when it can (`canPause`: every call so far recorded and settled, see `runs/run-pause.ts`), and an approval then
+  resumes it from that call. In a run that cannot pause, a call that needs approval after a tool without
+  `readOnlyHint` reached its tool (`effectsSoFar`, from the run's journal) gets `needs_changes`
+  (`approval-after-effects`) instead, since an approval would run the whole script again; a run that could pause at
+  the call but was not kept paused (its record did not fit) gets the same answer (`unpausedResultOf`). On a resumed
+  run, `runs/run-replay.ts` (`journaledReviewHooks`) gives each replayed call its recorded decision without calling
+  the hooks, so neither the rules nor a budget see it again. `reviewOutcomeOf` reads
   `result.review.decisions`, never the error code: on the double VM an uncaught refused call ends as
   `DOUBLE_VM_EXECUTION_ERROR`, and only its error name (`ReviewError`) tells it apart.
 - `review.service.ts`: the options, the policy version approvals are bound to, and the reviewers, loaded from
@@ -879,7 +883,8 @@ on both runtimes. The code lives in `src/review/`:
 policyVersion }>`), read from the Approval plugin's `this.approval` (`Symbol.for('plugin:approval:service')`)
   without depending on the plugin. A grant on `anyArgumentsId` needs `metadata.maxCalls`, counted per run.
 - `approval-elicitation.ts`: asking the person when the server enables elicitation and the client declares it.
-  `codecall:execute` runs the same script again after each approval, up to 5 times.
+  `codecall:execute` resumes the run from the approved call after each approval (or runs the same script again when
+  it could not pause there), up to 5 times.
 - `review-invocation.ts`: `codecall:invoke` reviewed as `return await callTool(name, <canonical JSON>)`.
 
 The hooks get `{ session, subject, surface }` as `context`. Enclave's reviewers do not pass it on to `reviewer`
