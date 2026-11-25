@@ -30,6 +30,12 @@ describe('StorageTaskStore', () => {
   let storage: RootStorage;
   let store: StorageTaskStore;
 
+  /** The generation of the session's ready marker, `done:{generation}:{count}`. */
+  async function generationOf(sessionId: string): Promise<string> {
+    const marker = await storage.namespace('index-ready').get(sessionId);
+    return String(marker).split(':')[1];
+  }
+
   /** A task record as an instance before the per-session index stores it: the record alone. */
   async function writtenByAnOlderInstance(taskId: string): Promise<void> {
     await storage.namespace('records').set(`session-A:${taskId}`, JSON.stringify(makeRecord({ taskId })), {
@@ -621,12 +627,15 @@ describe('StorageTaskStore', () => {
 
     it('starts a first page after the positions whose keys expired, once every write before them has settled', async () => {
       for (const taskId of ['t-1', 't-2', 't-3']) await indexed.create(makeRecord({ taskId }));
+      await indexed.list('session-A');
       for (const taskId of ['t-1', 't-2']) {
         await storage.namespace('records').delete(`session-A:${taskId}`);
         await storage.namespace('index-of').delete(`session-A:${taskId}`);
       }
       for (const position of [1, 2]) await storage.namespace('index').delete(`session-A:${position}`);
-      await storage.namespace('index-settled').set('session-A', '2', { ttlSeconds: 3_600 - 120 });
+      await storage.namespace('index-settled').set('session-A', `${await generationOf('session-A')}:2`, {
+        ttlSeconds: 3_600 - 120,
+      });
 
       const page = await indexed.list('session-A');
 
@@ -636,13 +645,40 @@ describe('StorageTaskStore', () => {
 
     it('keeps reading an empty position numbered after the last settled write, which may be a write in progress', async () => {
       await indexed.create(makeRecord({ taskId: 't-1' }));
+      await indexed.list('session-A');
       await storage.namespace('index').delete('session-A:1');
-      await storage.namespace('index-settled').set('session-A', '1', { ttlSeconds: 3_600 });
+      await storage.namespace('index-settled').set('session-A', `${await generationOf('session-A')}:1`, {
+        ttlSeconds: 3_600,
+      });
 
       await indexed.list('session-A');
 
       expect(await storage.namespace('index-start').get('session-A')).toBeNull();
     });
+
+    it.each(['50', 'an-earlier-generation:50'])(
+      'never skips a position just reserved under a restarted count because of an earlier settled note (%s)',
+      async (earlierNote) => {
+        await indexed.create(makeRecord({ taskId: 'a' }));
+        await indexed.list('session-A');
+        await indexed.delete('a', 'session-A');
+        await storage.namespace('index-count').delete('session-A');
+        await storage.namespace('index-settled').set('session-A', earlierNote, { ttlSeconds: 3_600 - 120 });
+        await indexed.create(makeRecord({ taskId: 'b' }));
+        await indexed.list('session-A');
+        await storage.namespace('index-count').incr('session-A');
+
+        await indexed.list('session-A');
+        await storage.namespace('index-of').set('session-A:c', '2', { ttlSeconds: 60 });
+        await storage.namespace('index').set('session-A:2', 'c', { ttlSeconds: 60 });
+        await storage.namespace('records').set('session-A:c', JSON.stringify(makeRecord({ taskId: 'c' })), {
+          ttlSeconds: 60,
+        });
+        const page = await indexed.list('session-A');
+
+        expect(page.tasks.map((task) => task.taskId)).toEqual(['b', 'c']);
+      },
+    );
   });
 
   describe('pub/sub', () => {
