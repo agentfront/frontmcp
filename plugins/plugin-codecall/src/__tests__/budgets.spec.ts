@@ -346,6 +346,19 @@ describe('budget counts', () => {
     jest.restoreAllMocks();
   });
 
+  it('counts nothing for a call a records budget that denies already stops', async () => {
+    const records: CodeCallBudget = { ...RECORDS_PER_HOUR, onExceeded: 'denied' };
+    const store = new CodeCallBudgetStore(storage, [CALLS_PER_HOUR, records], clock);
+    await useCalls(meterFor(store, 'subject:ada'), 200);
+    const incrBy = jest.spyOn(storage, 'incrBy');
+
+    const reservation = await store.reserveCall('subject:ada');
+
+    expect(reservation.exceeded.map(({ budget }) => budget.name)).toEqual(['records-per-hour']);
+    expect(incrBy).not.toHaveBeenCalled();
+    jest.restoreAllMocks();
+  });
+
   it('takes back every increment a reservation made, and rejects a release that could not take one back', async () => {
     const daily: CodeCallBudget = { ...CALLS_PER_HOUR, name: 'calls-per-day', windowSeconds: 86400 };
     const store = new CodeCallBudgetStore(storage, [CALLS_PER_HOUR, daily], clock);

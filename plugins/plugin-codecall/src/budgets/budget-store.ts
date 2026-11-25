@@ -33,7 +33,10 @@ export class CodeCallBudgetStore implements OnShutdown {
       .map((budget) => exceededAt(budget, nowSeconds));
   }
 
-  /** Counts one call against the caller's `toolCalls` budgets with an atomic increment each, and reads the others. */
+  /**
+   * Counts one call against the caller's `toolCalls` budgets with an atomic increment each, after reading the others.
+   * Once the call is over a budget that denies, what it counted is taken back and no later budget is touched.
+   */
   async reserveCall(caller: string): Promise<CallReservation> {
     const nowSeconds = this.now() / 1000;
     const reservedKeys: string[] = [];
@@ -42,18 +45,15 @@ export class CodeCallBudgetStore implements OnShutdown {
       const failed = results.find((result) => result.status === 'rejected');
       if (failed) throw failed.reason;
     };
+    const readFirst = [
+      ...this.budgets.filter((budget) => budget.counts === 'recordsChanged'),
+      ...this.budgets.filter((budget) => budget.counts === 'toolCalls'),
+    ];
     const exceeded: ExceededBudget[] = [];
     try {
-      for (const budget of this.budgets) {
+      for (const budget of readFirst) {
         const key = this.keyOf(budget, caller, nowSeconds);
-        if (budget.counts === 'recordsChanged') {
-          if (isReached(await this.storage.get(key), budget.limit)) exceeded.push(exceededAt(budget, nowSeconds));
-          continue;
-        }
-        const countWithCall = await this.storage.incrBy(key, 1);
-        reservedKeys.push(key);
-        await this.storage.extendTtl(key, budget.windowSeconds);
-        if (countWithCall <= budget.limit) continue;
+        if (!(await this.isOverWithCall(budget, key, reservedKeys))) continue;
         exceeded.push(exceededAt(budget, nowSeconds));
         if (budget.onExceeded === 'denied') {
           await release();
@@ -65,6 +65,15 @@ export class CodeCallBudgetStore implements OnShutdown {
       throw error;
     }
     return { exceeded, release };
+  }
+
+  /** Whether the call leaves the caller over `budget`: a `toolCalls` one counts it first, adding its key to `reserved`. */
+  private async isOverWithCall(budget: CodeCallBudget, key: string, reserved: string[]): Promise<boolean> {
+    if (budget.counts === 'recordsChanged') return isReached(await this.storage.get(key), budget.limit);
+    const countWithCall = await this.storage.incrBy(key, 1);
+    reserved.push(key);
+    await this.storage.extendTtl(key, budget.windowSeconds);
+    return countWithCall > budget.limit;
   }
 
   /** Adds the records a call changed to the caller's `recordsChanged` budgets. */
