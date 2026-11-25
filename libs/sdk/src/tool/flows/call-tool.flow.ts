@@ -225,6 +225,8 @@ const plan = {
     // A session that listed an older tool list is told so before a tool it may no longer have is looked up
     'checkSurface',
     'findTool',
+    // A hook that switched the tool hands the run over to the hooks of the tool that runs
+    'useToolHooks',
     'checkEnabled',
     // A lazy app's entry that is on and still a placeholder: its app failed to load before this run
     'checkAppLoaded',
@@ -516,6 +518,17 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     this.state.set('tool', tool);
     this.logger.verbose(`findTool: tool "${name}" found`);
     this.logger.verbose('findTool:done');
+  }
+
+  /** The settled tool's hooks run from here on, in place of the requested one's when a hook switched it. */
+  @Stage('useToolHooks')
+  async useToolHooks() {
+    const { tool } = this.state;
+    if (!tool) return;
+    await this.useEntryHooks(
+      hookOwnerIdOf(this.scope.tools.lineageOf(tool as ToolEntry) ?? [], tool.owner),
+      tool.record.provide,
+    );
   }
 
   /** A tool whose `enabled` is off is refused with `FEATURE_OFF` and the remedy of its source. */
