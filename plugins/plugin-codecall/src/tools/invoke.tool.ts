@@ -52,7 +52,8 @@ interface InvocationBudgets {
 /** The result for the budgets' answer at the call, or undefined when they allow it. */
 function refusalOf({ decision, pending }: BudgetVerdict): CodeCallReviewResult | undefined {
   if (decision.decision === 'allow') return undefined;
-  return reviewResultOf({ status: decision.decision, reason: decision.reason, findings: decision.findings }, pending);
+  const reason = 'reason' in decision ? decision.reason : undefined;
+  return reviewResultOf({ status: decision.decision, reason, findings: decision.findings }, pending);
 }
 
 /** A refusal of the review, with its result as structured content too. */

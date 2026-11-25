@@ -85,6 +85,21 @@ class RejectTicketTool extends ToolContext {
 }
 
 @Tool({
+  name: 'tickets.purge',
+  description: 'Purges tickets slowly, past its own timeout',
+  inputSchema: {},
+  timeout: { executeMs: 50 },
+})
+class SlowPurgeTool extends ToolContext {
+  async execute() {
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    executed.push('tickets.purge');
+    this.reportRecordsChanged(250);
+    return { purged: 250 };
+  }
+}
+
+@Tool({
   name: 'approvals.grant',
   description: 'Grants a CodeCall approval for this session, as a person would through the server',
   inputSchema: { id: z.string() },
@@ -128,6 +143,7 @@ function serverConfig(options: CodeCallPluginOptionsInput, { approvalPlugin = tr
       EchoTool,
       DeleteTicketTool,
       RejectTicketTool,
+      SlowPurgeTool,
       GrantApprovalTool,
       ReadRunTool,
     ],
@@ -360,6 +376,51 @@ describe('CodeCall budgets', () => {
       status: 'needs_approval',
     });
     expect(executed).toEqual(['tickets.get:4']);
+  });
+
+  it('counts the records a tool reports after its call timed out', async () => {
+    const ada = await open(serverConfig({ budgets: RECORDS_PER_HOUR }), 'ada');
+
+    const timedOut = await execute(
+      ada,
+      "try {\n  await callTool('tickets.purge', {});\n  return 'ran';\n} catch (error) {\n  return error.message;\n}",
+    );
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    expect(timedOut).toMatchObject({ status: 'ok', result: expect.stringMatching(/timed out|timeout/i) });
+    expect(executed).toEqual(['tickets.purge']);
+    expect(await execute(ada, "return await callTool('tickets.archive', { ids: ['t1'] });")).toMatchObject({
+      status: 'needs_approval',
+    });
+  });
+
+  it('lets one of two calls that start together through a limit of one', async () => {
+    const oneCallPerHour = { ...threeCallsPerHour(), limits: [{ ...threeCallsPerHour().limits[0], limit: 1 }] };
+    const ada = await open(serverConfig({ budgets: oneCallPerHour }), 'ada');
+
+    await execute(
+      ada,
+      "return await parallel([1, 2], (id) => callTool('tickets.get', { id }, { throwOnError: false }));",
+    );
+
+    expect(executed).toHaveLength(1);
+  });
+
+  it('asks for changes, not an approval, for a call over a budget after a tool with effects ran in the script', async () => {
+    const oneCallPerHour = { ...threeCallsPerHour(), limits: [{ ...threeCallsPerHour().limits[0], limit: 1 }] };
+    const ada = await open(serverConfig({ budgets: oneCallPerHour }), 'ada');
+
+    const outcome = await execute(
+      ada,
+      "await callTool('tickets.archive', { ids: ['t1'] });\nreturn await callTool('tickets.get', { id: 1 });",
+    );
+
+    expect(outcome).toMatchObject({
+      status: 'needs_changes',
+      findings: [expect.objectContaining({ rule: 'approval-after-effects', toolName: 'tickets.get' })],
+    });
+    expect(outcome).not.toHaveProperty('approval');
+    expect(executed).toEqual(['tickets.archive:1']);
   });
 
   it('records the decision of a budget with review off, and says in the description what a budget stop means', async () => {

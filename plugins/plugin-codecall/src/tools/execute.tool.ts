@@ -25,7 +25,13 @@ import {
   clientCanElicit,
   MAX_APPROVALS_ASKED,
 } from '../review/approval-elicitation';
-import { approvalsOf, createRunReview, reviewContextOf, type RunReviewCaller } from '../review/create-run-review';
+import {
+  approvalsOf,
+  createRunReview,
+  effectsSoFarOf,
+  reviewContextOf,
+  type RunReviewCaller,
+} from '../review/create-run-review';
 import { ApprovalServiceViewToken } from '../review/review-approvals';
 import { reviewDecisionOf, reviewResultOf } from '../review/review-result';
 import CodeCallReviewService from '../review/review.service';
@@ -229,6 +235,7 @@ export default class ExecuteTool extends ToolContext {
       approvals: approvalsOf(caller, scriptHash, reviewService),
       grantedByPerson: approvedByPerson,
       canApprove: caller.approvalService !== undefined || canElicit,
+      effectsSoFar: effectsSoFarOf(caller),
     };
     const budgets = budgetMeterOf(this.tryGet(CodeCallBudgetStoreToken), this, approval, this.logger);
     const result = await this.runScript(input, journal, review, budgets);

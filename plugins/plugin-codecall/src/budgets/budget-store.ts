@@ -3,13 +3,17 @@ import { randomUUID, sha256Hex, type NamespacedStorage } from '@frontmcp/utils';
 
 import type { CodeCallBudget } from '../codecall.types';
 
-/** What one call used, by what a budget counts. */
-export type BudgetUsage = Record<CodeCallBudget['counts'], number>;
-
 /** A budget the caller reached the limit of, and the seconds until its window ends. */
 export interface ExceededBudget {
   budget: CodeCallBudget;
   resetsInSeconds: number;
+}
+
+/** One call counted against the caller's `toolCalls` budgets at once, and the budgets that leaves it over. */
+export interface CallReservation {
+  exceeded: ExceededBudget[];
+  /** Takes the call back off its `toolCalls` budgets, for a call that does not run. */
+  release(): Promise<void>;
 }
 
 /** Each caller's counts in shared storage: one key per budget, caller and fixed window, kept for at least the window. */
@@ -20,29 +24,50 @@ export class CodeCallBudgetStore implements OnShutdown {
     private readonly now: () => number = Date.now,
   ) {}
 
-  /** The budgets the caller reached in their windows; a stored count that is not a number counts as reached. */
+  /** The budgets the caller reached in their windows. */
   async exceededOf(caller: string): Promise<ExceededBudget[]> {
     const nowSeconds = this.now() / 1000;
     const stored = await this.storage.mget(this.budgets.map((budget) => this.keyOf(budget, caller, nowSeconds)));
     return this.budgets
-      .filter((budget, position) => {
-        const used = Number(stored[position] ?? 0);
-        return Number.isNaN(used) || used >= budget.limit;
-      })
-      .map((budget) => {
-        const windowEnd = windowStartOf(budget, nowSeconds) + budget.windowSeconds;
-        return { budget, resetsInSeconds: Math.ceil(windowEnd - nowSeconds) };
-      });
+      .filter((budget, position) => isReached(stored[position], budget.limit))
+      .map((budget) => exceededAt(budget, nowSeconds));
   }
 
-  /** Adds what one call used to the caller's budgets that count it. */
-  async add(caller: string, usage: BudgetUsage): Promise<void> {
+  /** Counts one call against the caller's `toolCalls` budgets with an atomic increment each, and reads the others. */
+  async reserveCall(caller: string): Promise<CallReservation> {
     const nowSeconds = this.now() / 1000;
-    const counted = this.budgets.filter((budget) => usage[budget.counts] > 0);
-    await Promise.all(
-      counted.map(async (budget) => {
+    const reservedKeys: string[] = [];
+    const release = async () => {
+      await Promise.allSettled(reservedKeys.map((key) => this.storage.incrBy(key, -1)));
+    };
+    const exceeded: ExceededBudget[] = [];
+    try {
+      for (const budget of this.budgets) {
         const key = this.keyOf(budget, caller, nowSeconds);
-        await this.storage.incrBy(key, usage[budget.counts]);
+        if (budget.counts === 'recordsChanged') {
+          if (isReached(await this.storage.get(key), budget.limit)) exceeded.push(exceededAt(budget, nowSeconds));
+          continue;
+        }
+        const countWithCall = await this.storage.incrBy(key, 1);
+        reservedKeys.push(key);
+        await this.storage.extendTtl(key, budget.windowSeconds);
+        if (countWithCall > budget.limit) exceeded.push(exceededAt(budget, nowSeconds));
+      }
+    } catch (error: unknown) {
+      await release();
+      throw error;
+    }
+    return { exceeded, release };
+  }
+
+  /** Adds the records a call changed to the caller's `recordsChanged` budgets. */
+  async addRecords(caller: string, count: number): Promise<void> {
+    const nowSeconds = this.now() / 1000;
+    const counting = this.budgets.filter((budget) => budget.counts === 'recordsChanged');
+    await Promise.all(
+      counting.map(async (budget) => {
+        const key = this.keyOf(budget, caller, nowSeconds);
+        await this.storage.incrBy(key, count);
         await this.storage.extendTtl(key, budget.windowSeconds);
       }),
     );
@@ -81,6 +106,17 @@ export class CodeCallBudgetStore implements OnShutdown {
 /** A `.` keeps the marker apart from every budget's keys, whose names have none. */
 function spentKeyOf(grantKey: string): string {
   return `grant.spent:${sha256Hex(grantKey)}`;
+}
+
+/** Whether a stored count reached the limit; one that is not a number counts as reached. */
+function isReached(stored: string | null | undefined, limit: number): boolean {
+  const used = Number(stored ?? 0);
+  return Number.isNaN(used) || used >= limit;
+}
+
+function exceededAt(budget: CodeCallBudget, nowSeconds: number): ExceededBudget {
+  const windowEnd = windowStartOf(budget, nowSeconds) + budget.windowSeconds;
+  return { budget, resetsInSeconds: Math.ceil(windowEnd - nowSeconds) };
 }
 
 function windowStartOf(budget: CodeCallBudget, nowSeconds: number): number {

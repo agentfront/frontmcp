@@ -161,7 +161,7 @@ export class RunReview {
  * The answer for a call that needs approval after tools with effects ran: approving it would run the whole script, and
  * those tools, again, until a run resumes from its journal (#1335).
  */
-function needsOwnScript(toolName: string, repeated: readonly string[]): ReviewDecision {
+export function needsOwnScript(toolName: string, repeated: readonly string[]): ReviewDecision {
   const more = repeated.length - MAX_NAMED_TOOLS;
   const earlier = `${repeated.slice(0, MAX_NAMED_TOOLS).join(', ')}${more > 0 ? ` and ${more} more` : ''}`;
   return {

@@ -393,16 +393,17 @@ async execute({ ids }: { ids: string[] }) {
   unknown name, a rate or quota limit, or a hook that answered for the tool, such as a cache) doesn't count; a tool that
   refuses its input from inside `execute()` does. `recordsChanged` counts what the call's tool reports with
   `this.reportRecordsChanged(n)`, which reaches CodeCall with the call through the SDK, never through the result: what
-  a tool returns, or what a script or client sends, is never counted. Reports after the tool returned, a remote tool's
-  reports, and calls a client makes directly are not counted.
+  a tool returns, or what a script or client sends, is never counted. A report after the call ended, from a tool that
+  ran past its timeout, counts as it comes; a remote tool's reports, and calls a client makes directly, are not
+  counted.
 - **Before each call, and again as it starts.** Once the caller is at or over a budget's limit in the current window,
   the call doesn't run. It gets the budget's answer at that call, as a review decision there would be, with or without
   `review` (with it, the budgets answer first): `needs_approval` stops the run after the calls before it, and `denied`
   throws in the script, which may catch it, and ends the run with `denied` when it doesn't. The finding
   (`budget-exceeded`) names the budget and when its window resets. As the tool starts, after the review and any wait
-  for a person, the budgets are checked again, the approvals the call needs are spent, and the call is counted; a call
-  the window filled up for in between fails there, with `RATE_LIMITED` and the budget's reason in a script, and with
-  the budget's answer from `codecall:invoke`. Budgets count per caller, not per run, so they carry across runs that
+  for a person, the call is counted at once with an atomic increment of each `toolCalls` budget, and the approvals it
+  needs for the budgets it is then over are spent; when it lacks one, it is taken back off the count and fails there,
+  with `RATE_LIMITED` and the budget's reason in a script, and with the budget's answer from `codecall:invoke`. Budgets count per caller, not per run, so they carry across runs that
   resume.
 - **Approving a call over a budget.** A budget's `needs_approval` carries an `approval` whose `id` covers this script,
   this call's tool and arguments, its place in the run, and that budget; it has no `anyArgumentsId`. A person grants it
@@ -415,13 +416,14 @@ async execute({ ids }: { ids: string[] }) {
   budget approval and a review approval never stand for each other, so approving a destructive call never lifts a
   budget. A refused approval gives `denied`, and so does a budget stop when nobody can approve it (no Approval plugin,
   and a client that can't elicit), as review answers a destructive call. Until a run resumes from its journal (#1335),
-  an approved script runs again from the start, so the calls before the approved one run and count again, and each
-  that is over the limit asks for its own approval; an approval is bound to its place, so an earlier identical call
-  never spends it.
-- **The call that crosses the limit runs.** A call's records changed are known only once it ran, so the call that
-  takes a caller past a `recordsChanged` limit runs, and the next one is stopped. Calls that start together, in a
-  `parallel()` or in two scripts at once, are each checked before any of them is counted, and can go past a limit by
-  the calls in flight.
+  an approved script runs again from the start, so once a tool without `readOnlyHint` ran in the script, a call over a
+  budget gets `needs_changes` (`approval-after-effects`), as review answers, rather than an approval that would run
+  that tool again. After read-only calls, the calls before the approved one run and count again, and each that is over
+  the limit asks for its own approval; an approval is bound to its place, so an earlier identical call never spends it.
+- **The call that crosses a `recordsChanged` limit runs.** A call's records changed are known only once it ran, so the
+  call that takes a caller past a `recordsChanged` limit runs, and the next one is stopped; calls that start together
+  can each run before any of them reports. A `toolCalls` limit holds for calls that start together, in a `parallel()`
+  or in two scripts at once, since each is counted before it runs.
 - **Who is a caller.** A signed-in user, or an API key in `static` auth, is one caller across its sessions. An
   anonymous caller counts per verified session; anonymous calls without a session share one count.
 - **Shared counts.** Each count is one key per budget, caller (as a SHA-256) and window, added to with an atomic

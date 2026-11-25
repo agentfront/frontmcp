@@ -204,16 +204,52 @@ describe('budget counts', () => {
     expect(call.refusal?.decision).toMatchObject({ decision: 'denied' });
   });
 
-  it('counts the records of a call once, and no report after it ended', async () => {
+  it('counts the records a call reported once when it ends, and a report after it ended as it comes', async () => {
     const store = new CodeCallBudgetStore(storage, [RECORDS_PER_HOUR], clock);
     const ada = meterFor(store, 'subject:ada');
     const call = ada.startCall(ARCHIVE);
     call.dispatch.onRecordsChanged(150);
     await call.end();
     await call.end();
-    call.dispatch.onRecordsChanged(150);
-
     expect(await decisionOf(ada)).toEqual({ decision: 'allow' });
+
+    call.dispatch.onRecordsChanged(60);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(await decisionOf(ada)).toMatchObject({ decision: 'needs_approval' });
+  });
+
+  it('admits one of two calls that start together against a limit of one, and takes the other off the count', async () => {
+    const store = new CodeCallBudgetStore(storage, [{ ...CALLS_PER_MINUTE, limit: 1 }], clock);
+    const [first, second] = [meterFor(store, 'subject:ada'), meterFor(store, 'subject:ada')];
+
+    const admissions = await Promise.allSettled([
+      first.startCall(ARCHIVE).dispatch.beforeExecute(),
+      second.startCall(ARCHIVE).dispatch.beforeExecute(),
+    ]);
+
+    expect(admissions.map(({ status }) => status).sort()).toEqual(['fulfilled', 'rejected']);
+    const [key] = await storage.keys('calls-per-minute:*');
+    expect(await storage.get(key)).toBe('1');
+  });
+
+  it('asks for changes instead of an approval once tools with effects ran in the run, as review does', async () => {
+    const store = new CodeCallBudgetStore(storage, [RECORDS_PER_HOUR], clock);
+    await useCalls(meterFor(store, 'subject:ada'), 200);
+    const ada = new BudgetMeter(store, 'subject:ada', {
+      approvals: approvalsWith({}, Date.now()),
+      grantedByPerson: new Set(),
+      canApprove: true,
+      effectsSoFar: () => ['tickets.archive'],
+    });
+
+    const verdict = await ada.check(ARCHIVE);
+
+    expect(verdict.decision).toMatchObject({
+      decision: 'needs_changes',
+      findings: [expect.objectContaining({ rule: 'approval-after-effects', toolName: ARCHIVE.toolName })],
+    });
+    expect(verdict.pending).toBeUndefined();
   });
 
   it.each([[-1], [1.5], [Number.NaN]])(
@@ -393,14 +429,26 @@ describe('budget approvals', () => {
       expect(await both.isSpent(recordsGrant)).toBe(false);
     });
 
-    it('gives back every grant it claimed when the call cannot be counted', async () => {
-      jest.spyOn(storage, 'incrBy').mockRejectedValueOnce(new Error('connection refused'));
+    it('takes the call back off the count and spends no grant when the store fails while counting it', async () => {
+      jest.spyOn(storage, 'extendTtl').mockRejectedValueOnce(new Error('connection refused'));
       const call = bob.startCall(ARCHIVE);
 
       await expect(call.dispatch.beforeExecute()).rejects.toMatchObject({ code: 'RATE_LIMIT_EXCEEDED' });
 
+      const [callsKey] = await storage.keys('calls-per-hour:*');
+      expect(await storage.get(callsKey)).toBe('2');
       expect(await both.isSpent(recordsGrant)).toBe(false);
       expect(await both.isSpent(callsGrant)).toBe(false);
+    });
+
+    it('takes the call back off the count when it is refused for a grant it lacks', async () => {
+      jest.spyOn(both, 'claim').mockResolvedValue(undefined);
+      const call = bob.startCall(ARCHIVE);
+
+      await expect(call.dispatch.beforeExecute()).rejects.toMatchObject({ code: 'RATE_LIMIT_EXCEEDED' });
+
+      const [callsKey] = await storage.keys('calls-per-hour:*');
+      expect(await storage.get(callsKey)).toBe('2');
     });
 
     it('spends both grants and counts the call when it can', async () => {

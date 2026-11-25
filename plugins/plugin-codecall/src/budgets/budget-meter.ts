@@ -6,9 +6,9 @@ import type { CodeCallBudget } from '../codecall.types';
 import type { ReviewCallerContext } from '../review/create-run-review';
 import type { CodeCallApprovalReference, ReviewApprovals } from '../review/review-approvals';
 import { NO_APPROVAL_CHANNEL } from '../review/review-rules';
-import type { PendingApproval } from '../review/run-review';
+import { needsOwnScript, type PendingApproval } from '../review/run-review';
 import { isBlockedSelfReference } from '../security/self-reference-guard';
-import type { CodeCallBudgetStore, ExceededBudget } from './budget-store';
+import type { CallReservation, CodeCallBudgetStore, ExceededBudget } from './budget-store';
 
 export const BUDGET_EXCEEDED_RULE = 'budget-exceeded';
 export const BUDGET_UNAVAILABLE_RULE = 'budget-unavailable';
@@ -46,8 +46,13 @@ export interface BudgetCall {
 
 /** The budgets' answer for a call, with the approval a `needs_approval` waits for. */
 export interface BudgetVerdict {
-  decision: BudgetDecision;
+  decision: ReviewDecision;
   pending?: PendingApproval;
+}
+
+/** What a refusal says: its reason, or the message of its first finding. */
+export function messageOf(decision: Exclude<ReviewDecision, { decision: 'allow' }>): string {
+  return 'reason' in decision ? decision.reason : (decision.findings[0]?.message ?? '');
 }
 
 /** Who budgets count for: the signed-in user or API key, else the verified session, else one shared anonymous bucket. */
@@ -99,6 +104,8 @@ export interface BudgetApprovals {
   grantedByPerson: Set<string>;
   /** Whether a person can approve: the Approval plugin is installed, or the client can answer an elicitation. */
   canApprove: boolean;
+  /** The tools with effects that already ran in this run, which approving a later call would run again. */
+  effectsSoFar?: () => readonly string[];
 }
 
 /** Gives a spent grant back. */
@@ -110,7 +117,7 @@ type GrantClaim = () => Promise<Release | undefined>;
 export interface BudgetedCall {
   /** The members of the call's dispatch context the tool flow calls. */
   readonly dispatch: {
-    /** Throws on a count that is not a non-negative integer, which fails the tool's call. */
+    /** Throws on a count that is not a non-negative integer; a report after the call ended is counted at once. */
     onRecordsChanged(count: number): void;
     /** As execute() starts: checks again, spends the grants the call needs and counts it, or throws to stop it. */
     beforeExecute(): Promise<void>;
@@ -149,7 +156,7 @@ export class BudgetMeter {
     if (isBlockedSelfReference(call.toolName)) return { decision: ALLOW };
     if (this.countLost) return { decision: unavailableDecision(call.toolName) };
     try {
-      return await this.decide(call);
+      return await this.verdictFor(call, await this.store.exceededOf(this.caller));
     } catch (error: unknown) {
       this.warn('codecall: could not check the budgets', error);
       return { decision: unavailableDecision(call.toolName) };
@@ -165,50 +172,49 @@ export class BudgetMeter {
           if (!Number.isSafeInteger(count) || count < 0) {
             throw new RangeError(`reportRecordsChanged needs a non-negative integer, not ${String(count)}`);
           }
-          if (!ended) recordsChanged += count;
+          if (ended) void this.countRecords(count);
+          else recordsChanged += count;
         },
         beforeExecute: async () => {
           const verdict = await this.admit(call);
           const { decision } = verdict;
           if (decision.decision === 'allow') return;
           budgetedCall.refusal = verdict;
-          throw new PublicMcpError(decision.reason, STOPPED_AT_DISPATCH_CODE);
+          throw new PublicMcpError(messageOf(decision), STOPPED_AT_DISPATCH_CODE);
         },
       },
       end: async () => {
         if (ended) return;
         ended = true;
-        if (recordsChanged > 0) await this.count({ toolCalls: 0, recordsChanged });
+        if (recordsChanged > 0) await this.countRecords(recordsChanged);
       },
     };
     return budgetedCall;
   }
 
-  /** As the call enters its tool: the budgets' answer now; when it lets the call run, its grants spent and it counted. */
+  /** As the call enters its tool: counted at once, then kept only with grants for every budget that leaves it over. */
   private async admit(call: BudgetCall): Promise<BudgetVerdict> {
     if (this.countLost) return { decision: unavailableDecision(call.toolName) };
     const claimed: Release[] = [];
+    let reservation: CallReservation | undefined;
     let admitted = false;
     try {
-      const verdict = await this.decide(call, claimed);
-      if (verdict.decision.decision === 'allow') {
-        await this.store.add(this.caller, { toolCalls: 1, recordsChanged: 0 });
-        admitted = true;
-      }
+      reservation = await this.store.reserveCall(this.caller);
+      const verdict = await this.verdictFor(call, reservation.exceeded, claimed);
+      admitted = verdict.decision.decision === 'allow';
       return verdict;
     } catch (error: unknown) {
       this.countLost = true;
       this.warn('codecall: could not admit a call against the budgets', error);
       return { decision: unavailableDecision(call.toolName) };
     } finally {
-      if (!admitted) await Promise.allSettled(claimed.map((release) => release()));
+      if (!admitted) await Promise.allSettled([...claimed.map((release) => release()), reservation?.release()]);
     }
   }
 
-  /** The budgets' answer for the call; given `claimed`, it also claims the grants the call needs, adding each release. */
-  private async decide(call: BudgetCall, claimed?: Release[]): Promise<BudgetVerdict> {
+  /** The budgets' answer for a call over `exceeded`; given `claimed`, it also claims the grants it needs into it. */
+  private async verdictFor(call: BudgetCall, exceeded: ExceededBudget[], claimed?: Release[]): Promise<BudgetVerdict> {
     this.pendingByCallIndex.delete(call.callIndex);
-    const exceeded = await this.store.exceededOf(this.caller);
     if (exceeded.length === 0) return { decision: ALLOW };
     const denying = exceeded.find(({ budget }) => budget.onExceeded === 'denied');
     if (denying) return { decision: exceededDecision(denying, call.toolName) };
@@ -220,19 +226,27 @@ export class BudgetMeter {
       const reference = this.approval.approvals.budgetReferenceFor(call, over.budget.name);
       const claim = await this.unspentGrantOf(reference);
       if (claim === 'denied') return { decision: exceededDecision(over, call.toolName, REFUSED_BY_PERSON) };
-      if (!claim) return this.waitForApproval(over, reference, call);
+      if (!claim) return this.waitForApproval(over, reference, call, claimed === undefined);
       grants.push({ over, reference, claim });
     }
     if (!claimed) return { decision: ALLOW };
     for (const { over, reference, claim } of grants) {
       const release = await claim();
-      if (!release) return this.waitForApproval(over, reference, call);
+      if (!release) return this.waitForApproval(over, reference, call, false);
       claimed.push(release);
     }
     return { decision: ALLOW };
   }
 
-  private waitForApproval(over: ExceededBudget, reference: CodeCallApprovalReference, call: BudgetCall): BudgetVerdict {
+  /** A `needs_approval`, unless tools with effects already ran: approving would run them again, as review answers. */
+  private waitForApproval(
+    over: ExceededBudget,
+    reference: CodeCallApprovalReference,
+    call: BudgetCall,
+    beforeTheCall: boolean,
+  ): BudgetVerdict {
+    const repeated = beforeTheCall ? (this.approval.effectsSoFar?.() ?? []) : [];
+    if (repeated.length > 0) return { decision: needsOwnScript(call.toolName, repeated) };
     const pending = { reference, call: { toolName: call.toolName, args: call.args } };
     this.pendingByCallIndex.set(call.callIndex, pending);
     return { decision: exceededDecision(over, call.toolName), pending };
@@ -259,12 +273,12 @@ export class BudgetMeter {
     return undefined;
   }
 
-  private async count(usage: { toolCalls: number; recordsChanged: number }): Promise<void> {
+  private async countRecords(count: number): Promise<void> {
     try {
-      await this.store.add(this.caller, usage);
+      await this.store.addRecords(this.caller, count);
     } catch (error: unknown) {
       this.countLost = true;
-      this.warn('codecall: could not count a call against the budgets', error);
+      this.warn('codecall: could not count records against the budgets', error);
     }
   }
 

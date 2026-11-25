@@ -89,6 +89,26 @@ export function approvalsOf(
   });
 }
 
+/** Whether the tool a script names is marked read-only, so running it again repeats no effect. */
+function isReadOnlyTool(caller: RunReviewCaller, name: string): boolean {
+  const access = checkCodeCallToolAccess<ToolEntry>(caller.scope, caller.config, name, {
+    surface: caller.surface,
+    directCall: caller.directCall,
+  });
+  return access.allowed && access.entry.metadata.annotations?.readOnlyHint === true;
+}
+
+/** The tools without `readOnlyHint` whose calls reached the tool in the run so far, in the order they first ran. */
+export function effectsSoFarOf(
+  caller: RunReviewCaller,
+  isReadOnly = (name: string) => isReadOnlyTool(caller, name),
+): () => string[] {
+  return () => {
+    const ranTools = (caller.journal?.entriesSoFar() ?? []).filter(reachedTool).map((entry) => entry.tool);
+    return [...new Set(ranTools)].filter((name) => !isReadOnly(name));
+  };
+}
+
 /** The review of one script for this caller: its rules, the server's reviewers and the approvals people granted. */
 export async function createRunReview(
   service: CodeCallReviewService,
@@ -111,10 +131,7 @@ export async function createRunReview(
   const rules =
     options.rules === false ? undefined : new ReviewRules({ rules: options.rules, toolOf, hasApprovalChannel });
   const approvals = approvalsOf(caller, scriptHash, service);
-  const effectsSoFar = (): string[] => {
-    const ranTools = (caller.journal?.entriesSoFar() ?? []).filter(reachedTool).map((entry) => entry.tool);
-    return [...new Set(ranTools)].filter((name) => toolOf(name)?.annotations?.readOnlyHint !== true);
-  };
+  const effectsSoFar = effectsSoFarOf(caller, (name) => toolOf(name)?.annotations?.readOnlyHint === true);
   return new RunReview({
     rules,
     hasApprovalChannel,
