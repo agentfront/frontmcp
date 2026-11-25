@@ -363,16 +363,16 @@ for a bad one.
 
 `outbound`:
 
-| Field                     | Default     | Description                                                                                                                         |
-| ------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `allowHttp`               | `false`     | Allow `http:` services. `dev: true` turns it on.                                                                                    |
-| `allowPrivateNetworks`    | `false`     | Allow services on private and loopback addresses. Link-local and cloud metadata addresses stay blocked. Logs a warning.             |
-| `defaultTimeoutMs`        | `30000`     | How long a request may take, in milliseconds. An operation's `timeoutMs` overrides it.                                              |
-| `defaultMaxResponseBytes` | `262144`    | The largest response read (256 KB). An operation's `maxResponseBytes` overrides it.                                                 |
-| `maxConcurrencyPerHost`   | `10`        | Requests in flight to one host; more wait their turn.                                                                               |
-| `egressProxy`             |             | A proxy URL every request to your API goes through. Needs `undici` on Node.js.                                                      |
-| `egressProxyConnectTo`    |             | `'approved-address'` asks the proxy for an address the outbound check approved; `'hostname'` (unset: warns) for the hostname.       |
-| `errorBodies`             | `'include'` | `'include'` adds your API's error body, redacted and cut to 2 KB, to a failed call's error; `'status-only'` names the status alone. |
+| Field                     | Default              | Description                                                                                                                            |
+| ------------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `allowHttp`               | `false`              | Allow `http:` services. `dev: true` turns it on.                                                                                       |
+| `allowPrivateNetworks`    | `false`              | Allow services on private and loopback addresses. Link-local and cloud metadata addresses stay blocked. Logs a warning.                |
+| `defaultTimeoutMs`        | `30000`              | How long a request may take, in milliseconds. An operation's `timeoutMs` overrides it.                                                 |
+| `defaultMaxResponseBytes` | `262144`             | The largest response read (256 KB). An operation's `maxResponseBytes` overrides it.                                                    |
+| `maxConcurrencyPerHost`   | `10`                 | Requests in flight to one host; more wait their turn.                                                                                  |
+| `egressProxy`             |                      | A proxy URL every request to your API goes through. Needs `undici` on Node.js.                                                         |
+| `egressProxyConnectTo`    | `'approved-address'` | `'approved-address'` asks the proxy for an address the outbound check approved; `'hostname'` for the hostname (warns; SOCKS needs it). |
+| `errorBodies`             | `'include'`          | `'include'` adds your API's error body, redacted and cut to 2 KB, to a failed call's error; `'status-only'` names the status alone.    |
 
 ### Sources
 
@@ -709,9 +709,10 @@ the server to be ready, and a request applies a bundle that failed to apply agai
 - **Outbound requests.** URLs must be `https:` (unless `allowHttp`) and on the operation's service host. The host's
   addresses are checked before sending: private and loopback addresses are refused unless `allowPrivateNetworks`, and
   link-local and cloud metadata addresses always. On Node.js the request connects only to the checked addresses.
-  Through `egressProxy` the proxy resolves the hostname itself unless `egressProxyConnectTo: 'approved-address'` asks it
-  for a checked address (`CONNECT <address>:<port>`); 1.13 makes that the default. In a browser, which can't resolve a
-  name, only an IP-literal host's address is checked (see [Browser](#browser)). Responses are size- and time-limited.
+  Through `egressProxy` the proxy is asked for a checked address (`CONNECT <address>:<port>`), IPv4 first and the next
+  one when it refuses the tunnel, with the hostname kept for `Host` and TLS; `egressProxyConnectTo: 'hostname'` asks it
+  for the hostname instead, which it resolves itself (up to 1.12.x that was the default). In a browser, which can't resolve a name, only an IP-literal host's address is checked
+  (see [Browser](#browser)). Responses are size- and time-limited.
 - **What reaches the model.** The model sees only what the script returns, but the content of your API's answers isn't
   checked. Treat text your API returns, like ticket bodies or notes, as you would user input.
 
