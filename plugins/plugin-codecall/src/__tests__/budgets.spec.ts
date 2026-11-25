@@ -346,21 +346,69 @@ describe('budget approvals', () => {
     expect(admissions.map(({ status }) => status).sort()).toEqual(['fulfilled', 'rejected']);
   });
 
-  it('claims every grant a call needs together, and gives them back when one is lost to another call', async () => {
-    const both = new CodeCallBudgetStore(storage, [RECORDS_PER_HOUR, CALLS_PER_HOUR]);
-    const recordsId = recordsReference().id;
-    const callsId = referenceOf('calls-per-hour').id;
-    const approvals = approvalsWith({ [recordsId]: 'approved', [callsId]: 'approved' }, grantedAt);
-    await useCalls(meterFor(both, 'subject:bob'), 100, 2);
-    const bob = meterFor(both, 'subject:bob', { approvals });
-    expect(await decisionOf(bob)).toEqual({ decision: 'allow' });
+  describe('a call over two budgets, with an Approval plugin grant for each', () => {
+    let both: CodeCallBudgetStore;
+    let bob: BudgetMeter;
+    let recordsGrant: string;
+    let callsGrant: string;
+    const callsId = () => referenceOf('calls-per-hour').id;
 
-    await both.claim(`${callsId}:${grantedAt}`, grantedAt + MAX_AGE_MS);
-    const call = bob.startCall(ARCHIVE);
+    beforeEach(async () => {
+      both = new CodeCallBudgetStore(storage, [RECORDS_PER_HOUR, CALLS_PER_HOUR]);
+      await useCalls(meterFor(both, 'subject:bob'), 100, 2);
+      const approvals = approvalsWith({ [recordsReference().id]: 'approved', [callsId()]: 'approved' }, grantedAt);
+      bob = meterFor(both, 'subject:bob', { approvals });
+      recordsGrant = `${recordsReference().id}:${grantedAt}`;
+      callsGrant = `${callsId()}:${grantedAt}`;
+    });
 
-    await expect(call.dispatch.beforeExecute()).rejects.toMatchObject({ code: 'RATE_LIMIT_EXCEEDED' });
-    expect(call.refusal?.pending?.reference.id).toBe(callsId);
-    expect(await both.isSpent(`${recordsId}:${grantedAt}`)).toBe(false);
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('gives back the grant it claimed when another call wins the next one', async () => {
+      const realClaim = both.claim.bind(both);
+      const claim = jest.spyOn(both, 'claim').mockImplementationOnce(realClaim).mockResolvedValueOnce(undefined);
+      const call = bob.startCall(ARCHIVE);
+
+      await expect(call.dispatch.beforeExecute()).rejects.toMatchObject({ code: 'RATE_LIMIT_EXCEEDED' });
+
+      expect(claim).toHaveBeenCalledTimes(2);
+      expect(call.refusal?.pending?.reference.id).toBe(callsId());
+      expect(await both.isSpent(recordsGrant)).toBe(false);
+    });
+
+    it('gives back the grant it claimed when the store fails on the next claim', async () => {
+      const realClaim = both.claim.bind(both);
+      const claim = jest
+        .spyOn(both, 'claim')
+        .mockImplementationOnce(realClaim)
+        .mockRejectedValueOnce(new Error('connection refused'));
+      const call = bob.startCall(ARCHIVE);
+
+      await expect(call.dispatch.beforeExecute()).rejects.toMatchObject({ code: 'RATE_LIMIT_EXCEEDED' });
+
+      expect(claim).toHaveBeenCalledTimes(2);
+      expect(call.refusal?.decision.findings).toEqual([expect.objectContaining({ rule: BUDGET_UNAVAILABLE_RULE })]);
+      expect(await both.isSpent(recordsGrant)).toBe(false);
+    });
+
+    it('gives back every grant it claimed when the call cannot be counted', async () => {
+      jest.spyOn(storage, 'incrBy').mockRejectedValueOnce(new Error('connection refused'));
+      const call = bob.startCall(ARCHIVE);
+
+      await expect(call.dispatch.beforeExecute()).rejects.toMatchObject({ code: 'RATE_LIMIT_EXCEEDED' });
+
+      expect(await both.isSpent(recordsGrant)).toBe(false);
+      expect(await both.isSpent(callsGrant)).toBe(false);
+    });
+
+    it('spends both grants and counts the call when it can', async () => {
+      await bob.startCall(ARCHIVE).dispatch.beforeExecute();
+
+      expect(await both.isSpent(recordsGrant)).toBe(true);
+      expect(await both.isSpent(callsGrant)).toBe(true);
+    });
   });
 
   it('spends no grant of a person until it has one for each budget the call is over', async () => {

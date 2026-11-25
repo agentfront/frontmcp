@@ -149,7 +149,7 @@ export class BudgetMeter {
     if (isBlockedSelfReference(call.toolName)) return { decision: ALLOW };
     if (this.countLost) return { decision: unavailableDecision(call.toolName) };
     try {
-      return await this.decide(call, false);
+      return await this.decide(call);
     } catch (error: unknown) {
       this.warn('codecall: could not check the budgets', error);
       return { decision: unavailableDecision(call.toolName) };
@@ -184,21 +184,29 @@ export class BudgetMeter {
     return budgetedCall;
   }
 
-  /** As the call enters its tool: the budgets' answer now, with its grants spent and the call counted when allowed. */
+  /** As the call enters its tool: the budgets' answer now; when it lets the call run, its grants spent and it counted. */
   private async admit(call: BudgetCall): Promise<BudgetVerdict> {
     if (this.countLost) return { decision: unavailableDecision(call.toolName) };
+    const claimed: Release[] = [];
+    let admitted = false;
     try {
-      const verdict = await this.decide(call, true);
-      if (verdict.decision.decision === 'allow') await this.store.add(this.caller, { toolCalls: 1, recordsChanged: 0 });
+      const verdict = await this.decide(call, claimed);
+      if (verdict.decision.decision === 'allow') {
+        await this.store.add(this.caller, { toolCalls: 1, recordsChanged: 0 });
+        admitted = true;
+      }
       return verdict;
     } catch (error: unknown) {
       this.countLost = true;
       this.warn('codecall: could not admit a call against the budgets', error);
       return { decision: unavailableDecision(call.toolName) };
+    } finally {
+      if (!admitted) await Promise.allSettled(claimed.map((release) => release()));
     }
   }
 
-  private async decide(call: BudgetCall, spend: boolean): Promise<BudgetVerdict> {
+  /** The budgets' answer for the call; given `claimed`, it also claims the grants the call needs, adding each release. */
+  private async decide(call: BudgetCall, claimed?: Release[]): Promise<BudgetVerdict> {
     this.pendingByCallIndex.delete(call.callIndex);
     const exceeded = await this.store.exceededOf(this.caller);
     if (exceeded.length === 0) return { decision: ALLOW };
@@ -215,16 +223,11 @@ export class BudgetMeter {
       if (!claim) return this.waitForApproval(over, reference, call);
       grants.push({ over, reference, claim });
     }
-    if (spend) {
-      const releases: Release[] = [];
-      for (const { over, reference, claim } of grants) {
-        const release = await claim();
-        if (!release) {
-          await Promise.all(releases.map((giveBack) => giveBack()));
-          return this.waitForApproval(over, reference, call);
-        }
-        releases.push(release);
-      }
+    if (!claimed) return { decision: ALLOW };
+    for (const { over, reference, claim } of grants) {
+      const release = await claim();
+      if (!release) return this.waitForApproval(over, reference, call);
+      claimed.push(release);
     }
     return { decision: ALLOW };
   }
