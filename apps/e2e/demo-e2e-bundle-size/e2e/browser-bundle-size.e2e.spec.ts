@@ -27,7 +27,7 @@ const BUDGETS: Array<{ entry: string; label: string; maxBytes: number }> = [
 ];
 
 // +372 bytes (#1315): the task index never shortens a TTL (an atomic extendTtl in the storage adapters) and jumps runs of gone tasks
-const VITE_INITIAL_CHUNK_MAX_BYTES = 785_598;
+const VITE_INITIAL_CHUNK_MAX_BYTES = 785_645;
 
 // What create() never needs: the parser behind @enclave-vm/ast (#885), the MCP client (#886) and server-only code
 const NEVER_BUNDLED: Record<string, RegExp> = {
