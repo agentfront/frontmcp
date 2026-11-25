@@ -186,6 +186,20 @@ describe('budget counts', () => {
     expect(await ada.check('users.get', {})).toMatchObject({ decision: 'denied' });
   });
 
+  it.each([[-1], [1.5], [Number.NaN]])(
+    'refuses a report of %p records, so the call fails and no count drops',
+    async (count) => {
+      const store = new CodeCallBudgetStore(storage, [RECORDS_PER_HOUR], clock);
+      const ada = meterFor(store, 'subject:ada');
+      await useCalls(ada, 200);
+      const call = ada.startCall();
+
+      expect(() => call.onRecordsChanged(count)).toThrow(RangeError);
+      await call.end(new ToolExecutionError('users.archive', new RangeError('bad count')));
+      expect(await ada.check(ARCHIVE.toolName, ARCHIVE.args)).toMatchObject({ decision: 'needs_approval' });
+    },
+  );
+
   it('counts a call once, and no report after it ended', async () => {
     const store = new CodeCallBudgetStore(storage, [RECORDS_PER_HOUR], clock);
     const ada = meterFor(store, 'subject:ada');

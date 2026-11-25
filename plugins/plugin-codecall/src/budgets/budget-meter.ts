@@ -90,7 +90,7 @@ function unavailableDecision(toolName: string): ReviewDecision {
 
 /** One call's use of the budgets, counted when it ends. */
 export interface BudgetedCall {
-  /** The `onRecordsChanged` of the call's dispatch context; reports after the call ended are not counted. */
+  /** The `onRecordsChanged` of the call's dispatch context: throws on a count that is not a non-negative integer. */
   onRecordsChanged(count: number): void;
   /** Counts the call once: as a tool call unless the flow refused it before its tool ran, and the records it reported. */
   end(dispatchError?: unknown): Promise<void>;
@@ -139,6 +139,9 @@ export class BudgetMeter {
     let ended = false;
     return {
       onRecordsChanged: (count) => {
+        if (!Number.isSafeInteger(count) || count < 0) {
+          throw new RangeError(`reportRecordsChanged needs a non-negative integer, not ${String(count)}`);
+        }
         if (!ended) recordsChanged += count;
       },
       end: async (dispatchError) => {

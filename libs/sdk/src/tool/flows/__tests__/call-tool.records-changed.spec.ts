@@ -5,7 +5,6 @@ import { z } from '@frontmcp/lazy-zod';
 
 import { App, LogLevel, Tool, ToolContext } from '../../../common';
 import { type DirectMcpServer } from '../../../direct/direct.types';
-import { ToolExecutionError } from '../../../errors';
 import { FrontMcpInstance } from '../../../front-mcp/front-mcp';
 
 @Tool({ name: 'archive_tickets', inputSchema: { counts: z.array(z.number()) } })
@@ -57,12 +56,5 @@ describe('this.reportRecordsChanged() in a tool', () => {
     const result = await server.callTool('archive_tickets', { counts: [5] });
 
     expect(result.structuredContent).toEqual({ archived: true });
-  });
-
-  it.each([[-1], [1.5]])('fails the call for a count of %p', async (count) => {
-    const failure = await server.callTool('archive_tickets', { counts: [count] }).catch((error: unknown) => error);
-
-    expect(failure).toBeInstanceOf(ToolExecutionError);
-    expect((failure as ToolExecutionError).originalError).toBeInstanceOf(RangeError);
   });
 });
