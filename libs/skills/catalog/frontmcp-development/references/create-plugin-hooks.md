@@ -480,6 +480,24 @@ The entry flows also name their entry:
 | `resources:read-resource` | `uri`        | The URI the read asks for                                                                                                            |
 | `prompts:get-prompt`      | `promptName` | The prompt's name: the one `findPrompt` resolved, else the name the request asks for                                                 |
 
+A hook that stands in for a stage hands its result over through the flow, never by splicing the state:
+
+| Flow                      | Method                                  | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ------------------------- | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `resources:read-resource` | `resolveResource({ resource, params })` | Settles the resource the read gets, with its URI template `params`, as `findResource` does: its `availableWhen` is checked (a surface it is not offered on answers "Resource not found"), and the stages after it (`enabled`, authorities) check it as usual. Call it from an `@Around('findResource')` hook that does not call `next()`. The handed resource's app and `static` hooks run from the `useResourceHooks` stage on, its guards included. |
+| `tools:list-tools`        | `removeTool(name)`                      | Leaves a tool out of this listing, by its listed name or its own: from a hook on any stage up to `parseTools`.                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+
+```typescript
+@ResourceHook.Around('findResource')
+async readAlias(ctx: FlowCtxOf<'resources:read-resource'>, next: () => Promise<void>) {
+  const match = ctx.uri === 'docs://latest' ? ctx.get(ScopeEntry).resources.findResourceForUri('docs://v3') : undefined;
+  if (!match) return next();
+  ctx.resolveResource({ resource: match.instance, params: match.params });
+}
+```
+
+Up to 1.12.2 such a hook set `ctx.state` itself, which skipped the stage's `availableWhen` check, and narrowed a listing by splicing `ctx.state.resolvedTools`.
+
 `ctx.request` holds:
 
 - `sessionId`: the session the server verified for the request; `undefined` for a request without one (the stateless transports, MCP 2026-07-28, an `mcp-session-id` the server did not accept).
@@ -787,7 +805,7 @@ class TransferTool extends ToolContext {
 
 An instance method on an earlier stage, or `Will`/`Around` on `createToolCallContext`, fails startup with `InvalidHookFlowError` whose message says to make it `static`. A list-flow hook (`ListToolsHook`; listing builds no instance and runs for no single entry) fails startup whether static or not -- put it on a plugin or a provider. Up to 1.9.3 static hooks on earlier stages were refused too. A `@Job` class declares hooks for the `jobs:execute-job` flow its attempts run (`JobHook`), with the same rules: instance methods from `createJobContext` on, `static` methods for earlier stages; a hook for another flow fails startup (up to 1.9.3 any hook on a job class did). Up to 1.8.7 these hooks were accepted and silently never ran.
 
-A run's app hooks and `static` entry hooks are those of the entry the request names. In `prompts:get-prompt`, a hook that switches to another prompt (rewriting `state.input.name` before `findPrompt`, or setting `state.prompt` after it) hands the run over to that prompt at the `usePromptHooks` stage, right after `findPrompt`: from there on, its app's hooks and its class's `static` hooks run, in the order a request for that prompt runs them (its app's hooks ahead of the flow's own steps of the same priority), and the first prompt's no longer do; the hooks that already ran stay as they ran. Up to 1.12.2 the replacement prompt ran with the first prompt's hooks, so its own guards never ran. `tools:call-tool` and `resources:read-resource` still keep the hooks of the entry the request names.
+A run's app hooks and `static` entry hooks are those of the entry the request names. In `prompts:get-prompt`, a hook that switches to another prompt (rewriting `state.input.name` before `findPrompt`, or setting `state.prompt` after it) hands the run over to that prompt at the `usePromptHooks` stage, right after `findPrompt`: from there on, its app's hooks and its class's `static` hooks run, in the order a request for that prompt runs them (its app's hooks ahead of the flow's own steps of the same priority), and the first prompt's no longer do; the hooks that already ran stay as they ran. Up to 1.12.2 the replacement prompt ran with the first prompt's hooks, so its own guards never ran. `tools:call-tool` and `resources:read-resource` do the same at their `useToolHooks` and `useResourceHooks` stages, right after `findTool` and `findResource`: a hook that rewrites `state.input.name` or `state.input.uri`, sets `state.tool` or `state.resource`, or hands a resource over with `ctx.resolveResource()`, runs the hooks of the entry that runs from there on.
 
 ## Common Patterns
 

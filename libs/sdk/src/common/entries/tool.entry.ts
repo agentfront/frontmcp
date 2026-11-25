@@ -15,7 +15,13 @@ import type ProviderRegistry from '../../provider/provider.registry';
 import { type ToolInputOf, type ToolOutputOf } from '../decorators';
 import { type ToolContext } from '../interfaces';
 import { type ProviderRegistryInterface } from '../interfaces/internal';
-import { type ToolInputType, type ToolMetadata, type ToolOutputType, type UndeclaredKeysPolicy } from '../metadata';
+import {
+  type StructuredContentValidation,
+  type ToolInputType,
+  type ToolMetadata,
+  type ToolOutputType,
+  type UndeclaredKeysPolicy,
+} from '../metadata';
 import { type ToolRecord } from '../records';
 import { BaseEntry, type EntryOwnerRef } from './base.entry';
 
@@ -48,6 +54,13 @@ export interface OutputParseOptions {
   undeclaredKeys?: UndeclaredKeysPolicy;
   /** Called with the undeclared key paths an answer carried, under the `'warn'` policy. */
   onUndeclaredKeys?: (keyPaths: string[]) => void;
+  /**
+   * What happens to a returned `CallToolResult` whose `structuredContent` does not match the schema. A tool that is
+   * passed none uses its own policy (Tool > App > server); any other caller gets `'enforce'`. @default 'enforce'
+   */
+  validateStructuredContent?: StructuredContentValidation;
+  /** Called when such a result is sent as returned, under `'warn'`. */
+  onInvalidStructuredContent?: () => void;
 }
 
 type OutputJsonSchemaResolution = { schema: Record<string, unknown> | null; unlistedReason?: string };

@@ -24,6 +24,14 @@ interface MockProxyAgent {
 }
 
 const sentRequests: Array<{ url: string; agent: ProxyAgentOptions; dispatcher: MockProxyAgent }> = [];
+/** What the next fetches throw, in turn; empty, they answer. */
+const fetchFailures: Error[] = [];
+
+/** The error undici's fetch throws when the proxy answers its `CONNECT` with `status`, causes nested as undici nests them. */
+function tunnelRefusal(status: number): Error {
+  const refusal = new Error(`Proxy response (${status}) !== 200 when HTTP Tunneling`);
+  return new TypeError('fetch failed', { cause: new Error('Request was cancelled.', { cause: refusal }) });
+}
 
 jest.mock('undici', () => ({
   ProxyAgent: class {
@@ -48,6 +56,8 @@ jest.mock('undici', () => ({
   },
   fetch: async (url: string, init: RequestInit & { dispatcher: MockProxyAgent }) => {
     sentRequests.push({ url, agent: init.dispatcher.options, dispatcher: init.dispatcher });
+    const failure = fetchFailures.shift();
+    if (failure) throw failure;
     return new Response('ok');
   },
 }));
@@ -71,6 +81,7 @@ function tunnelOptions(agent: ProxyAgentOptions, origin: string): Record<string,
 
 beforeEach(() => {
   sentRequests.length = 0;
+  fetchFailures.length = 0;
 });
 
 describe('proxiedFetch', () => {
@@ -94,7 +105,7 @@ describe('proxiedFetch', () => {
     ]);
   });
 
-  it('asks the proxy for the first checked address, keeping the hostname and TLS server name', async () => {
+  it('asks the proxy for an IPv4 address first, keeping the hostname and TLS server name', async () => {
     const send = await proxiedFetch('http://proxy-b.internal:3128', [
       { address: '2001:db8::7', family: 6 },
       { address: '203.0.113.7', family: 4 },
@@ -106,9 +117,56 @@ describe('proxiedFetch', () => {
     expect(request.url).toBe('https://api.example.com:8443/v1/items?page=2');
     expect(tunnelOptions(request.agent, 'https://api.example.com:8443')).toEqual({
       ...TUNNEL_TO_API,
+      host: '203.0.113.7:8443',
+      hostname: '203.0.113.7',
+    });
+  });
+
+  it('asks for an IPv6 address in brackets', async () => {
+    const send = await proxiedFetch('http://proxy-b.internal:3128', [{ address: '2001:db8::7', family: 6 }]);
+
+    await send('https://api.example.com:8443/');
+
+    expect(tunnelOptions(sentRequests[0].agent, 'https://api.example.com:8443')).toMatchObject({
       host: '[2001:db8::7]:8443',
       hostname: '2001:db8::7',
     });
+  });
+
+  it('moves to the next approved address when the proxy refuses the tunnel', async () => {
+    const send = await proxiedFetch('http://proxy-b.internal:3128', [
+      { address: '203.0.113.7', family: 4 },
+      { address: '2001:db8::7', family: 6 },
+    ]);
+    fetchFailures.push(tunnelRefusal(502));
+
+    const response = await send('https://api.example.com:8443/');
+
+    expect(await response.text()).toBe('ok');
+    const tunnelHosts = sentRequests.map(({ agent }) => tunnelOptions(agent, 'https://api.example.com:8443').host);
+    expect(tunnelHosts).toEqual(['203.0.113.7:8443', '[2001:db8::7]:8443']);
+  });
+
+  it('fails with the last refusal once the proxy refused every approved address', async () => {
+    const send = await proxiedFetch('http://proxy-b.internal:3128', [
+      { address: '203.0.113.7', family: 4 },
+      { address: '203.0.113.8', family: 4 },
+    ]);
+    fetchFailures.push(tunnelRefusal(403), tunnelRefusal(403));
+
+    await expect(send('https://api.example.com/')).rejects.toThrow('fetch failed');
+    expect(sentRequests).toHaveLength(2);
+  });
+
+  it('does not try another address after a failure that is not a tunnel refusal', async () => {
+    const send = await proxiedFetch('http://proxy-b.internal:3128', [
+      { address: '203.0.113.7', family: 4 },
+      { address: '203.0.113.8', family: 4 },
+    ]);
+    fetchFailures.push(new TypeError('fetch failed', { cause: new Error('other side closed') }));
+
+    await expect(send('https://api.example.com/')).rejects.toThrow('fetch failed');
+    expect(sentRequests).toHaveLength(1);
   });
 
   it('leaves a connection to any other origin as it is', async () => {

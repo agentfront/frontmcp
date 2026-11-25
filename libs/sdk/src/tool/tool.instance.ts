@@ -30,6 +30,7 @@ import type HookRegistry from '../hooks/hook.registry';
 import { normalizeHooksFromCls } from '../hooks/hooks.utils';
 import type ProviderRegistry from '../provider/provider.registry';
 import { toolClassHooksJoin } from './flows/call-tool.flow';
+import { resolveStructuredContentValidation, toolOutputPolicies } from './tool-output-policy';
 import { buildParsedToolResult } from './tool.utils';
 
 const looseArgumentsSchema = z.looseObject({});
@@ -225,7 +226,7 @@ export class ToolInstance<
   override parseOutput(raw: Out | Partial<Out> | any, options?: OutputParseOptions): ParsedToolResult {
     const descriptor = this.outputSchema as any;
 
-    return buildParsedToolResult(descriptor, raw, options);
+    return buildParsedToolResult(descriptor, raw, this.withOwnOutputPolicy(options));
   }
 
   override safeParseOutput(
@@ -234,10 +235,17 @@ export class ToolInstance<
   ): SafeTransformResult<ParsedToolResult> {
     const descriptor = this.outputSchema as any;
     try {
-      return { success: true, data: buildParsedToolResult(descriptor, raw, options) };
+      return { success: true, data: buildParsedToolResult(descriptor, raw, this.withOwnOutputPolicy(options)) };
     } catch (error: any) {
       return { success: false, error };
     }
+  }
+
+  /** The caller's options, with the tool's own `validateStructuredContent` (Tool > App > server) where it passes none. */
+  private withOwnOutputPolicy(options: OutputParseOptions = {}): OutputParseOptions {
+    if (options.validateStructuredContent !== undefined) return options;
+    const policies = toolOutputPolicies(this as unknown as ToolEntry, this.scope);
+    return { ...options, validateStructuredContent: resolveStructuredContentValidation(...policies) };
   }
 }
 

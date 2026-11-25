@@ -81,6 +81,8 @@ const plan = {
     'parseInput',
     'ensureRemoteCapabilities',
     'findResource',
+    // A hook that switched the resource, or handed one over, hands the run over to the hooks of the resource that runs
+    'useResourceHooks',
     'checkEnabled',
     'checkAppLoaded',
     'checkEntryAuthorities',
@@ -256,9 +258,25 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
       throw new ResourceNotFoundError(uri);
     }
 
+    this.settleResource(match.instance, match.params);
+    this.logger.verbose('findResource:done');
+  }
+
+  /**
+   * Hand over the resource a hook standing in for `findResource` found, settled as that stage settles one; its app and
+   * `static` hooks run from `useResourceHooks` on.
+   */
+  resolveResource({ resource, params = {} }: { resource: ResourceEntry; params?: Record<string, string> }): void {
+    this.settleResource(resource, params);
+  }
+
+  /** Settle the resource this read gets, as `findResource` does: its `availableWhen` checked, the hook owner set. */
+  private settleResource(resource: ResourceEntry, params: Record<string, string> = {}): void {
+    const { uri } = this;
+    const loggedUri = escapeControlCharacters(uri);
     // `availableWhen` gates reads by URI, not only the listings: a surface the resource isn't offered
     // on answers like an unknown URI, and a process-wide axis answers EntryUnavailableError.
-    const { availableWhen } = match.instance.metadata;
+    const { availableWhen } = resource.metadata;
     const callSurface = callSurfaceOf(this.input.ctx);
     const availability = availabilityForCall(availableWhen, callSurface);
     if (availability === 'not-offered') {
@@ -268,7 +286,7 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
     if (availability === 'unavailable') {
       this.logger.warn(`findResource: resource for URI "${loggedUri}" is unavailable in this environment`);
       throw entryUnavailableError(
-        match.instance.isTemplate ? 'ResourceTemplate' : 'Resource',
+        resource.isTemplate ? 'ResourceTemplate' : 'Resource',
         uri,
         availableWhen,
         callSurface,
@@ -276,17 +294,13 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
     }
 
     // Store resource owner ID in flow state for hook filtering
-    if (match.instance.owner) {
-      this.state.set('resourceOwnerId', match.instance.owner.id);
+    if (resource.owner) {
+      this.state.set('resourceOwnerId', resource.owner.id);
     }
 
     this.logger = this.logger.child(`ReadResourceFlow(${loggedUri})`);
-    this.state.set('resource', match.instance);
-    this.state.set('params', match.params);
-    this.logger.verbose(
-      `findResource: resource "${match.instance.name}" found (template: ${match.instance.isTemplate})`,
-    );
-    this.logger.verbose('findResource:done');
+    this.state.set({ resource, params });
+    this.logger.verbose(`findResource: resource "${resource.name}" found (template: ${resource.isTemplate})`);
   }
 
   /** Whether `uri` names a tool's widget, kept for 'finalize'; any other `ui://` URI is looked up as a resource. */
@@ -310,6 +324,17 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
 
     this.state.set({ isUIResource: true, uiResourceResult: uiResult.result });
     return true;
+  }
+
+  /** The settled resource's hooks run from here on, in place of the requested one's when a hook switched it. */
+  @Stage('useResourceHooks')
+  async useResourceHooks() {
+    const { resource } = this.state;
+    if (!resource) return;
+    await this.useEntryHooks(
+      appOwnerIdOf(this.scope.resources.lineageOf(resource) ?? [], resource.owner),
+      resource.record.provide,
+    );
   }
 
   /** A resource or template whose `enabled` is off is refused with `FEATURE_OFF` and the remedy of its source. */

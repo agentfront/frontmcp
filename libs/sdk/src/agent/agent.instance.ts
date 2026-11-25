@@ -20,11 +20,13 @@ import {
   type AgentOutputOf,
   type AgentRecord,
   type EntryOwnerRef,
+  type OutputPolicy,
   type ParsedAgentResult,
   type PromptEntry,
   type ResourceEntry,
   type SafeTransformResult,
   type ScopeEntry,
+  type StructuredContentValidation,
   type ToolCallExtra,
   type ToolEntry,
   type ToolInputType,
@@ -53,6 +55,7 @@ import { normalizePrompt } from '../prompt/prompt.utils';
 import type ProviderRegistry from '../provider/provider.registry';
 import { normalizeProvider } from '../provider/provider.utils';
 import { isResourceTemplate, normalizeResource, normalizeResourceTemplate } from '../resource/resource.utils';
+import { resolveStructuredContentValidation } from '../tool/tool-output-policy';
 import { ToolInstance } from '../tool/tool.instance';
 import { buildAgentToolDefinition, buildParsedToolResult, normalizeTool } from '../tool/tool.utils';
 import { errorBehindFlowControl } from '../transport/mcp-handlers/mcp-error.utils';
@@ -1101,7 +1104,15 @@ export class AgentInstance<
 
   override parseOutput(raw: Out | Partial<Out> | unknown): ParsedAgentResult {
     const descriptor = this.outputSchema as unknown;
-    return buildParsedToolResult(descriptor, raw);
+    return buildParsedToolResult(descriptor, raw, { validateStructuredContent: this.structuredContentValidation() });
+  }
+
+  /** How a `CallToolResult` the agent returns is checked against its `outputSchema`: its app's policy, else the server's. */
+  private structuredContentValidation(): StructuredContentValidation {
+    const { owner, scope } = this;
+    const app = owner.kind === 'app' ? scope.apps.getApps().find((candidate) => candidate.id === owner.id) : undefined;
+    const appOutput = (app?.metadata as { output?: OutputPolicy } | undefined)?.output;
+    return resolveStructuredContentValidation(undefined, appOutput, scope.metadata.output);
   }
 
   override safeParseOutput(raw: Out | Partial<Out> | unknown): SafeTransformResult<ParsedAgentResult> {

@@ -32,6 +32,7 @@ import { isSkillsOnlyRequest } from '../../skill/skill-mode.utils';
 import { enabledItems, SURFACE_META_KEY, surfaceHash } from '../../surface';
 import { isListedByAuthorities } from '../../surface/entry-authorized';
 import { toolOutputPolicies } from '../tool-output-policy';
+import { isAppOnlyTool, knownPlatformOf, rendersAppPages } from '../ui/app-only-tools';
 import { buildStaticWidgetUri, hasUIConfig } from '../ui/ui-shared';
 
 const inputSchema = z.object({
@@ -89,7 +90,14 @@ type ResponseToolItem = BaseResponseToolItem & {
 // TODO: add support for session based tools
 const plan = {
   pre: ['parseInput', 'ensureRemoteCapabilities'],
-  execute: ['findTools', 'filterByEnabled', 'filterByAuthorities', 'filterByPublicAccess', 'resolveConflicts'],
+  execute: [
+    'findTools',
+    'filterByEnabled',
+    'filterByAuthorities',
+    'filterByPublicAccess',
+    'filterByAppVisibility',
+    'resolveConflicts',
+  ],
   post: ['parseTools'],
 } as const satisfies FlowPlan<string>;
 
@@ -117,6 +125,9 @@ const { Stage } = FlowHooksOf('tools:list-tools');
 })
 export default class ToolsListFlow extends FlowBase<typeof name> {
   logger = this.scopeLogger.child('ToolsListFlow');
+
+  /** The names hooks asked `removeTool` to leave out, applied to the tools whenever `findTools` finds them. */
+  private readonly removedToolNames = new Set<string>();
 
   private sample<T>(arr: T[], n = 5): T[] {
     return arr.slice(0, n);
@@ -303,7 +314,10 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
         this.logger.warn('findTools: no tools found across apps');
       }
 
-      this.state.set('tools', tools);
+      this.state.set(
+        'tools',
+        tools.filter(({ tool }) => !this.isRemoved(tool)),
+      );
       this.state.set('foundTools', tools);
       this.logger.verbose('findTools:done');
     } catch (error) {
@@ -371,6 +385,38 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
       this.state.required.tools.filter(({ tool }) =>
         isPubliclyListed(publicAccess, 'tools', [tool.fullName, tool.name]),
       ),
+    );
+  }
+
+  /** Leave a tool out of this listing, by its listed or its own name: for a hook on any stage up to `parseTools`. */
+  removeTool(name: string): void {
+    this.removedToolNames.add(name);
+    const { tools, resolvedTools } = this.state;
+    const keptTools = tools?.filter(({ tool }) => !this.isRemoved(tool));
+    const keptResolvedTools = resolvedTools?.filter(({ tool, finalName }) => !this.isRemoved(tool, finalName));
+    if (keptTools) this.state.set('tools', keptTools);
+    if (keptResolvedTools) this.state.set('resolvedTools', keptResolvedTools);
+  }
+
+  private isRemoved(tool: { fullName: string; metadata: { id?: string; name: string } }, finalName?: string): boolean {
+    const names = [finalName, tool.fullName, tool.metadata.id ?? tool.metadata.name];
+    return names.some((name) => name !== undefined && this.removedToolNames.has(name));
+  }
+
+  /** A tool for the MCP Apps page only (`_meta.ui.visibility: ['app']`) is listed only to a client that renders it. */
+  @Stage('filterByAppVisibility')
+  async filterByAppVisibility() {
+    const { authInfo } = this.state;
+    const sessionId = authInfo?.sessionId;
+    const callerPlatform = knownPlatformOf(
+      this.tryGetContext()?.platformType,
+      sessionId ? this.scope.notifications?.getPlatformType(sessionId) : undefined,
+      authInfo?.sessionIdPayload?.platformType,
+    );
+    if (rendersAppPages(callerPlatform)) return;
+    this.state.set(
+      'tools',
+      this.state.required.tools.filter(({ tool }) => !isAppOnlyTool(tool.metadata)),
     );
   }
 
@@ -585,6 +631,9 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
 
           // Use custom resourceUri from config if provided, otherwise auto-generate
           const widgetUri = uiConfig.resourceUri || buildStaticWidgetUri(finalName);
+          // The `_meta.ui` fields the tool declares itself, such as `visibility`, are kept
+          const declaredUiMeta = tool.metadata._meta?.['ui'];
+          const ownUiMeta = typeof declaredUiMeta === 'object' && declaredUiMeta !== null ? declaredUiMeta : {};
 
           // Copy widget sizing hints (preferredHeight / minHeight / maxHeight /
           // aspectRatio / autoResize) onto the nested _meta.ui object. Read straight
@@ -602,9 +651,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
 
           if (isExtApps) {
             // MCP Apps specification — nested _meta.ui object per spec
-            const uiMeta: Record<string, unknown> = {
-              resourceUri: widgetUri,
-            };
+            const uiMeta: Record<string, unknown> = { ...ownUiMeta, resourceUri: widgetUri };
 
             // Add CSP from tool UI config
             if (uiConfig.csp) {
@@ -639,9 +686,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
             }
           } else {
             // Generic MCP clients (Claude, Cursor, etc.) — nested _meta.ui object per spec
-            const uiMeta: Record<string, unknown> = {
-              resourceUri: widgetUri,
-            };
+            const uiMeta: Record<string, unknown> = { ...ownUiMeta, resourceUri: widgetUri };
 
             // Add CSP from tool UI config
             if (uiConfig.csp) {

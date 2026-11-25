@@ -315,6 +315,10 @@ export {
   KeyPersistence,
   createKeyPersistence,
   createKeyPersistenceWithStorage,
+  LocalStorageKeyLostError,
+  LocalStorageKeyRequiredError,
+  LocalStorageKeyUnavailableError,
+  UnreadableKeyRecordError,
 } from './crypto';
 export type { CryptoProvider, EncBlob, EncryptedBlob } from './crypto';
 
@@ -478,6 +482,7 @@ export type {
   ChangeFeed,
   ChangeFeedKind,
   ChangeFeedOptions,
+  PublishOptions,
 } from './storage';
 
 // LLM platform tool call processing (cross-platform: Node.js and browser)

@@ -3,7 +3,7 @@ import { guardConfigSchema, type GuardConfig } from '@frontmcp/guard';
 import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import type { ServerManifest } from '../../manifest/server-manifest.schema';
-import { MAX_CONCURRENT_TASKS_PER_SESSION } from '../../task/task.types';
+import { MAX_CONCURRENT_TASKS_PER_SESSION, type TaskListSource } from '../../task/task.types';
 import type { AdapterType, AppType, PluginType, ProviderType, ResourceType, SkillType, ToolType } from '../interfaces';
 import {
   annotatedFrontMcpAdaptersSchema,
@@ -67,6 +67,7 @@ import { legacySessionOptionsSchema } from '../types/options/session/schema';
 import { packageLoaderSchema, type PackageLoader } from './app.metadata';
 import { channelsConfigSchema, type ChannelsConfigInput } from './channel.metadata';
 import { eventsConfigSchema, type EventsConfigOptions } from './event.metadata';
+import { inputPolicySchema, type InputPolicy } from './input-policy';
 import { MAX_JOB_TIMER_MS, timerLimitMessage } from './job.metadata';
 import { outputPolicySchema, type OutputPolicy } from './output-policy';
 import type { WidgetServingMode } from './tool-ui.metadata';
@@ -391,6 +392,16 @@ export interface FrontMcpBaseMetadata {
   output?: OutputPolicy;
 
   /**
+   * Input policy applied to every tool (overridable per `@App` / `@Tool`):
+   *
+   * - `undeclaredKeys`: what `tools/call` does with argument keys a tool's `inputSchema` does not
+   *   declare — `'strip'` drops them; `'warn'` drops them, logs a warning once per tool and key, and adds
+   *   a text block to the answer naming them; `'fail'` refuses the call with `INVALID_INPUT`. Default
+   *   `'warn'`, in every environment.
+   */
+  input?: InputPolicy;
+
+  /**
    * Per-client answer shaping, keyed by a glob of the `clientInfo.name` a client sends at
    * `initialize`: whether answers carry text, `structuredContent` or both, the resource annotations
    * and the skills instructions it receives. See {@link ClientProfilesOptionsInput}.
@@ -686,6 +697,8 @@ export interface FrontMcpBaseMetadata {
     defaultPollIntervalMs?: number;
     /** Unfinished tasks a caller may have at once (per session, or per subject under 2026-07-28); default 16, at most 1000. */
     maxConcurrentPerSession?: number;
+    /** `tasks/list` reads `'index'` (the default), or `'scan'` while an instance from before the index still runs. */
+    listFrom?: TaskListSource;
     /**
      * Throw at startup instead of warning when the runtime cannot run tasks
      * reliably (edge/serverless). Default: `false`.
@@ -777,6 +790,7 @@ export const frontMcpBaseSchema = z.object({
    * numeric output throws `InvalidOutputError`.
    */
   output: outputPolicySchema.optional(),
+  input: inputPolicySchema.optional(),
   clients: clientProfilesOptionsSchema.optional(),
   jobs: z
     .object({
@@ -855,6 +869,7 @@ export const frontMcpBaseSchema = z.object({
       maxTtlMs: z.number().int().positive().optional(),
       defaultPollIntervalMs: z.number().int().positive().optional(),
       maxConcurrentPerSession: z.number().int().positive().max(MAX_CONCURRENT_TASKS_PER_SESSION).optional(),
+      listFrom: z.enum(['scan', 'index']).optional(),
       strict: z.boolean().optional(),
       runner: z.enum(['in-process', 'cli']).optional(),
       sqlite: z
@@ -1058,6 +1073,7 @@ const frontMcpLiteSchema = z.object({
   // Output-validation policy (see `frontMcpBaseSchema.output`). CLI mode
   // honors the same `allowNonFinite` switch as the full server.
   output: outputPolicySchema.optional(),
+  input: inputPolicySchema.optional(),
   session: checkedAsServer('session'),
   clients: checkedAsServer('clients'),
   observability: checkedAsServer('observability'),

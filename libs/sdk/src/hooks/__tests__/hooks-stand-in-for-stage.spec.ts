@@ -1,0 +1,161 @@
+import 'reflect-metadata';
+
+import {
+  createTestFetchServer,
+  rpc20260728,
+  type TestFetchServer,
+} from '../../__test-utils__/helpers/mcp-20260728.helpers';
+import {
+  App,
+  FlowHooksOf,
+  Plugin,
+  Resource,
+  ResourceContext,
+  ResourceTemplate,
+  ScopeEntry,
+  Tool,
+  ToolContext,
+  type FlowCtxOf,
+} from '../../common';
+
+const ReadResourceHook = FlowHooksOf('resources:read-resource');
+const ListToolsHook = FlowHooksOf('tools:list-tools');
+const guardsRun: string[] = [];
+
+@ResourceTemplate({ name: 'note', uriTemplate: 'notes://{id}', mimeType: 'text/plain' })
+class NoteResource extends ResourceContext<{ id: string }> {
+  async execute(uri: string, params: { id: string }) {
+    return `Note ${params.id}`;
+  }
+}
+
+@Resource({ name: 'agent-notes', uri: 'agent://notes', availableWhen: { surface: ['agent'] } })
+class AgentNotesResource extends ResourceContext {
+  async execute() {
+    return 'for agents only';
+  }
+}
+
+@Resource({ name: 'guarded-doc', uri: 'guarded://doc' })
+class GuardedDocResource extends ResourceContext {
+  @ReadResourceHook.Will('execute')
+  static guard() {
+    guardsRun.push('guarded-doc');
+  }
+
+  async execute() {
+    return 'guarded content';
+  }
+}
+
+@Tool({ name: 'public_tool', inputSchema: {}, outputSchema: 'string' })
+class PublicTool extends ToolContext {
+  async execute() {
+    return 'ok';
+  }
+}
+
+@Tool({ name: 'hidden_by_hook', inputSchema: {}, outputSchema: 'string' })
+class HiddenByHookTool extends ToolContext {
+  async execute() {
+    return 'ok';
+  }
+}
+
+@Tool({ name: 'hidden_early', inputSchema: {}, outputSchema: 'string' })
+class HiddenEarlyTool extends ToolContext {
+  async execute() {
+    return 'ok';
+  }
+}
+
+@Plugin({ name: 'stand-in' })
+class StandInPlugin {
+  @ReadResourceHook.Around('findResource')
+  async findAlias(flowCtx: FlowCtxOf<'resources:read-resource'>, next: () => Promise<void>) {
+    const aliasTargets: Record<string, string> = {
+      'alias://note': 'notes://aliased',
+      'alias://agent': 'agent://notes',
+      'alias://guarded': 'guarded://doc',
+      'rewrite://guarded': 'guarded://doc',
+    };
+    const target = aliasTargets[flowCtx.uri];
+    const match = target ? flowCtx.get(ScopeEntry).resources.findResourceForUri(target) : undefined;
+    if (!match) return next();
+    flowCtx.resolveResource({ resource: match.instance, params: match.params });
+  }
+
+  @ReadResourceHook.Will('parseInput')
+  rewriteRequest(flowCtx: FlowCtxOf<'resources:read-resource'>) {
+    // `input` is the flow's own parsed request, which a hook reaches only past its type
+    const { params } = (flowCtx as unknown as { input: { request: { params: { uri: string } } } }).input.request;
+    if (params.uri === 'rewrite://guarded') params.uri = 'guarded://doc';
+  }
+
+  @ReadResourceHook.Will('findResource')
+  switchResource(flowCtx: FlowCtxOf<'resources:read-resource'>) {
+    const input = flowCtx.state.input;
+    if (input?.uri === 'switch://guarded') flowCtx.state.set('input', { ...input, uri: 'guarded://doc' });
+  }
+
+  @ListToolsHook.Will('findTools')
+  hideEarly(flowCtx: FlowCtxOf<'tools:list-tools'>) {
+    flowCtx.removeTool('hidden_early');
+  }
+
+  @ListToolsHook.Will('parseTools')
+  hideTool(flowCtx: FlowCtxOf<'tools:list-tools'>) {
+    flowCtx.removeTool('hidden_by_hook');
+  }
+}
+
+@App({
+  id: 'notes',
+  name: 'Notes',
+  resources: [NoteResource, AgentNotesResource, GuardedDocResource],
+  tools: [PublicTool, HiddenByHookTool, HiddenEarlyTool],
+  plugins: [StandInPlugin],
+})
+class NotesApp {}
+
+describe('a hook that stands in for a stage', () => {
+  let server: TestFetchServer;
+
+  beforeAll(async () => {
+    server = await createTestFetchServer({ info: { name: 'stand-in-hooks', version: '1.0.0' }, apps: [NotesApp] });
+  });
+
+  it("hands findResource's result over with ctx.resolveResource, params included", async () => {
+    const { message } = await rpc20260728(server.handler, 'resources/read', { uri: 'alias://note' });
+
+    expect(message.error).toBeUndefined();
+    expect(JSON.stringify(message.result)).toContain('Note aliased');
+  });
+
+  it('has the resource it hands over checked as findResource checks it (availableWhen)', async () => {
+    const { message } = await rpc20260728(server.handler, 'resources/read', { uri: 'alias://agent' });
+
+    expect(message.error?.message).toBe('Resource not found: alias://agent');
+  });
+
+  it.each(['alias://guarded', 'rewrite://guarded', 'switch://guarded'])(
+    'runs the hooks of the resource it hands over for %s from useResourceHooks on, its own guards included',
+    async (uri) => {
+      guardsRun.length = 0;
+
+      const { message } = await rpc20260728(server.handler, 'resources/read', { uri });
+
+      expect(JSON.stringify(message.result)).toContain('guarded content');
+      expect(guardsRun).toEqual(['guarded-doc']);
+    },
+  );
+
+  it('leaves a tool out of tools/list with ctx.removeTool, called before or after the tools are found', async () => {
+    const { message } = await rpc20260728(server.handler, 'tools/list');
+    const names = ((message.result?.['tools'] ?? []) as Array<{ name: string }>).map(({ name }) => name);
+
+    expect(names).toContain('public_tool');
+    expect(names).not.toContain('hidden_by_hook');
+    expect(names).not.toContain('hidden_early');
+  });
+});

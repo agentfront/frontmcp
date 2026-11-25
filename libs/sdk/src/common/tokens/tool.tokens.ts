@@ -28,6 +28,7 @@ export const FrontMcpToolTokens = {
   enabled: tokenFactory.meta('enabled'),
   execution: tokenFactory.meta('execution'), // Execution hints (taskSupport, etc.)
   output: tokenFactory.meta('output'), // Output policy (allowNonFinite, schemaMode, ...)
+  input: tokenFactory.meta('input'),
 } as const satisfies RawMetadataShape<ToolMetadata, ExtendFrontMcpToolMetadata>;
 
 export const extendedToolMetadata = tokenFactory.meta('extendedToolMetadata');

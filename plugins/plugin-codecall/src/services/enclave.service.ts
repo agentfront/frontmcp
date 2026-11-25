@@ -1,7 +1,7 @@
 // file: libs/plugins/src/codecall/services/enclave.service.ts
 
 import type { ConsoleHandler, ReferenceSidecarOptions } from '@enclave-vm/core';
-import type { ToolHandler } from '@enclave-vm/core/worker';
+import type { ReviewContext, ReviewOptions, ReviewReport, ToolHandler } from '@enclave-vm/core/worker';
 
 import { Provider, ProviderScope, type FrontMcpLogger } from '@frontmcp/sdk';
 
@@ -65,6 +65,14 @@ export interface EnclaveExecutionResult {
      */
     pendingToolCalls?: number;
   };
+  /** Every decision of the review hooks, when the run was reviewed. */
+  review?: ReviewReport;
+}
+
+/** The review of one run: Enclave's hooks, and the caller they receive as `context`. */
+export interface EnclaveRunReview {
+  hooks: ReviewOptions;
+  context: ReviewContext;
 }
 
 /**
@@ -262,6 +270,7 @@ export default class EnclaveService {
    * @param code - The AgentScript code to execute (raw, not transformed)
    * @param environment - The VM environment with callTool, getTool, etc.
    * @param journal - Records each tool call as the tool handler is entered; closed when the run returns
+   * @param review - The review of the script and each call, when the server's `review` is on
    * @returns Execution result with success/error and logs
    * @throws ScriptTooLargeError if script exceeds max length and sidecar is disabled
    */
@@ -269,6 +278,7 @@ export default class EnclaveService {
     code: string,
     environment: CodeCallVmEnvironment,
     journal = new RunJournal(),
+    review?: EnclaveRunReview,
   ): Promise<EnclaveExecutionResult> {
     const logs: string[] = [];
 
@@ -386,6 +396,7 @@ export default class EnclaveService {
         ...(rapidEnumerationThreshold !== undefined && { threshold: rapidEnumerationThreshold }),
         ...(rapidEnumerationOverrides !== undefined && { overrides: rapidEnumerationOverrides }),
       },
+      ...(review && { review: review.hooks, reviewContext: review.context }),
     };
 
     let runner: CodeCallScriptRunner;
@@ -400,7 +411,8 @@ export default class EnclaveService {
     try {
       const result = await runner.run(code);
       const { pendingToolCalls } = gate.close();
-      return this.mapEnclaveResult(result, logs, toolFailures, code, pendingToolCalls);
+      const mapped = this.mapEnclaveResult(result, logs, toolFailures, code, pendingToolCalls);
+      return result.review ? { ...mapped, review: result.review } : mapped;
     } finally {
       gate.close();
       journal.close();

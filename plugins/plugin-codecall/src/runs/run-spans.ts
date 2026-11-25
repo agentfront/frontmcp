@@ -1,3 +1,5 @@
+import type { ReviewFinding } from '@enclave-vm/core/worker';
+
 import type { Reference } from '@frontmcp/sdk';
 
 import type { RunCallValues, RunJournalObserver } from './run-journal';
@@ -6,6 +8,9 @@ import type { CodeCallJournalEntry } from './run-record.types';
 import { valuePreviewOf } from './run-trace';
 
 type SpanAttributes = Record<string, string | number | boolean>;
+
+/** How much of the review's findings, as JSON, the run span keeps. */
+const MAX_FINDINGS_ATTRIBUTE_CHARS = 2000;
 
 /** The part of `@frontmcp/observability`'s `TelemetrySpan` that run spans use. */
 export interface RunTelemetrySpan {
@@ -54,6 +59,18 @@ export class RunSpans implements RunJournalObserver {
     } else {
       span.end();
     }
+  }
+
+  /** Puts what the review found on the run span: each finding's rule, message, tool and place, never a suggestion's values. */
+  recordFindings(findings: readonly ReviewFinding[]): void {
+    const described = findings.map(({ rule, message, toolName, location }) => ({ rule, message, toolName, location }));
+    const json = JSON.stringify(described);
+    this.runSpan.setAttributes({
+      'codecall.review.findings.count': findings.length,
+      'codecall.review.findings.rules': [...new Set(findings.map((finding) => finding.rule))].join(','),
+      'codecall.review.findings':
+        json.length > MAX_FINDINGS_ATTRIBUTE_CHARS ? `${json.slice(0, MAX_FINDINGS_ATTRIBUTE_CHARS)}...` : json,
+    });
   }
 
   /** Ends the run span with what the run's record says, or with an error when the run threw before it had one. */

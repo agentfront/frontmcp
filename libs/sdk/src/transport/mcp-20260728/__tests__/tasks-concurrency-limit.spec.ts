@@ -20,6 +20,15 @@ function finishRunningTasks(): void {
   for (const finish of pendingRuns.splice(0)) finish();
 }
 
+/** Wait until a started task's background run reaches `execute()`, which it does after its call was answered. */
+async function untilATaskRuns(): Promise<void> {
+  const deadline = Date.now() + 2_000;
+  while (pendingRuns.length === 0) {
+    if (Date.now() > deadline) throw new Error('no task reached execute()');
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
 @Tool({ name: 'export_report', inputSchema: {}, execution: { taskSupport: 'optional' } })
 class ExportReportTool extends ToolContext {
   async execute() {
@@ -91,6 +100,7 @@ describe('tasks.maxConcurrentPerSession', () => {
 
       const started = responses.find((response) => outcomeOf(response) === 'task');
       if (!started) throw new Error('no task was started');
+      await untilATaskRuns();
       finishRunningTasks();
       await waitUntilFinished(server, KEY, started);
 

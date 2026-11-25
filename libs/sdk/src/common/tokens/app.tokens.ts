@@ -23,6 +23,7 @@ export const FrontMcpLocalAppTokens: RawMetadataShape<LocalAppMetadata> = {
   events: tokenFactory.meta('events'),
   routes: tokenFactory.meta('routes'),
   output: tokenFactory.meta('output'),
+  input: tokenFactory.meta('input'),
   // tool UI defaults (`ui.servingMode`) for the app's tools (#720)
   ui: tokenFactory.meta('ui'),
   standalone: tokenFactory.meta('standalone'),

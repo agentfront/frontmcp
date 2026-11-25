@@ -16,6 +16,8 @@ import { QuestionAlreadyAnsweredError, QuestionNotFoundError, QuestionStoreBusyE
 
 /** The topic a store publishes whenever a question is asked, answered or taken. */
 export const QUESTIONS_TOPIC = 'questions';
+/** The prefix of the topic of one question, which only the call waiting on it follows. */
+const QUESTION_TOPIC_PREFIX = 'question:';
 
 const RECORD_PREFIX = 'q:';
 /** Attempts at a compare-and-set before giving up on a record other writers keep changing. */
@@ -115,7 +117,7 @@ export class QuestionStore implements HttpRouteTopicSource {
       }
       const { record, raw } = current;
       if (record.answer) {
-        if (await this.claim(storageKey, raw)) {
+        if (await this.claim(storageKey, raw, record.expiresAt)) {
           return { kind: 'answered', answer: record.answer, expiresAt: record.expiresAt };
         }
         continue;
@@ -135,7 +137,7 @@ export class QuestionStore implements HttpRouteTopicSource {
       if (!current || current.record.waiter !== waiter) return { kind: 'superseded' };
       const { record, raw } = current;
       if (!record.answer) return { kind: 'waiting', question: view(record) };
-      if (await this.claim(storageKey, raw)) {
+      if (await this.claim(storageKey, raw, record.expiresAt)) {
         return { kind: 'answered', answer: record.answer, expiresAt: record.expiresAt };
       }
     }
@@ -194,6 +196,11 @@ export class QuestionStore implements HttpRouteTopicSource {
     return this.options.feed.subscribe(topic, listener);
   }
 
+  /** Call `listener` when the question `key` of `subject` changes, here or in another process, and for no other. */
+  subscribeToQuestion(subject: string, key: string, listener: () => void): () => void {
+    return this.options.feed.subscribe(this.questionTopic(this.recordKey(subject, key)), listener);
+  }
+
   async close(): Promise<void> {
     await this.options.feed.close();
     await this.options.storage.disconnect();
@@ -224,13 +231,13 @@ export class QuestionStore implements HttpRouteTopicSource {
     });
     const stored = await this.read(storageKey, request.subject);
     if (stored?.record.id !== record.id) return undefined;
-    await this.changed();
+    await this.changed(storageKey, record.expiresAt);
     return record;
   }
 
-  private async claim(storageKey: string, raw: string): Promise<boolean> {
+  private async claim(storageKey: string, raw: string, expiresAt: number): Promise<boolean> {
     const claimed = await this.options.storage.deleteIfEquals(storageKey, raw);
-    if (claimed) await this.changed();
+    if (claimed) await this.changed(storageKey, expiresAt);
     return claimed;
   }
 
@@ -239,7 +246,7 @@ export class QuestionStore implements HttpRouteTopicSource {
     const { storage } = this.options;
     if (!(await storage.setIfEquals(storageKey, raw, next))) return false;
     await storage.expireIfEquals(storageKey, next, ttlSecondsUntil(record.expiresAt));
-    await this.changed();
+    await this.changed(storageKey, record.expiresAt);
     return true;
   }
 
@@ -306,9 +313,19 @@ export class QuestionStore implements HttpRouteTopicSource {
       : bytesToHex(hmacSha256(textEncoder.encode(secret), textEncoder.encode(text)));
   }
 
-  private async changed(): Promise<void> {
+  /** A question's topic names it by its storage key, made of digests, so it shows neither the subject nor the key. */
+  private questionTopic(storageKey: string): string {
+    return QUESTION_TOPIC_PREFIX + storageKey;
+  }
+
+  /** Tell the inbox, and the call waiting on this question; a polling feed drops the question's counter with it. */
+  private async changed(storageKey: string, expiresAt: number): Promise<void> {
+    const { feed } = this.options;
     try {
-      await this.options.feed.publish(QUESTIONS_TOPIC);
+      await Promise.all([
+        feed.publish(QUESTIONS_TOPIC),
+        feed.publish(this.questionTopic(storageKey), { ttlSeconds: ttlSecondsUntil(expiresAt) }),
+      ]);
     } catch {
       // A missed wake-up costs a waiting call its answer until its next read, not the answer itself
     }

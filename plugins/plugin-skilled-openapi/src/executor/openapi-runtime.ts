@@ -251,12 +251,13 @@ export async function executeOperation(args: {
   if (!ssrf.ok) {
     return failure(0, `ssrf check rejected request: ${ssrf.reason}`);
   }
-  if (outbound.egressProxy && outbound.egressProxyConnectTo === 'approved-address' && !ssrf.addresses?.length) {
+  if (outbound.egressProxy && outbound.egressProxyConnectTo !== 'hostname' && !ssrf.addresses?.length) {
     const hostname = new URL(req.url).hostname.replace(/^\[|\]$/g, '');
     if (!classifyIpAddress(hostname)) {
       return failure(
         0,
-        `ssrf check rejected request: no address of "${hostname}" was approved to ask the egress proxy for`,
+        `ssrf check rejected request: no address of "${hostname}" was approved to ask the egress proxy for; ` +
+          "set outbound.egressProxyConnectTo: 'hostname' to have the proxy resolve it",
       );
     }
   }
@@ -366,11 +367,30 @@ export async function executeOperation(args: {
       };
     } catch (e) {
       if (signal?.aborted) return abortedFailure(signal);
-      return failure(0, timeoutController.signal.aborted ? `timeout after ${timeoutMs}ms` : (e as Error).message);
+      if (timeoutController.signal.aborted) return failure(0, `timeout after ${timeoutMs}ms`);
+      return failure(0, fetchFailureMessage(e as Error, outbound));
     } finally {
       clearTimeout(timer);
     }
   });
+}
+
+/**
+ * A failed fetch's message with its innermost cause, where undici puts a proxy's answer, and, when the egress proxy
+ * is asked for approved addresses by default, the setting that asks it for the hostname instead. Causes are read by
+ * shape: undici builds some in another realm.
+ */
+function fetchFailureMessage(error: Error, outbound: OutboundOptions): string {
+  let innermost: { message?: unknown; cause?: unknown } = error;
+  while (typeof innermost.cause === 'object' && innermost.cause !== null) {
+    innermost = innermost.cause as typeof innermost;
+  }
+  const cause = innermost !== error && typeof innermost.message === 'string' ? `: ${innermost.message}` : '';
+  const hint =
+    outbound.egressProxy && outbound.egressProxyConnectTo === undefined
+      ? " (the egress proxy is asked for the approved address; set outbound.egressProxyConnectTo: 'hostname' if it allows destinations by hostname)"
+      : '';
+  return `${error.message}${cause}${hint}`;
 }
 
 /**
@@ -379,7 +399,7 @@ export async function executeOperation(args: {
  */
 async function outboundFetch(outbound: OutboundOptions, ssrf: SsrfCheckResult): Promise<typeof fetch | PinnedFetch> {
   if (outbound.egressProxy) {
-    const approvedAddresses = outbound.egressProxyConnectTo === 'approved-address' ? ssrf.addresses : undefined;
+    const approvedAddresses = outbound.egressProxyConnectTo === 'hostname' ? undefined : ssrf.addresses;
     return proxiedFetch(outbound.egressProxy, approvedAddresses);
   }
   if (ssrf.addresses?.length && !isEdgeRuntime()) return pinnedFetch(ssrf.addresses);

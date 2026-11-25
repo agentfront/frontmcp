@@ -59,6 +59,8 @@ export function buildRemoteToolRecord(
     name: toolName,
     id: toolName,
     ...(remoteTool.title !== undefined && { title: remoteTool.title }),
+    // The remote tool's own `_meta`, such as an MCP Apps `ui.visibility` that keeps it from the model
+    ...(remoteTool._meta !== undefined && { _meta: remoteTool._meta }),
     description: remoteTool.description || `Remote tool: ${remoteTool.name}`,
     inputSchema: {},
     rawInputSchema: remoteTool.inputSchema,

@@ -117,6 +117,7 @@ The plugin adds a `codecall` field to `@Tool`:
 | `maxDefinitions` | `8`                    | Most tools one `codecall:describe` call may name.                                                                                                               |
 | `runs`           | `{ enabled: true }`    | A record of each `codecall:execute` run, with a journal of its tool calls. See [Run records](#run-records).                                                     |
 | `trace`          | `{ level: 'failure' }` | The tool calls `codecall:execute` lists in its result, and the spans it sends. See [Trace](#trace).                                                             |
+| `review`         | off                    | Review each script and each call with the server's rules before it runs. See [Review](#review).                                                                 |
 
 ```ts
 CodeCallPlugin.init({
@@ -149,7 +150,7 @@ CodeCallPlugin.init({
 
 Each `codecall:execute` that has an owner (a session, or a signed-in caller) leaves a run record, and its result
 carries `runId`. The record holds the owner, the script's SHA-256, the status, the start and end times,
-`reviewDecision` (`null` until a review stage exists), the return value's size, and a journal with one entry per tool
+`reviewDecision` (the [review](#review)'s status, `'allow'` when it let the script run, `null` with `review` off), the return value's size, and a journal with one entry per tool
 call: its position (in the order the host's tool handler was entered, on either runtime), the tool, a SHA-256 of the
 arguments, the outcome (`success`, `failure` or `unfinished`), the phase of a failure (`access`, `input`, `limit` or
 `execute`), the duration and the result's size. Results are kept only with `runs.resume: true`.
@@ -188,7 +189,106 @@ calls ran before a script failed:
 
 With observability on, each run is also a `codecall run` span with a `codecall call <tool>` child span per tool call,
 carrying the same position, outcome, phase, duration and size, and values only with `trace.values: true`. With
-observability off, CodeCall sends no spans.
+`review` on, the run span also carries `codecall.review.decision` and the findings (`codecall.review.findings.count`,
+`codecall.review.findings.rules`, and `codecall.review.findings` as JSON without suggestions, cut to 2,000
+characters). With observability off, CodeCall sends no spans.
+
+## Review
+
+With `review` set, the server checks each script before it runs and each tool call, with the arguments it really
+has, before the tool sees it. It's off by default; without it nothing changes. Turn it on with the built-in rules, a
+model provider, your own function, or any mix:
+
+```ts
+CodeCallPlugin.init({
+  review: {
+    rules: { readThenSend: 'denied' }, // the built-in rules; `false` turns them off
+    provider: { provider: 'openai', apiKey: process.env.OPENAI_API_KEY!, model: 'gpt-4.1-mini' },
+    reviewer: async ({ code, analysis, policy, tools }) => ({ decision: 'allow' }),
+    policy: 'Scripts may read customers. Refunds need a person.',
+  },
+});
+```
+
+The built-in rules run in the server, from tool annotations and input schemas, with no model call. Only an explicit
+annotation counts: an unannotated tool is not destructive or open-world here, whatever MCP's defaults say.
+
+| Rule (`rules.*`)                   | Finds                                                                                                                   | Answer                                                 |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `inputSchema` (`true`)             | A literal argument of the wrong type or value (`limit: "20"` where a number is wanted), or the real arguments of a call | `needs_changes`, with the place and a suggestion       |
+| `availability` (`true`)            | A tool outside the CodeCall policy (`includeTools`, `mode`), the caller's authorities or the script's `allowedTools`    | `denied`                                               |
+| `destructive` (`true`)             | A tool with `destructiveHint: true`                                                                                     | `needs_approval`, or `denied` when nobody can approve  |
+| `readThenSend` (`'needs_changes'`) | A `readOnlyHint` tool's result flowing into an `openWorldHint` tool's arguments                                         | `needs_changes`, `'denied'`, or nothing with `false`   |
+| `fanOut` (`true`)                  | A call in a loop over a tool result with no bound below `vm.maxToolCalls`                                               | `needs_changes`; cut the items first (`.slice(0, 20)`) |
+
+`provider` and `reviewer` are Enclave's `providerReviewer` and `functionReviewer`. They review the script, with its
+static analysis, against `policy` (required with `provider`), and get the names and descriptions of the tools a script
+may call. The script, its comments and strings, and the tool descriptions reach them as untrusted data, never as
+instructions. The API key goes only into the provider request's `authorization` header; it is never logged and is
+never in a result. The rules answer first, then `reviewer`, then `provider`; the first answer that isn't `allow` is
+the review's.
+
+| Option                         | Default | Description                                                                                                    |
+| ------------------------------ | ------- | -------------------------------------------------------------------------------------------------------------- |
+| `review.rules`                 | all on  | The built-in rules above; `false` turns them all off.                                                          |
+| `review.provider`              |         | `{ provider: 'openai', apiKey, model, baseUrl?, timeoutMs? }`; `baseUrl` is https, or http on a loopback host. |
+| `review.reviewer`              |         | `({ code, analysis, policy, tools }) => ReviewDecision`, your own reviewer.                                    |
+| `review.policy`                |         | Your rules for scripts, as text, for `provider` and `reviewer`.                                                |
+| `review.policyVersion`         |         | Change it to ask again for every approval, for example when `reviewer` changes.                                |
+| `review.timeoutMs`             | `30000` | How long one review may take; a review that takes longer fails.                                                |
+| `review.approvalMaxAgeSeconds` | `3600`  | How long an approval counts after it was granted.                                                              |
+
+With `review` on, `codecall:execute` has four more statuses, and its description lists them:
+
+| `status`         | Payload                                                             | What the agent does                                                                                                                                                                                                   |
+| ---------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `needs_changes`  | `findings`: `rule`, `message`, `location`, `suggestion`, `toolName` | Fixes the script and sends it again.                                                                                                                                                                                  |
+| `needs_approval` | `reason`, `approval`, `findings?`                                   | Waits for a person to approve, then sends the same script again.                                                                                                                                                      |
+| `denied`         | `reason`, `findings?`                                               | Doesn't retry.                                                                                                                                                                                                        |
+| `review_failed`  | `error.message`                                                     | Reads the message: a review that failed before the script ran nothing, and the same script can be sent again; one that failed at a call stopped the run after the calls before it, whose effects are not rolled back. |
+
+A refused script runs no statement. A call the rules refuse while the script runs (a computed argument of the wrong
+type, a computed tool name) throws in the script, which may catch it; uncaught, it ends the run with that status. A
+call that needs approval stops the run, after the calls before it ran.
+
+An approved script runs again from the start. So when a call needs approval after a call to a tool without
+`readOnlyHint` has run in the same script (sending an email, say), the answer is `needs_changes`, not
+`needs_approval`: the finding (`approval-after-effects`) names those tools and asks for the call in a script of its
+own, or for the earlier calls in a separate script. No approval is asked for, by elicitation either. A call that needs
+approval after read-only calls only, or before the script runs, asks as usual. Resuming a run from its journal (#1335)
+will lift this.
+
+### Approvals
+
+`approval.id` covers this script (its SHA-256), the call's arguments and the review policy version. The Approval
+plugin's record binds the caller (its session or user) and the expiry, and `review.approvalMaxAgeSeconds` caps the
+expiry. A changed script, other arguments or another policy ask again. `approval.anyArgumentsId` covers any
+arguments of that tool in that script, for as many calls per run as the grant's `metadata.maxCalls` allows. When
+`provider` or `reviewer` asks for approval, `approval.id` covers the whole script. Enclave keeps their decisions by
+the script's SHA-256 for 5 minutes, so the same script sent again within that time gets the same answer without a new
+model call.
+
+A person approves through one of two channels:
+
+- **The Approval plugin** (`@frontmcp/plugin-approval`), installed on the server or CodeCall's app. Your code grants
+  the id with any of its scopes, and the agent sends the same script again:
+
+  ```ts
+  await this.approval.grantSessionApproval(approval.id);
+  await this.approval.grantTimeLimitedApproval(approval.anyArgumentsId, 3_600_000, { metadata: { maxCalls: 20 } });
+  ```
+
+  A denial recorded for the id gives `denied`.
+
+- **Elicitation**, with `elicitation: { enabled: true }` on the server and a client that declares it. CodeCall asks
+  the person, showing the tool and its arguments; once they approve, it runs the same script again in the same call
+  (up to 5 approvals), and a decline gives `denied`.
+
+Without either, a destructive call is `denied`, and the reason says why.
+
+`codecall:invoke` is reviewed as the one-call script it stands for, with the same rules, reviewers and approvals; a
+refusal is an error result whose structured content is the same payload. Tools a client calls directly (listed in
+`codecall_opt_in` or `metadata_driven`, or with `visibleInListTools: true`) are not reviewed yet.
 
 ## Runtime and process boundary
 

@@ -38,12 +38,20 @@ export type SchemaDescriptionFormat = (typeof SCHEMA_DESCRIPTION_FORMATS)[number
  *   schema's objects open to undeclared keys.
  * - `'fail'`: refuse the answer with `InvalidOutputError` naming the keys.
  *
- * A call that renders the tool's UI sends declared keys only, whatever the policy, and so does an
- * `outputSchema` with a transform (`.transform()`, `z.preprocess()`, `.pipe()`), whose output cannot
- * be compared with the answer key by key.
+ * The policy applies to a call that renders the tool's UI too, and to the `structuredContent` of a
+ * `CallToolResult` the tool returns itself. An `outputSchema` with a transform (`.transform()`,
+ * `z.preprocess()`, `.pipe()`) sends declared keys only, whatever the policy: its output cannot be
+ * compared with the answer key by key.
  */
 export const UNDECLARED_KEYS_POLICIES = ['strip', 'warn', 'keep', 'fail'] as const;
 export type UndeclaredKeysPolicy = (typeof UNDECLARED_KEYS_POLICIES)[number];
+
+/**
+ * What `tools/call` does with a `CallToolResult` a tool returns itself whose `structuredContent` does not match its
+ * object `outputSchema`: `'enforce'` (the default since 1.13) refuses it with `InvalidOutputError`; `'warn'`, the 1.12
+ * behaviour, sends it as returned and logs a warning once per tool.
+ */
+export type StructuredContentValidation = 'warn' | 'enforce';
 
 /**
  * Which end of a list an answer budget keeps when it has to leave items out.
@@ -112,6 +120,14 @@ export interface OutputPolicy {
   undeclaredKeys?: UndeclaredKeysPolicy;
 
   /**
+   * What `tools/call` does with a returned `CallToolResult` whose `structuredContent` does not match `outputSchema`.
+   * See {@link StructuredContentValidation}.
+   *
+   * @default 'enforce'
+   */
+  validateStructuredContent?: StructuredContentValidation;
+
+  /**
    * Fit each answer to a byte budget. `false` turns off a budget an outer level set.
    * See {@link OutputBudget}.
    *
@@ -129,6 +145,7 @@ export const outputPolicySchema = z.object({
   schemaMode: z.enum(OUTPUT_SCHEMA_MODES).optional(),
   schemaDescriptionFormat: z.enum(SCHEMA_DESCRIPTION_FORMATS).optional(),
   undeclaredKeys: z.enum(UNDECLARED_KEYS_POLICIES).optional(),
+  validateStructuredContent: z.enum(['warn', 'enforce']).optional(),
   budget: z
     .union([
       z.literal(false),

@@ -3,8 +3,10 @@
 import {
   resolveOutputSchemaMode,
   type EntryLineage,
+  type InputPolicy,
   type OutputPolicy,
   type ScopeEntry,
+  type StructuredContentValidation,
   type ToolEntry,
 } from '../common';
 import { appOwnerIdOf } from '../utils/lineage.utils';
@@ -17,7 +19,7 @@ type OutputPolicyTool = Pick<ToolEntry, 'metadata' | 'owner'>;
 
 /** What the output-policy lookup reads from a scope: its metadata, its apps and its tools' lineage. */
 export interface OutputPolicyScope<Tool extends OutputPolicyTool = ToolEntry> {
-  readonly metadata: { readonly output?: OutputPolicy };
+  readonly metadata: { readonly output?: OutputPolicy; readonly input?: InputPolicy };
   readonly apps: Pick<ScopeEntry['apps'], 'getApps'>;
   readonly tools: { lineageOf(entry: Tool): EntryLineage | undefined };
 }
@@ -31,11 +33,35 @@ export function toolOutputPolicies<Tool extends OutputPolicyTool>(
   tool: Tool,
   scope: OutputPolicyScope<Tool>,
 ): ToolOutputPolicies {
-  const appId = appOwnerIdOf(scope.tools.lineageOf(tool) ?? [], tool.owner);
-  const app = appId === undefined ? undefined : scope.apps.getApps().find((candidate) => candidate.id === appId);
   // Remote apps have no `output` option
-  const appOutput = (app?.metadata as { output?: OutputPolicy } | undefined)?.output;
+  const appOutput = (appMetadataOf(tool, scope) as { output?: OutputPolicy } | undefined)?.output;
   return [tool.metadata.output, appOutput, scope.metadata.output];
+}
+
+/** Resolve how a returned `CallToolResult`'s `structuredContent` is validated: Tool > App > server > 'enforce'. */
+export function resolveStructuredContentValidation(
+  tool?: OutputPolicy,
+  app?: OutputPolicy,
+  server?: OutputPolicy,
+): StructuredContentValidation {
+  return (
+    tool?.validateStructuredContent ?? app?.validateStructuredContent ?? server?.validateStructuredContent ?? 'enforce'
+  );
+}
+
+/** The `input` policies that apply to `tool`, most specific first: its own, its app's and the server's. */
+export function toolInputPolicies<Tool extends OutputPolicyTool>(
+  tool: Tool,
+  scope: OutputPolicyScope<Tool>,
+): [tool?: InputPolicy, app?: InputPolicy, server?: InputPolicy] {
+  const appInput = (appMetadataOf(tool, scope) as { input?: InputPolicy } | undefined)?.input;
+  return [tool.metadata.input, appInput, scope.metadata.input];
+}
+
+/** The metadata of the app `tool` is in, the app of a plugin or an adapter that contributed it included. */
+function appMetadataOf<Tool extends OutputPolicyTool>(tool: Tool, scope: OutputPolicyScope<Tool>): unknown {
+  const appId = appOwnerIdOf(scope.tools.lineageOf(tool) ?? [], tool.owner);
+  return appId === undefined ? undefined : scope.apps.getApps().find((candidate) => candidate.id === appId)?.metadata;
 }
 
 /**

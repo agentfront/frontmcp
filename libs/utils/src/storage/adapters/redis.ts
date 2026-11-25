@@ -19,6 +19,7 @@ import {
   COMPARE_AND_DELETE_SCRIPT,
   COMPARE_AND_EXPIRE_SCRIPT,
   COMPARE_AND_SET_SCRIPT,
+  EXTEND_TTL_SCRIPT,
 } from '../utils/compare-and-delete';
 import { BaseStorageAdapter } from './base';
 
@@ -281,6 +282,17 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
       expectedValue,
     );
     return deleted === 1;
+  }
+
+  override async extendTtl(key: string, ttlSeconds: number): Promise<boolean> {
+    validateTTL(ttlSeconds);
+    const extended = await this.getConnectedClient().eval(
+      EXTEND_TTL_SCRIPT,
+      1,
+      this.prefixKey(key),
+      String(ttlSeconds),
+    );
+    return extended === 1;
   }
 
   override async expireIfEquals(key: string, expectedValue: string, ttlSeconds: number): Promise<boolean> {

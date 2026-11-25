@@ -7,7 +7,7 @@
 
 import { StorageNotConnectedError, StorageNotSupportedError } from '../errors';
 import type { MessageHandler, SetEntry, SetOptions, StorageAdapter, Unsubscribe } from '../types';
-import { validateOptionalTTL } from '../utils/ttl';
+import { extendTtlByReading, validateOptionalTTL } from '../utils/ttl';
 
 /**
  * Abstract base class for storage adapters.
@@ -140,6 +140,11 @@ export abstract class BaseStorageAdapter implements StorageAdapter {
       this.backendName,
       'Use the memory, Redis, Upstash, Vercel KV or SQLite adapter for an atomic compare-and-delete.',
     );
+  }
+
+  /** Default: a read of the TTL then `expire`, which never lowers the TTL it read; atomic backends override it. */
+  async extendTtl(key: string, ttlSeconds: number): Promise<boolean> {
+    return extendTtlByReading(this, key, ttlSeconds);
   }
 
   /** Default: not supported, for the same reason as {@link deleteIfEquals}. */

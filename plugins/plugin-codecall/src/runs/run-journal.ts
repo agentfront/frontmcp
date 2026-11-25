@@ -23,7 +23,8 @@ export function jsonBytes(value: unknown): number {
   return encoder.encode(JSON.stringify(value) ?? '').byteLength;
 }
 
-function argumentsHashOf(args: unknown): string {
+/** SHA-256 (hex) of the arguments' canonical JSON. */
+export function argumentsHashOf(args: unknown): string {
   try {
     return sha256Hex(canonicalJson(args ?? null));
   } catch {
@@ -103,6 +104,11 @@ export class RunJournal {
         this.ended(entry);
       },
     };
+  }
+
+  /** The entries so far, without closing the journal. */
+  entriesSoFar(): readonly CodeCallJournalEntry[] {
+    return this.entries;
   }
 
   /** The arguments and result of a call, when `keepValues` is on. */

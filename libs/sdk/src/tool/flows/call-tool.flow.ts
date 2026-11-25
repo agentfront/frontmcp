@@ -52,6 +52,7 @@ import {
   type Token,
 } from '../../common';
 import { callSurfaceOf, entryUnavailableError, isOfferedOnSurface } from '../../common/availability';
+import { resolveInputUndeclaredKeysPolicy } from '../../common/metadata/input-policy';
 import { normalizeToolAuthProviders, resolveToolVisibility } from '../../common/metadata/tool.metadata';
 import {
   lookupTool,
@@ -96,9 +97,12 @@ import { TaskNotifier } from '../../task/helpers/task-notifier';
 import { TASK_DEFAULTS, toWireShape, type TaskRecord } from '../../task/task.types';
 import { linkedAbortController } from '../../utils/abort.utils';
 import { appOwnerIdOf, hookOwnerIdOf, isServerEntryOwner } from '../../utils/lineage.utils';
-import { toolOutputPolicies } from '../tool-output-policy';
+import { resolveStructuredContentValidation, toolInputPolicies, toolOutputPolicies } from '../tool-output-policy';
+import { asElicitationFallback, isReturnedCallToolResult } from '../tool.utils';
+import { isAppOnlyTool, knownPlatformOf, rendersAppPages } from '../ui/app-only-tools';
 import { toolServingMode } from '../ui/serving-mode-default';
 import { hasUIConfig, WIDGET_CALL_META_KEY } from '../ui/ui-shared';
+import { findUndeclaredArguments, formatKeyPath } from '../undeclared-arguments';
 import { askToOpenConnectPages, credentialsRequiredErrorOf, evaluateToolCredentialGate } from './tool-credentials.gate';
 
 /**
@@ -182,6 +186,8 @@ const stateSchema = z.object({
   uiResult: z.any().optional() as z.ZodType<ToolResponseContent | undefined>,
   // UI metadata from rendering (merged into _meta)
   uiMeta: z.record(z.string(), z.unknown()).optional(),
+  // Under input.undeclaredKeys 'warn': the line the answer ends with, naming the arguments that were ignored
+  undeclaredArgumentsNote: z.string().optional(),
   // Metadata hooks add to the result (e.g. the cache plugin's `cache: 'hit'`), merged into the
   // result's _meta; never merged into rawOutput, which is the tool's data
   resultMeta: z.record(z.string(), z.unknown()).optional(),
@@ -219,6 +225,8 @@ const plan = {
     // A session that listed an older tool list is told so before a tool it may no longer have is looked up
     'checkSurface',
     'findTool',
+    // A hook that switched the tool hands the run over to the hooks of the tool that runs
+    'useToolHooks',
     'checkEnabled',
     // A lazy app's entry that is on and still a placeholder: its app failed to load before this run
     'checkAppLoaded',
@@ -268,6 +276,12 @@ const resolvedTools = new ResolvedEntries<ToolEntry>();
 /** The undeclared key paths already reported per tool, so the 'warn' policy names each one once. */
 const reportedUndeclaredKeyPaths = new WeakMap<CallToolEntry, Set<string>>();
 
+/** Tools that returned a structuredContent off their outputSchema and had it sent, so it is logged once. */
+const reportedInvalidStructuredContent = new WeakSet<CallToolEntry>();
+
+/** The undeclared argument key paths already reported per tool, so `input.undeclaredKeys: 'warn'` logs each once. */
+const reportedUndeclaredArguments = new WeakMap<CallToolEntry, Set<string>>();
+
 /** Tools whose answer the budget left whole because a cut broke the outputSchema, so it is logged once. */
 const reportedUnfittedTools = new WeakSet<CallToolEntry>();
 
@@ -309,6 +323,9 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   }
 
   logger = this.scopeLogger.child('CallToolFlow');
+
+  /** The output the UI renders, parsed once per call (see {@link uiOutput}). */
+  private declaredUiOutput?: { value: unknown };
 
   /** The tool's name (its `id`, else its `name`) once `findTool` resolved it, else the name the call asks for. */
   get toolName(): string {
@@ -489,10 +506,29 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       throw new ToolNotFoundError(name);
     }
 
+    // A tool for the MCP Apps page only answers a client that renders no page like an unknown tool; a task's run
+    // was checked as the call that created it
+    const isTaskRun = Boolean(ctxObj?.taskId);
+    if (isAppOnlyTool(tool.metadata) && this.isClientCall() && !isTaskRun && !rendersAppPages(this.appPagePlatform())) {
+      this.logger.warn(`findTool: rejecting tools/call of "${name}", a tool for the MCP Apps page only`);
+      throw new ToolNotFoundError(name);
+    }
+
     this.logger = this.logger.child(`CallToolFlow(${name})`);
     this.state.set('tool', tool);
     this.logger.verbose(`findTool: tool "${name}" found`);
     this.logger.verbose('findTool:done');
+  }
+
+  /** The settled tool's hooks run from here on, in place of the requested one's when a hook switched it. */
+  @Stage('useToolHooks')
+  async useToolHooks() {
+    const { tool } = this.state;
+    if (!tool) return;
+    await this.useEntryHooks(
+      hookOwnerIdOf(this.scope.tools.lineageOf(tool as ToolEntry) ?? [], tool.owner),
+      tool.record.provide,
+    );
   }
 
   /** A tool whose `enabled` is off is refused with `FEATURE_OFF` and the remedy of its source. */
@@ -1241,7 +1277,6 @@ export default class CallToolFlow extends FlowBase<typeof name> {
 
     try {
       toolContext.input = tool.parseInput(input);
-      this.logger.verbose('validateInput:done');
     } catch (err) {
       if (err instanceof z.ZodError) {
         throw new InvalidInputError('Invalid tool input', err.issues);
@@ -1250,6 +1285,22 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       this.logger.error('validateInput: failed to parse input', err);
       throw new InvalidInputError('Unknown error occurred when trying to parse input');
     }
+    await this.applyInputPolicy(tool, input.arguments, toolContext.input);
+    this.logger.verbose('validateInput:done');
+  }
+
+  /** `input.undeclaredKeys` for the arguments the `inputSchema` does not declare, which parsing dropped. */
+  private async applyInputPolicy(tool: CallToolEntry, sent: unknown, parsed: unknown): Promise<void> {
+    const policy = resolveInputUndeclaredKeysPolicy(...toolInputPolicies(tool, this.scope));
+    if (policy === 'strip') return;
+    const keyPaths = findUndeclaredArguments(tool.inputSchema ?? {}, sent, parsed);
+    if (keyPaths.length === 0) return;
+    const messages = await import('../undeclared-arguments-message.js');
+    const declaredKeys = Object.keys(tool.inputSchema ?? {});
+    if (policy === 'fail') throw new InvalidInputError(messages.undeclaredArgumentsRefusal(keyPaths, declaredKeys));
+    this.state.set('undeclaredArgumentsNote', messages.undeclaredArgumentsNote(keyPaths, declaredKeys));
+    const newKeyPaths = unreportedKeyPaths(reportedUndeclaredArguments, tool, keyPaths.map(formatKeyPath));
+    if (newKeyPaths.length > 0) this.logger.warn(messages.undeclaredArgumentsWarning(tool.metadata.name, newKeyPaths));
   }
 
   @Stage('execute')
@@ -1398,7 +1449,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
             },
           },
         };
-        toolContext.output = fallbackResponse;
+        toolContext.output = asElicitationFallback(fallbackResponse);
 
         this.logger.verbose('execute:done (elicitation fire-and-forget fallback)');
         return;
@@ -1468,8 +1519,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   @Stage('applyUI')
   async applyUI() {
     this.logger.verbose('applyUI:start');
-    const { tool, rawOutput: executeOutput, input } = this.state;
-    const rawOutput = declaredOutput(tool, executeOutput);
+    const { tool, input } = this.state;
 
     // Skip UI for calls that want the data only: an agent's tool calls, and the calls a widget
     // makes back to the server, through `ui/callServerTool` or a `tools/call` its bridge marks
@@ -1484,6 +1534,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       this.logger.verbose('applyUI:skip (no UI config)');
       return;
     }
+    const rawOutput = this.uiOutput();
 
     try {
       const scope = this.scope;
@@ -1658,9 +1709,9 @@ export default class CallToolFlow extends FlowBase<typeof name> {
    * is rendered for this call when the serving mode didn't, and goes to this caller only.
    */
   private async applyHtmlResponse(prefix: string, renderedHtml: string | undefined, platformType: AIPlatformType) {
-    const { tool, rawOutput: executeOutput, input } = this.state;
+    const { tool, input } = this.state;
     if (!tool || !this.scope.toolUI) return;
-    const rawOutput = declaredOutput(tool, executeOutput);
+    const rawOutput = this.uiOutput();
     const { buildHtmlResponseText, buildToolResponseContent, isUIRenderFailure } = await import('../ui/ui-render.js');
 
     let html = renderedHtml;
@@ -1719,9 +1770,10 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     const outputPolicies = toolOutputPolicies(tool, this.scope);
     const undeclaredKeys = resolveUndeclaredKeysPolicy(...outputPolicies);
     const parseResult = tool.safeParseOutput(rawOutput, {
-      // A call that renders the tool's UI sends declared keys only, whatever the policy
-      undeclaredKeys: uiResult && undeclaredKeys === 'keep' ? 'strip' : undeclaredKeys,
+      undeclaredKeys,
       onUndeclaredKeys: (keyPaths) => this.warnUndeclaredKeysOnce(tool, keyPaths),
+      validateStructuredContent: resolveStructuredContentValidation(...outputPolicies),
+      onInvalidStructuredContent: () => this.warnInvalidStructuredContentOnce(tool),
     });
 
     if (!parseResult.success) {
@@ -1752,7 +1804,8 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       }
     }
 
-    const result = parseResult.data;
+    // A copy: the parsed answer can be the tool's own CallToolResult, which may be cached or frozen
+    const result = { ...parseResult.data };
 
     // Preserve any _meta the tool returned itself
     // Runtime type guard to safely extract _meta from rawOutput
@@ -1788,6 +1841,11 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       if (uiMeta) {
         result._meta = { ...result._meta, ...uiMeta };
       }
+    }
+
+    const { undeclaredArgumentsNote } = this.state;
+    if (undeclaredArgumentsNote) {
+      result.content = [...result.content, { type: 'text', text: undeclaredArgumentsNote }];
     }
 
     // Log the final result being sent
@@ -1898,6 +1956,17 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     );
   }
 
+  /** The caller's platform for a tool meant for the MCP Apps page: what it negotiated before a user-agent guess. */
+  private appPagePlatform(): string | undefined {
+    const { authInfo } = this.state;
+    const sessionId = authInfo?.sessionId;
+    return knownPlatformOf(
+      this.tryGetContext()?.platformType,
+      sessionId ? this.scope.notifications.getPlatformType(sessionId) : undefined,
+      authInfo?.sessionIdPayload?.platformType,
+    );
+  }
+
   private callerProfile(): ClientProfile | undefined {
     return callerClientProfile(this.scope.metadata.clients, {
       context: this.tryGetContext(),
@@ -1919,18 +1988,48 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     return (schemaMode === 'definition' || schemaMode === 'both') && isObjectSchema;
   }
 
+  /** What the UI renders and echoes: what the `outputSchema` declares, and undeclared keys under 'keep'; parsed once. */
+  private uiOutput(): unknown {
+    const { tool, rawOutput } = this.state;
+    if (!tool) return rawOutput;
+    if (this.declaredUiOutput) return this.declaredUiOutput.value;
+    const keepsUndeclaredKeys = resolveUndeclaredKeysPolicy(...toolOutputPolicies(tool, this.scope)) === 'keep';
+    this.declaredUiOutput = { value: declaredOutput(tool, rawOutput, keepsUndeclaredKeys ? 'keep' : 'strip') };
+    return this.declaredUiOutput.value;
+  }
+
+  private warnInvalidStructuredContentOnce(tool: CallToolEntry): void {
+    if (reportedInvalidStructuredContent.has(tool)) return;
+    reportedInvalidStructuredContent.add(tool);
+    this.logger.warn(
+      `Tool "${tool.metadata.name}" returned a CallToolResult whose structuredContent is missing or does not ` +
+        "match its outputSchema, and output.validateStructuredContent: 'warn' sent it as returned. Without 'warn' " +
+        'such an answer is refused with INVALID_OUTPUT.',
+    );
+  }
+
   private warnUndeclaredKeysOnce(tool: CallToolEntry, keyPaths: string[]): void {
-    const reportedKeyPaths = reportedUndeclaredKeyPaths.get(tool) ?? new Set<string>();
-    reportedUndeclaredKeyPaths.set(tool, reportedKeyPaths);
-    const roomLeft = MAX_REPORTED_UNDECLARED_KEY_PATHS - reportedKeyPaths.size;
-    const newKeyPaths = keyPaths.filter((keyPath) => !reportedKeyPaths.has(keyPath)).slice(0, roomLeft);
+    const newKeyPaths = unreportedKeyPaths(reportedUndeclaredKeyPaths, tool, keyPaths);
     if (newKeyPaths.length === 0) return;
-    newKeyPaths.forEach((keyPath) => reportedKeyPaths.add(keyPath));
     this.logger.warn(
       `Tool "${tool.metadata.name}" answered with keys its outputSchema does not declare, so they were stripped: ` +
         `${newKeyPaths.join(', ')}. Declare them, or set output.undeclaredKeys to 'strip', 'keep' or 'fail'.`,
     );
   }
+}
+
+/** The key paths not reported for `tool` yet, now recorded as reported, up to the most a tool reports. */
+function unreportedKeyPaths(
+  reported: WeakMap<CallToolEntry, Set<string>>,
+  tool: CallToolEntry,
+  keyPaths: readonly string[],
+): string[] {
+  const reportedKeyPaths = reported.get(tool) ?? new Set<string>();
+  reported.set(tool, reportedKeyPaths);
+  const roomLeft = MAX_REPORTED_UNDECLARED_KEY_PATHS - reportedKeyPaths.size;
+  const newKeyPaths = keyPaths.filter((keyPath) => !reportedKeyPaths.has(keyPath)).slice(0, roomLeft);
+  newKeyPaths.forEach((keyPath) => reportedKeyPaths.add(keyPath));
+  return newKeyPaths;
 }
 
 /**
@@ -1941,11 +2040,12 @@ export default class CallToolFlow extends FlowBase<typeof name> {
 function declaredOutput(
   tool: Pick<ToolEntry, 'outputSchema' | 'safeParseOutput'> | undefined,
   output: unknown,
+  undeclaredKeys: 'strip' | 'keep',
 ): unknown {
   if (!tool?.outputSchema || typeof output !== 'object' || output === null || Array.isArray(output)) return output;
-  if (Array.isArray((output as Record<string, unknown>)['content'])) return output;
-  const parsed = tool.safeParseOutput(output);
+  const parsed = tool.safeParseOutput(output, { undeclaredKeys });
   if (!parsed.success) return output;
+  if (isReturnedCallToolResult(tool.outputSchema, output)) return parsed.data;
   const structured = parsed.data.structuredContent;
   return typeof structured === 'object' && structured !== null && !Array.isArray(structured) ? structured : output;
 }
