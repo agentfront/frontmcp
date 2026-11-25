@@ -1,5 +1,5 @@
 import type { OnShutdown, Reference } from '@frontmcp/sdk';
-import { sha256Hex, type NamespacedStorage } from '@frontmcp/utils';
+import { randomUUID, sha256Hex, type NamespacedStorage } from '@frontmcp/utils';
 
 import type { CodeCallBudget } from '../codecall.types';
 
@@ -48,6 +48,19 @@ export class CodeCallBudgetStore implements OnShutdown {
     );
   }
 
+  /** Whether a call already spent the grant named `grantKey`. */
+  async isSpent(grantKey: string): Promise<boolean> {
+    return this.storage.exists(spentKeyOf(grantKey));
+  }
+
+  /** Spends the grant for one call: true only for the claim whose marker was set first, on any instance. */
+  async claim(grantKey: string, ttlSeconds: number): Promise<boolean> {
+    const key = spentKeyOf(grantKey);
+    const claimant = randomUUID();
+    await this.storage.set(key, claimant, { ttlSeconds, ifNotExists: true });
+    return (await this.storage.get(key)) === claimant;
+  }
+
   async onShutdown(): Promise<void> {
     await this.storage.disconnect();
   }
@@ -56,6 +69,11 @@ export class CodeCallBudgetStore implements OnShutdown {
   private keyOf(budget: CodeCallBudget, caller: string, nowSeconds: number): string {
     return `${budget.name}:${sha256Hex(caller)}:${windowStartOf(budget, nowSeconds)}`;
   }
+}
+
+/** A `.` keeps the marker apart from every budget's keys, whose names have none. */
+function spentKeyOf(grantKey: string): string {
+  return `grant.spent:${sha256Hex(grantKey)}`;
 }
 
 function windowStartOf(budget: CodeCallBudget, nowSeconds: number): number {

@@ -205,7 +205,7 @@ export default class ExecuteTool extends ToolContext {
     scriptHash: string,
     journal: RunJournal,
     reviewService: CodeCallReviewService | undefined,
-    approvedByPerson: ReadonlySet<string>,
+    approvedByPerson: Set<string>,
     canElicit: boolean,
   ): Promise<ReviewedAttempt> {
     const caller: RunReviewCaller = {
@@ -220,8 +220,12 @@ export default class ExecuteTool extends ToolContext {
       journal,
     };
     const review = reviewService ? await createRunReview(reviewService, caller, scriptHash) : undefined;
-    const approvals = approvalsOf(caller, scriptHash, reviewService);
-    const budgets = budgetMeterOf(this.tryGet(CodeCallBudgetStoreToken), this, approvals, this.logger);
+    const approval = {
+      approvals: approvalsOf(caller, scriptHash, reviewService),
+      grantedByPerson: approvedByPerson,
+      canApprove: caller.approvalService !== undefined || canElicit,
+    };
+    const budgets = budgetMeterOf(this.tryGet(CodeCallBudgetStoreToken), this, approval, this.logger);
     const result = await this.runScript(input, journal, review, budgets);
     return { result, journal, review, budgets };
   }

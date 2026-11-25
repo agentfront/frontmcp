@@ -46,24 +46,32 @@ function callerContext(subject: string | undefined, session?: string) {
 
 const ARCHIVE = { toolName: 'users.archive', args: { ids: ['t1'] } };
 
-/** The approvals of one script, with the states a person gave approval ids in the Approval plugin. */
-function approvalsWith(states: Record<string, ApprovalRecordView['state']> = {}, granted = new Set<string>()) {
+const GRANTED_AT = Date.now() - 600_000;
+
+/** The approvals of one script, with the states a person gave approval ids in the Approval plugin, 10 minutes ago. */
+function approvalsWith(states: Record<string, ApprovalRecordView['state']> = {}, grantedAt = GRANTED_AT) {
   const queryApprovals = async ({ toolId }: { toolId: string }): Promise<ApprovalRecordView[]> => {
     const state = states[toolId];
-    return state ? [{ state, scope: 'session', grantedAt: Date.now(), metadata: { maxCalls: 10 } }] : [];
+    return state ? [{ state, scope: 'session', grantedAt, metadata: { maxCalls: 10 } }] : [];
   };
   return new ReviewApprovals({
     scriptHash: 'script-hash',
     policyVersion: 'policy',
     maxAgeMs: 3_600_000,
     service: { queryApprovals },
-    granted,
+    granted: new Set(),
   });
 }
 
-function meterFor(store: CodeCallBudgetStore, caller: string, approvals = approvalsWith()): BudgetMeter {
-  return new BudgetMeter(store, caller, approvals);
+function meterFor(
+  store: CodeCallBudgetStore,
+  caller: string,
+  { approvals = approvalsWith(), grantedByPerson = new Set<string>(), canApprove = true } = {},
+): BudgetMeter {
+  return new BudgetMeter(store, caller, { approvals, grantedByPerson, canApprove });
 }
+
+const recordsGrantOf = (call = ARCHIVE) => approvalsWith().budgetReferenceFor(call, 'records-per-hour').id;
 
 async function useCalls(meter: BudgetMeter, records: number, calls = 1): Promise<void> {
   for (let index = 0; index < calls; index++) {
@@ -240,7 +248,7 @@ describe('budget approvals', () => {
 
   it('asks for the call over the budget with a reference shaped as a review approval, for that call only', async () => {
     const approvals = approvalsWith();
-    const ada = meterFor(store, 'subject:ada', approvals);
+    const ada = meterFor(store, 'subject:ada', { approvals });
 
     expect(await ada.check(ARCHIVE.toolName, ARCHIVE.args)).toMatchObject({ decision: 'needs_approval' });
     const reference = ada.pendingApproval?.reference;
@@ -256,13 +264,72 @@ describe('budget approvals', () => {
     );
   });
 
-  it('lets the approved call run once a run, and asks again for the next call over the limit', async () => {
-    const granted = new Set([approvalsWith().budgetReferenceFor(ARCHIVE, 'records-per-hour').id]);
-    const ada = meterFor(store, 'subject:ada', approvalsWith({}, granted));
+  it("spends a person's grant on one call, and asks again for the same call after it", async () => {
+    const grantedByPerson = new Set([recordsGrantOf()]);
+    const ada = meterFor(store, 'subject:ada', { grantedByPerson });
 
     expect(await ada.check(ARCHIVE.toolName, ARCHIVE.args)).toEqual({ decision: 'allow' });
+    expect(grantedByPerson.size).toBe(0);
     expect(await ada.check(ARCHIVE.toolName, ARCHIVE.args)).toMatchObject({ decision: 'needs_approval' });
     expect(await ada.check(ARCHIVE.toolName, { ids: ['t2'] })).toMatchObject({ decision: 'needs_approval' });
+  });
+
+  it('spends an Approval plugin grant once, never again in a later run, and takes a new grant as new', async () => {
+    const approvals = approvalsWith({ [recordsGrantOf()]: 'approved' });
+
+    expect(await meterFor(store, 'subject:ada', { approvals }).check(ARCHIVE.toolName, ARCHIVE.args)).toEqual({
+      decision: 'allow',
+    });
+    expect(await meterFor(store, 'subject:ada', { approvals }).check(ARCHIVE.toolName, ARCHIVE.args)).toMatchObject({
+      decision: 'needs_approval',
+    });
+    const regranted = approvalsWith({ [recordsGrantOf()]: 'approved' }, GRANTED_AT + 1);
+    expect(
+      await meterFor(store, 'subject:ada', { approvals: regranted }).check(ARCHIVE.toolName, ARCHIVE.args),
+    ).toEqual({ decision: 'allow' });
+  });
+
+  it('lets only one of two concurrent runs on instances sharing a store spend one grant', async () => {
+    const storage = await sharedStorage();
+    const first = new CodeCallBudgetStore(storage, [RECORDS_PER_HOUR]);
+    const second = new CodeCallBudgetStore(storage, [RECORDS_PER_HOUR]);
+    await useCalls(meterFor(first, 'subject:ada'), 200);
+    const approvals = approvalsWith({ [recordsGrantOf()]: 'approved' });
+
+    const decisions = await Promise.all(
+      [first, second].map((instance) =>
+        meterFor(instance, 'subject:ada', { approvals }).check(ARCHIVE.toolName, ARCHIVE.args),
+      ),
+    );
+
+    expect(decisions.map(({ decision }) => decision).sort()).toEqual(['allow', 'needs_approval']);
+  });
+
+  it('marks a spent grant for no longer than the grant counts, and lets one of two claims win', async () => {
+    const storage = await sharedStorage();
+    const instance = new CodeCallBudgetStore(storage, [RECORDS_PER_HOUR]);
+
+    const claims = await Promise.all([instance.claim('grant-1', 3000), instance.claim('grant-1', 3000)]);
+
+    expect(claims.sort()).toEqual([false, true]);
+    expect(await instance.isSpent('grant-1')).toBe(true);
+    const [marker] = await storage.keys('grant.spent:*');
+    expect(await storage.ttl(marker)).toBeLessThanOrEqual(3000);
+    const [{ countsForSeconds }] = (await approvalsWith({ [recordsGrantOf()]: 'approved' }).recordedGrantsOf(
+      approvalsWith().budgetReferenceFor(ARCHIVE, 'records-per-hour'),
+    )) as Array<{ countsForSeconds: number }>;
+    expect(countsForSeconds).toBeGreaterThan(2990);
+    expect(countsForSeconds).toBeLessThanOrEqual(3000);
+  });
+
+  it('denies a call over the budget when nobody can approve it', async () => {
+    const ada = meterFor(store, 'subject:ada', { canApprove: false });
+
+    expect(await ada.check(ARCHIVE.toolName, ARCHIVE.args)).toMatchObject({
+      decision: 'denied',
+      reason: expect.stringContaining('nobody can approve it here'),
+    });
+    expect(ada.pendingApproval).toBeUndefined();
   });
 
   it('never lifts a budget with a destructive-call approval, nor approves a destructive call with a budget one', async () => {
@@ -273,15 +340,14 @@ describe('budget approvals', () => {
       [reviewReference.anyArgumentsId as string]: 'approved',
     });
 
-    expect(await meterFor(store, 'subject:ada', approvals).check(ARCHIVE.toolName, ARCHIVE.args)).toMatchObject({
+    expect(await meterFor(store, 'subject:ada', { approvals }).check(ARCHIVE.toolName, ARCHIVE.args)).toMatchObject({
       decision: 'needs_approval',
     });
     expect(await approvalsWith({ [budgetReference.id]: 'approved' }).stateOf(reviewReference, false)).toBe('missing');
   });
 
   it('denies a call a person refused to approve over the budget', async () => {
-    const budgetReference = approvalsWith().budgetReferenceFor(ARCHIVE, 'records-per-hour');
-    const ada = meterFor(store, 'subject:ada', approvalsWith({ [budgetReference.id]: 'denied' }));
+    const ada = meterFor(store, 'subject:ada', { approvals: approvalsWith({ [recordsGrantOf()]: 'denied' }) });
 
     expect(await ada.check(ARCHIVE.toolName, ARCHIVE.args)).toMatchObject({
       decision: 'denied',
@@ -289,21 +355,24 @@ describe('budget approvals', () => {
     });
   });
 
-  it('needs an approval for each budget the call is over', async () => {
+  it('needs a grant for each budget the call is over, and spends none until it has all', async () => {
     const callsPerHour: CodeCallBudget = { ...CALLS_PER_MINUTE, name: 'calls-per-hour', onExceeded: 'needs_approval' };
     const both = new CodeCallBudgetStore(await sharedStorage(), [RECORDS_PER_HOUR, callsPerHour]);
     await useCalls(meterFor(both, 'subject:ada'), 200, 2);
     const recordsId = approvalsWith().budgetReferenceFor(ARCHIVE, 'records-per-hour').id;
     const callsId = approvalsWith().budgetReferenceFor(ARCHIVE, 'calls-per-hour').id;
 
-    const halfApproved = meterFor(both, 'subject:ada', approvalsWith({}, new Set([recordsId])));
-    expect(await halfApproved.check(ARCHIVE.toolName, ARCHIVE.args)).toMatchObject({
+    const grantedByPerson = new Set([recordsId]);
+    const ada = meterFor(both, 'subject:ada', { grantedByPerson });
+    expect(await ada.check(ARCHIVE.toolName, ARCHIVE.args)).toMatchObject({
       decision: 'needs_approval',
       reason: expect.stringContaining('calls-per-hour'),
     });
-    expect(halfApproved.pendingApproval?.reference.id).toBe(callsId);
-    const approved = meterFor(both, 'subject:ada', approvalsWith({}, new Set([recordsId, callsId])));
-    expect(await approved.check(ARCHIVE.toolName, ARCHIVE.args)).toEqual({ decision: 'allow' });
+    expect(ada.pendingApproval?.reference.id).toBe(callsId);
+    expect(grantedByPerson.has(recordsId)).toBe(true);
+    grantedByPerson.add(callsId);
+    expect(await ada.check(ARCHIVE.toolName, ARCHIVE.args)).toEqual({ decision: 'allow' });
+    expect(grantedByPerson.size).toBe(0);
   });
 });
 

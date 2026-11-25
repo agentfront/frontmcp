@@ -5,7 +5,7 @@ import type { CallToolResult } from '@frontmcp/protocol';
 import { getCallSurface, Tool, ToolContext } from '@frontmcp/sdk';
 import { sha256Hex } from '@frontmcp/utils';
 
-import { budgetMeterOf, type BudgetMeter } from '../budgets/budget-meter';
+import { budgetCallerOf, BudgetMeter } from '../budgets/budget-meter';
 import { CodeCallBudgetStoreToken } from '../budgets/budget-store';
 import CodeCallConfig from '../providers/code-call.config';
 import { approvalAnswerSchema, approvalQuestionOf, clientCanElicit } from '../review/approval-elicitation';
@@ -38,6 +38,12 @@ function buildErrorResult(message: string): CallToolResult {
 interface InvocationDecision {
   refusal?: CodeCallReviewResult;
   pending?: PendingApproval;
+}
+
+/** The caller's budgets for one invocation, and the grants a person makes for it in this request. */
+interface InvocationBudgets {
+  meter: BudgetMeter;
+  grantedByPerson: Set<string>;
 }
 
 /** The result for a budget's decision at the call, or undefined when it allows the call. */
@@ -115,14 +121,8 @@ export default class InvokeTool extends ToolContext {
     }
 
     const reviewService = this.tryGet(CodeCallReviewService);
-    const approvedOverBudget = new Set<string>();
-    const approvals = approvalsOf(
-      { authInfo: this.authInfo, approvalService: this.tryGet(ApprovalServiceViewToken), granted: approvedOverBudget },
-      sha256Hex(invocationScriptOf(toolName, toolInput)),
-      reviewService,
-    );
-    const budgets = budgetMeterOf(this.tryGet(CodeCallBudgetStoreToken), this, approvals, this.logger);
-    const budgetRefusal = budgets && (await this.budgetRefusal(budgets, toolName, toolInput, approvedOverBudget));
+    const budgets = this.budgetsFor(toolName, toolInput, reviewService);
+    const budgetRefusal = budgets && (await this.budgetRefusal(budgets, toolName, toolInput));
     if (budgetRefusal) {
       audit?.logSecurityAccessDenied(executionId, toolName, `budget: ${budgetRefusal.status}`);
       return buildReviewResult(budgetRefusal);
@@ -144,7 +144,7 @@ export default class InvokeTool extends ToolContext {
       },
     };
 
-    const budgetedCall = budgets?.startCall();
+    const budgetedCall = budgets?.meter.startCall();
     // The caller's surface goes along, so the flow judges the target for that caller as well. Marked as
     // CodeCall's own call, which may reach a tool CodeCall hides from a client's direct tools/call.
     const ctx = asCodeCallDispatch({
@@ -205,16 +205,38 @@ export default class InvokeTool extends ToolContext {
     });
   }
 
-  /** The budgets' answer for the call; a client that can answer is asked once to approve a call over a budget. */
-  private budgetRefusal(
-    budgets: BudgetMeter,
+  /** The caller's budgets for the call, with the grants a person makes in this request, or undefined without `budgets`. */
+  private budgetsFor(
     toolName: string,
     toolInput: Record<string, unknown>,
-    approvedByPerson: Set<string>,
+    reviewService: CodeCallReviewService | undefined,
+  ): InvocationBudgets | undefined {
+    const store = this.tryGet(CodeCallBudgetStoreToken);
+    if (!store) return undefined;
+    const grantedByPerson = new Set<string>();
+    const approvalService = this.tryGet(ApprovalServiceViewToken);
+    const scriptHash = sha256Hex(invocationScriptOf(toolName, toolInput));
+    const approval = {
+      approvals: approvalsOf(
+        { authInfo: this.authInfo, approvalService, granted: grantedByPerson },
+        scriptHash,
+        reviewService,
+      ),
+      grantedByPerson,
+      canApprove: approvalService !== undefined || clientCanElicit(this.scope, this.tryGetContext()),
+    };
+    return { meter: new BudgetMeter(store, budgetCallerOf(this), approval, this.logger), grantedByPerson };
+  }
+
+  /** The budgets' answer for the call; a client that can answer is asked once to approve a call over a budget. */
+  private budgetRefusal(
+    { meter, grantedByPerson }: InvocationBudgets,
+    toolName: string,
+    toolInput: Record<string, unknown>,
   ): Promise<CodeCallReviewResult | undefined> {
-    return this.askingApproval(approvedByPerson, async () => {
-      const decision = await budgets.check(toolName, toolInput);
-      return { refusal: refusalOf(decision, budgets.pendingApproval), pending: budgets.pendingApproval };
+    return this.askingApproval(grantedByPerson, async () => {
+      const decision = await meter.check(toolName, toolInput);
+      return { refusal: refusalOf(decision, meter.pendingApproval), pending: meter.pendingApproval };
     });
   }
 

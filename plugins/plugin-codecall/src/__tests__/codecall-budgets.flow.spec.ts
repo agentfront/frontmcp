@@ -109,7 +109,7 @@ interface ExecuteOutcome {
   findings?: Array<{ rule: string; message: string; toolName?: string }>;
 }
 
-function serverConfig(options: CodeCallPluginOptionsInput, { approvalPlugin = false, elicitation = false } = {}) {
+function serverConfig(options: CodeCallPluginOptionsInput, { approvalPlugin = true, elicitation = false } = {}) {
   @App({
     id: 'desk',
     name: 'Desk',
@@ -330,8 +330,19 @@ describe('CodeCall budgets', () => {
 });
 
 describe('approving a call over a budget', () => {
-  it('runs the call once a person granted its approval, and asks again for the next call over the limit', async () => {
-    const ada = await open(serverConfig({ budgets: threeCallsPerHour() }, { approvalPlugin: true }), 'ada');
+  it('denies a call over a budget when nobody can approve it, as review does', async () => {
+    const ada = await open(serverConfig({ budgets: threeCallsPerHour() }, { approvalPlugin: false }), 'ada');
+    await execute(ada, THREE_GETS);
+
+    const outcome = await execute(ada, "return await callTool('tickets.get', { id: 4 });");
+
+    expect(outcome).toMatchObject({ status: 'denied', reason: expect.stringContaining('nobody can approve it here') });
+    expect(outcome).not.toHaveProperty('approval');
+    expect(executed).toEqual(['tickets.get:1', 'tickets.get:2', 'tickets.get:3']);
+  });
+
+  it('runs the call once for a grant, and asks again for the same script and for the next call', async () => {
+    const ada = await open(serverConfig({ budgets: threeCallsPerHour() }), 'ada');
     await execute(ada, THREE_GETS);
     const fourth = "return await callTool('tickets.get', { id: 4 });";
 
@@ -341,6 +352,8 @@ describe('approving a call over a budget', () => {
     await ada.callTool('approvals.grant', { id: asked.approval?.id as string });
 
     expect(await execute(ada, fourth)).toMatchObject({ status: 'ok', result: { id: 4 } });
+    const again = await execute(ada, fourth);
+    expect(again).toMatchObject({ status: 'needs_approval', approval: { id: asked.approval?.id } });
     const next = await execute(ada, "return await callTool('tickets.get', { id: 5 });");
     expect(next).toMatchObject({ status: 'needs_approval' });
     expect(next.approval?.id).not.toBe(asked.approval?.id);
@@ -348,7 +361,7 @@ describe('approving a call over a budget', () => {
   });
 
   it('asks for a destructive-call approval and a budget approval apart, and runs the call only with both', async () => {
-    const config = serverConfig({ review: {}, budgets: threeCallsPerHour() }, { approvalPlugin: true });
+    const config = serverConfig({ review: {}, budgets: threeCallsPerHour() });
     const ada = await open(config, 'ada');
     await execute(ada, THREE_GETS);
     const deleteOne = "return await callTool('tickets.delete', { id: 7 });";
@@ -372,7 +385,7 @@ describe('approving a call over a budget', () => {
   it('asks a person through elicitation in the same call, for a script and for codecall:invoke', async () => {
     const config = serverConfig(
       { directCalls: { enabled: true }, budgets: threeCallsPerHour() },
-      { elicitation: true },
+      { approvalPlugin: false, elicitation: true },
     );
     const ada = await open(config, 'ada', { onElicitation: accept });
     await execute(ada, THREE_GETS);
@@ -390,7 +403,7 @@ describe('approving a call over a budget', () => {
   });
 
   it('denies the call when the person declines', async () => {
-    const config = serverConfig({ budgets: threeCallsPerHour() }, { elicitation: true });
+    const config = serverConfig({ budgets: threeCallsPerHour() }, { approvalPlugin: false, elicitation: true });
     const ada = await open(config, 'ada', { onElicitation: async () => ({ action: 'decline' }) });
     await execute(ada, THREE_GETS);
 

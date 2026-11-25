@@ -378,15 +378,15 @@ async execute({ ids }: { ids: string[] }) {
 }
 ```
 
-| Option                           | Default              | Description                                                                                   |
-| -------------------------------- | -------------------- | --------------------------------------------------------------------------------------------- |
-| `budgets.limits[].name`          |                      | Names the budget in answers and in its keys: letters, digits, `_` and `-`, unique.            |
-| `budgets.limits[].counts`        |                      | `'toolCalls'` or `'recordsChanged'`.                                                          |
-| `budgets.limits[].limit`         |                      | The most a caller may use in one window.                                                      |
-| `budgets.limits[].windowSeconds` |                      | The window's length. Windows are fixed, from the Unix epoch: `3600` is each hour on the hour. |
-| `budgets.limits[].onExceeded`    | `'needs_approval'`   | What a call gets once its caller reached the limit: `'needs_approval'` or `'denied'`.         |
-| `budgets.storage`                | `{ type: 'auto' }`   | Where counts are kept, through `createStorage()`. Share it across instances.                  |
-| `budgets.namespace`              | `'codecall-budgets'` | The key prefix of counts in the storage.                                                      |
+| Option                           | Default              | Description                                                                                                                |
+| -------------------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `budgets.limits[].name`          |                      | Names the budget in answers and in its keys: letters, digits, `_` and `-`, unique.                                         |
+| `budgets.limits[].counts`        |                      | `'toolCalls'` or `'recordsChanged'`.                                                                                       |
+| `budgets.limits[].limit`         |                      | The most a caller may use in one window.                                                                                   |
+| `budgets.limits[].windowSeconds` |                      | The window's length. Windows are fixed, from the Unix epoch: `3600` is each hour on the hour.                              |
+| `budgets.limits[].onExceeded`    | `'needs_approval'`   | What a call gets once its caller reached the limit: `'needs_approval'` (`'denied'` when nobody can approve) or `'denied'`. |
+| `budgets.storage`                | `{ type: 'auto' }`   | Where counts and spent-grant markers are kept, through `createStorage()`. Share it across instances.                       |
+| `budgets.namespace`              | `'codecall-budgets'` | The key prefix of counts in the storage.                                                                                   |
 
 - **What counts.** `toolCalls` counts each call that reaches its tool. A call refused before its tool runs (by the
   CodeCall policy, its input, an unknown name, or a rate or quota limit) doesn't count. `recordsChanged` counts what the
@@ -400,13 +400,15 @@ async execute({ ids }: { ids: string[] }) {
   and when its window resets. Budgets count per caller, not per run, so they carry across runs that resume.
 - **Approving a call over a budget.** A budget's `needs_approval` carries an `approval` whose `id` covers this script,
   this call's tool and arguments, and that budget; it has no `anyArgumentsId`. A person grants it as a review approval
-  ([Approvals](#approvals)): through the Approval plugin, or through elicitation, which asks in the same call. The
-  approved call then runs and is counted, once per run while the grant lasts, and the next call over the limit asks
-  again; a call over two budgets needs both. A budget approval and a review approval never stand for each other, so
-  approving a destructive call never lifts a budget. A refused approval gives `denied`. Without the Approval plugin or
-  a client that can elicit, the answer is still `needs_approval`. Until a run resumes from its journal (#1335), an
-  approved script runs again from the start, so the calls before the approved one run and count again, and each that
-  is over the limit asks for its own approval.
+  ([Approvals](#approvals)): through the Approval plugin, or through elicitation, which asks in the same call. Each
+  grant lets exactly one call over the limit run, and that call is counted. Sending the same script again, or the same
+  call again, asks again, and a call over two budgets needs a grant for each. The call that spends an Approval plugin
+  grant sets a marker in `budgets.storage` (set only if absent, kept while the grant counts), so two runs, on one
+  instance or on several sharing the store, never spend one grant. A budget approval and a review approval never stand
+  for each other, so approving a destructive call never lifts a budget. A refused approval gives `denied`, and so does
+  a budget stop when nobody can approve it (no Approval plugin, and a client that can't elicit), as review answers a
+  destructive call. Until a run resumes from its journal (#1335), an approved script runs again from the start, so the
+  calls before the approved one run and count again, and each that is over the limit asks for its own approval.
 - **The call that crosses the limit runs.** A call's records changed are known only once it ran, so the call that
   takes a caller past a `recordsChanged` limit runs, and the next one is stopped. Calls that start together, in a
   `parallel()` or in two scripts at once, are each checked before any of them is counted, and can go past a limit by
@@ -416,8 +418,9 @@ async execute({ ids }: { ids: string[] }) {
 - **Shared counts.** Each count is one key per budget, caller (as a SHA-256) and window, added to with an atomic
   increment and kept for at least the window. On Redis or SQLite every instance on the store counts together; in
   memory each instance counts alone. CodeCall's reserved names are never counted.
-- **A store that fails closes.** When the counts can't be read, the call is `denied` (`budget-unavailable`), and
-  once a count couldn't be kept, the rest of that run is too. An approval wouldn't fix a store, so it isn't asked for.
+- **A store that fails closes.** When the budgets can't be checked (the counts or an approval can't be read), the call
+  is `denied` (`budget-unavailable`), and once a count couldn't be kept, the rest of that run is too. An approval
+  wouldn't fix a store, so it isn't asked for.
 
 ## Runtime and process boundary
 

@@ -46,8 +46,9 @@ function keepLineOf(ttlSeconds: number): string {
 
 const BUDGET_LINE =
   '\nBUDGETS: each caller has limits per time window. A budget-exceeded finding means a budget is used up and the call ' +
-  'did not run; it resets with its window (the finding says when). needs_approval: a person may approve that call, ' +
-  'then send the same script again. denied: send it again once the window resets.';
+  'did not run; it resets with its window (the finding says when). needs_approval: a person may approve that one call, ' +
+  'then send the same script again. denied: the budget allows no approval, or nobody can approve here; send it again ' +
+  'once the window resets.';
 
 /**
  * The `codecall:execute` description for the server's resolved `vm` options, whether its `review` is on, how long

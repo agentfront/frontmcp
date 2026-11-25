@@ -34,6 +34,12 @@ export interface CodeCallApprovalReference {
 
 export type CodeCallApprovalState = 'approved' | 'denied' | 'missing';
 
+/** A grant in the Approval plugin's store: its name, unique per grant, and how many more seconds it counts here. */
+export interface RecordedGrant {
+  grantKey: string;
+  countsForSeconds: number;
+}
+
 export interface ReviewApprovalsOptions {
   scriptHash: string;
   policyVersion: string;
@@ -101,6 +107,19 @@ export class ReviewApprovals {
     if (used >= maxCalls) return 'missing';
     if (consume) this.callsByGrant.set(reference.anyArgumentsId, used + 1);
     return APPROVED;
+  }
+
+  /** The Approval plugin's grants of exactly this reference that still count, or `denied` when a person refused it. */
+  async recordedGrantsOf(reference: CodeCallApprovalReference): Promise<RecordedGrant[] | typeof DENIED> {
+    const records = await this.recordsOf(reference.id);
+    if (records.some((record) => record.state === DENIED)) return DENIED;
+    const countsUntil = (record: ApprovalRecordView) => record.grantedAt + this.options.maxAgeMs;
+    return records
+      .filter((record) => record.state === APPROVED)
+      .map((record) => ({
+        grantKey: `${reference.id}:${record.grantedAt}`,
+        countsForSeconds: Math.max(1, Math.ceil((countsUntil(record) - Date.now()) / 1000)),
+      }));
   }
 
   private async recordsOf(approvalId: string): Promise<ApprovalRecordView[]> {

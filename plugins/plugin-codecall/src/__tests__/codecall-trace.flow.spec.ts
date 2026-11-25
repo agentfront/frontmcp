@@ -219,10 +219,10 @@ describe.each<CodeCallVmRuntime>(['node-vm', 'interpreter'])('codecall:execute t
 
       const outcome = await execute(serverConfig({ vm, budgets }, true), THREE_CALLS);
 
-      expect(outcome.status).toBe('needs_approval');
+      expect(outcome.status).toBe('denied');
       const runSpan = codecallSpans().find((span) => span.name === 'codecall run');
       expect(runSpan?.attributes).toMatchObject({
-        'codecall.review.decision': 'needs_approval',
+        'codecall.review.decision': 'denied',
         'codecall.review.findings.count': 1,
         'codecall.review.findings.rules': 'budget-exceeded',
         'codecall.review.findings': expect.stringMatching(
