@@ -295,6 +295,87 @@ describe('budget counts', () => {
     });
   });
 
+  it('stops a call when the run lost a count while the call was being admitted, giving back what it took', async () => {
+    const store = new CodeCallBudgetStore(storage, [RECORDS_PER_HOUR, CALLS_PER_HOUR], clock);
+    const ada = meterFor(store, 'subject:ada');
+    const finished = ada.startCall(ARCHIVE);
+    await finished.end();
+    jest.spyOn(store, 'addRecords').mockRejectedValueOnce(new Error('connection refused'));
+    const realReserve = store.reserveCall.bind(store);
+    jest.spyOn(store, 'reserveCall').mockImplementationOnce(async (caller) => {
+      const reservation = await realReserve(caller);
+      finished.dispatch.onRecordsChanged(5);
+      await new Promise((resolve) => setImmediate(resolve));
+      return reservation;
+    });
+    const call = ada.startCall(ARCHIVE);
+
+    await expect(call.dispatch.beforeExecute()).rejects.toMatchObject({ code: 'RATE_LIMIT_EXCEEDED' });
+
+    expect(call.refusal?.decision.findings).toEqual([expect.objectContaining({ rule: BUDGET_UNAVAILABLE_RULE })]);
+    const [callsKey] = await storage.keys('calls-per-hour:*');
+    expect(await storage.get(callsKey)).toBe('0');
+    jest.restoreAllMocks();
+  });
+
+  it('touches no later budget once a call is over one that denies, so two calls never push each other over', async () => {
+    const hourly: CodeCallBudget = { ...CALLS_PER_MINUTE, name: 'calls-per-hour', limit: 1 };
+    const daily: CodeCallBudget = { ...CALLS_PER_MINUTE, name: 'calls-per-day', limit: 1, windowSeconds: 86400 };
+    const store = new CodeCallBudgetStore(storage, [hourly, daily], clock);
+    const realIncrBy = storage.incrBy.bind(storage);
+    let secondReserved!: () => void;
+    const afterSecond = new Promise<void>((resolve) => (secondReserved = resolve));
+    let dailyIncrements = 0;
+    jest.spyOn(storage, 'incrBy').mockImplementation(async (key, amount) => {
+      if (key.startsWith('calls-per-day:') && amount > 0 && dailyIncrements++ === 0) await afterSecond;
+      return realIncrBy(key, amount);
+    });
+
+    const first = store.reserveCall('subject:ada');
+    await new Promise((resolve) => setImmediate(resolve));
+    const second = await store.reserveCall('subject:ada');
+    secondReserved();
+
+    expect((await first).exceeded).toEqual([]);
+    expect(second.exceeded.map(({ budget }) => budget.name)).toEqual(['calls-per-hour']);
+    const [hourlyKey] = await storage.keys('calls-per-hour:*');
+    const [dailyKey] = await storage.keys('calls-per-day:*');
+    expect([await storage.get(hourlyKey), await storage.get(dailyKey)]).toEqual(['1', '1']);
+    jest.restoreAllMocks();
+  });
+
+  it('takes back every increment a reservation made, and rejects a release that could not take one back', async () => {
+    const daily: CodeCallBudget = { ...CALLS_PER_HOUR, name: 'calls-per-day', windowSeconds: 86400 };
+    const store = new CodeCallBudgetStore(storage, [CALLS_PER_HOUR, daily], clock);
+
+    await (await store.reserveCall('subject:ada')).release();
+    const failing = await store.reserveCall('subject:ada');
+    jest.spyOn(storage, 'incrBy').mockRejectedValueOnce(new Error('connection refused'));
+
+    await expect(failing.release()).rejects.toThrow('connection refused');
+    jest.restoreAllMocks();
+    const keys = [...(await storage.keys('calls-per-hour:*')), ...(await storage.keys('calls-per-day:*'))];
+    expect(await Promise.all(keys.map((key) => storage.get(key)))).toEqual(['1', '0']);
+  });
+
+  it('closes the rest of the run when a refused call cannot be taken back off the count', async () => {
+    const store = new CodeCallBudgetStore(storage, [CALLS_PER_HOUR], clock);
+    const ada = meterFor(store, 'subject:ada');
+    await useCalls(ada, 0, 2);
+    const realIncrBy = storage.incrBy.bind(storage);
+    jest.spyOn(storage, 'incrBy').mockImplementation(async (key, amount) => {
+      if (amount < 0) throw new Error('connection refused');
+      return realIncrBy(key, amount);
+    });
+
+    await expect(ada.startCall(ARCHIVE).dispatch.beforeExecute()).rejects.toMatchObject({
+      code: 'RATE_LIMIT_EXCEEDED',
+    });
+    jest.restoreAllMocks();
+
+    expect(await decisionOf(ada)).toMatchObject({ decision: 'denied', findings: [{ rule: BUDGET_UNAVAILABLE_RULE }] });
+  });
+
   it('denies the rest of the run once a count could not be kept', async () => {
     const store = new CodeCallBudgetStore(storage, [RECORDS_PER_HOUR], clock);
     const ada = meterFor(store, 'subject:ada');

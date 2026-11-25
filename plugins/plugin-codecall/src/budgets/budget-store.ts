@@ -12,7 +12,7 @@ export interface ExceededBudget {
 /** One call counted against the caller's `toolCalls` budgets at once, and the budgets that leaves it over. */
 export interface CallReservation {
   exceeded: ExceededBudget[];
-  /** Takes the call back off its `toolCalls` budgets, for a call that does not run. */
+  /** Takes the call back off its `toolCalls` budgets, once; rejects when a count could not be taken back. */
   release(): Promise<void>;
 }
 
@@ -38,7 +38,9 @@ export class CodeCallBudgetStore implements OnShutdown {
     const nowSeconds = this.now() / 1000;
     const reservedKeys: string[] = [];
     const release = async () => {
-      await Promise.allSettled(reservedKeys.map((key) => this.storage.incrBy(key, -1)));
+      const results = await Promise.allSettled(reservedKeys.splice(0).map((key) => this.storage.incrBy(key, -1)));
+      const failed = results.find((result) => result.status === 'rejected');
+      if (failed) throw failed.reason;
     };
     const exceeded: ExceededBudget[] = [];
     try {
@@ -51,7 +53,12 @@ export class CodeCallBudgetStore implements OnShutdown {
         const countWithCall = await this.storage.incrBy(key, 1);
         reservedKeys.push(key);
         await this.storage.extendTtl(key, budget.windowSeconds);
-        if (countWithCall > budget.limit) exceeded.push(exceededAt(budget, nowSeconds));
+        if (countWithCall <= budget.limit) continue;
+        exceeded.push(exceededAt(budget, nowSeconds));
+        if (budget.onExceeded === 'denied') {
+          await release();
+          break;
+        }
       }
     } catch (error: unknown) {
       await release();

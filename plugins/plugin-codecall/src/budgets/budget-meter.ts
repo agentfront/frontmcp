@@ -201,6 +201,7 @@ export class BudgetMeter {
     try {
       reservation = await this.store.reserveCall(this.caller);
       const verdict = await this.verdictFor(call, reservation.exceeded, claimed);
+      if (this.countLost) return { decision: unavailableDecision(call.toolName) };
       admitted = verdict.decision.decision === 'allow';
       return verdict;
     } catch (error: unknown) {
@@ -208,7 +209,7 @@ export class BudgetMeter {
       this.warn('codecall: could not admit a call against the budgets', error);
       return { decision: unavailableDecision(call.toolName) };
     } finally {
-      if (!admitted) await Promise.allSettled([...claimed.map((release) => release()), reservation?.release()]);
+      if (!admitted) await this.giveBack([...claimed, () => reservation?.release() ?? Promise.resolve()]);
     }
   }
 
@@ -271,6 +272,15 @@ export class BudgetMeter {
       };
     }
     return undefined;
+  }
+
+  /** Gives back what an admission took; one that cannot be given back closes the rest of the run. */
+  private async giveBack(releases: Release[]): Promise<void> {
+    const results = await Promise.allSettled(releases.map((release) => release()));
+    const failed = results.find((result) => result.status === 'rejected');
+    if (!failed) return;
+    this.countLost = true;
+    this.warn('codecall: could not give back what a refused call took from the budgets', failed.reason);
   }
 
   private async countRecords(count: number): Promise<void> {

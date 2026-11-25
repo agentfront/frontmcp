@@ -430,8 +430,8 @@ async execute({ ids }: { ids: string[] }) {
   increment and kept for at least the window. On Redis or SQLite every instance on the store counts together; in
   memory each instance counts alone. CodeCall's reserved names are never counted.
 - **A store that fails closes.** When the budgets can't be checked (the counts or an approval can't be read), the call
-  is `denied` (`budget-unavailable`), and once a count couldn't be kept, the rest of that run is too. An approval
-  wouldn't fix a store, so it isn't asked for.
+  is `denied` (`budget-unavailable`), and once a count couldn't be kept, or a refused call couldn't be taken back off
+  the count, the rest of that run is too. An approval wouldn't fix a store, so it isn't asked for.
 
 ## Runtime and process boundary
 
