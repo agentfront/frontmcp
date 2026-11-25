@@ -491,15 +491,14 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
       string,
       unknown
     >;
+    // A client that sends no clientInfo still has the platform its capabilities declare (MCP Apps)
     const clientInfo = toClientInfo(meta[MCP_20260728_META.clientInfo]);
-    if (clientInfo) {
-      const clientCapabilities = (meta[MCP_20260728_META.clientCapabilities] ?? {}) as ClientCapabilities;
-      const platformDetection = this.scope.metadata.transport?.platformDetection;
-      this.tryGetContext()?.setClientInfo(
-        clientInfo,
-        resolvePlatformType(clientInfo, clientCapabilities, platformDetection),
-      );
-    }
+    const clientCapabilities = (meta[MCP_20260728_META.clientCapabilities] ?? {}) as ClientCapabilities;
+    const platformDetection = this.scope.metadata.transport?.platformDetection;
+    this.tryGetContext()?.setClientInfo(
+      clientInfo,
+      resolvePlatformType(clientInfo, clientCapabilities, platformDetection),
+    );
 
     const auth = request[ServerRequestTokens.auth] as Authorization | undefined;
     const authInfo = auth
@@ -614,14 +613,12 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
     const sink = new RequestNotificationSink(logLevel, progressToken);
 
     const clientInfo = toClientInfo(meta[MCP_20260728_META.clientInfo]);
-    if (clientInfo) {
-      const platformType = resolvePlatformType(
-        clientInfo,
-        clientCapabilities as ClientCapabilities,
-        this.scope.metadata.transport?.platformDetection,
-      );
-      this.tryGetContext()?.setClientInfo(clientInfo, platformType);
-    }
+    const platformType = resolvePlatformType(
+      clientInfo,
+      clientCapabilities as ClientCapabilities,
+      this.scope.metadata.transport?.platformDetection,
+    );
+    this.tryGetContext()?.setClientInfo(clientInfo, platformType);
 
     const dispatchOptions = {
       scope: this.scope as unknown as Scope,

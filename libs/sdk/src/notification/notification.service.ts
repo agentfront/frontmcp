@@ -1120,6 +1120,8 @@ export class NotificationService {
     }
 
     registered.clientCapabilities = capabilities;
+    // A client that sends no clientInfo has the platform its capabilities declare (MCP Apps); setClientInfo decides it
+    if (!registered.clientInfo) registered.platformType = detectPlatformFromCapabilities(capabilities);
     this.logger.verbose(
       `Set client capabilities for session ${sessionId.slice(0, 20)}...: roots.listChanged=${
         capabilities.roots?.listChanged ?? false

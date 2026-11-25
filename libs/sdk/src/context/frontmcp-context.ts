@@ -440,12 +440,12 @@ export class FrontMcpContext {
   }
 
   /**
-   * Record the client info a request carries, and the platform detected from it.
-   * An `'unknown'` platform is not recorded, so lookups fall back to the session's platform.
+   * Record the client info a request carries, if any, and the platform detected from it or from the capabilities the
+   * request declares. An `'unknown'` platform is not recorded, so lookups fall back to the session's platform.
    *
    * @internal
    */
-  setClientInfo(clientInfo: ClientInfo, platformType: AIPlatformType): void {
+  setClientInfo(clientInfo: ClientInfo | undefined, platformType: AIPlatformType): void {
     this._clientInfo = clientInfo;
     this._platformType = platformType === 'unknown' ? undefined : platformType;
   }
