@@ -3,12 +3,14 @@ import type { CallToolResult } from '@frontmcp/protocol';
 import { getCallSurface, Tool, ToolContext } from '@frontmcp/sdk';
 import { sha256Hex } from '@frontmcp/utils';
 
+import { budgetMeterOf } from '../budgets/budget-meter';
+import { CodeCallBudgetStoreToken } from '../budgets/budget-store';
 import CodeCallConfig from '../providers/code-call.config';
 import { approvalAnswerSchema, approvalQuestionOf, clientCanElicit } from '../review/approval-elicitation';
 import { createRunReview, reviewContextOf } from '../review/create-run-review';
 import { ApprovalServiceViewToken } from '../review/review-approvals';
 import { invocationScriptOf, reviewInvocation } from '../review/review-invocation';
-import type { CodeCallReviewResult } from '../review/review-result';
+import { reviewResultOf, type CodeCallReviewResult } from '../review/review-result';
 import CodeCallReviewService from '../review/review.service';
 import { asCodeCallDispatch, checkCodeCallToolAccess, isBlockedSelfReference } from '../security';
 import { AuditLoggerService } from '../services/audit-logger.service';
@@ -95,6 +97,15 @@ export default class InvokeTool extends ToolContext {
       return buildErrorResult(`Tool "${toolName}" is not available. Use codecall:search to discover available tools.`);
     }
 
+    const budgets = budgetMeterOf(this.tryGet(CodeCallBudgetStoreToken), this, this.logger);
+    const budgetDecision = await budgets?.check(toolName);
+    if (budgetDecision && budgetDecision.decision !== 'allow') {
+      const { decision: status, findings } = budgetDecision;
+      const reason = 'reason' in budgetDecision ? budgetDecision.reason : undefined;
+      audit?.logSecurityAccessDenied(executionId, toolName, `budget: ${status}`);
+      return buildReviewResult(reviewResultOf({ status, reason, findings }));
+    }
+
     const reviewService = this.tryGet(CodeCallReviewService);
     const refusal = reviewService ? await this.review(reviewService, toolName, toolInput, surface) : undefined;
     if (refusal) {
@@ -112,15 +123,21 @@ export default class InvokeTool extends ToolContext {
       },
     };
 
+    const budgetedCall = budgets?.startCall();
     // The caller's surface goes along, so the flow judges the target for that caller as well. Marked as
     // CodeCall's own call, which may reach a tool CodeCall hides from a client's direct tools/call.
     const ctx = asCodeCallDispatch({
       authInfo: this.authInfo,
       surface,
+      onRecordsChanged: budgetedCall?.onRecordsChanged,
     });
 
     // runFlow returns CallToolResult directly - no transformation needed
-    const result = await this.scope.runFlow('tools:call-tool', { request, ctx });
+    const result = await this.scope.runFlow('tools:call-tool', { request, ctx }).catch(async (error: unknown) => {
+      await budgetedCall?.end(error);
+      throw error;
+    });
+    await budgetedCall?.end();
 
     // Flow returns null if tool not found or other pre-execution errors
     if (!result) {

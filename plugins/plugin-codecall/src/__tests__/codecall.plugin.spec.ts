@@ -69,6 +69,24 @@ describe('CodeCallPlugin', () => {
       expect(CodeCallPlugin.browserStores({ runs: { enabled: false }, keep: { enabled: false } })).toEqual([]);
     });
 
+    it('names a budgets.storage on Redis among the stores a browser refuses, and registers its store', () => {
+      const budgets = {
+        limits: [{ name: 'calls', counts: 'toolCalls' as const, limit: 10, windowSeconds: 60 }],
+        storage: { type: 'redis' as const, redis: { url: 'redis://127.0.0.1:6379' } },
+      };
+
+      expect(CodeCallPlugin.browserStores({ runs: { enabled: false }, budgets })).toEqual([
+        {
+          plugin: 'CodeCallPlugin',
+          option: "budgets.storage: { type: 'redis' }",
+          memory: "budgets.storage: { type: 'memory' }",
+        },
+      ]);
+      expect(CodeCallPlugin.dynamicProviders({ budgets }).map((provider) => provider.name)).toContain(
+        'codecall:budgets',
+      );
+    });
+
     it('registers no run store with runs.enabled false', () => {
       const providers = CodeCallPlugin.dynamicProviders({ runs: { enabled: false } });
       expect(providers.map((p) => p.name)).not.toContain('codecall:runs');

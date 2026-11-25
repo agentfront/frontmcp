@@ -119,6 +119,7 @@ The plugin adds a `codecall` field to `@Tool`:
 | `keep`           | `{ enabled: true }`    | `keep(name, value)` and `recall(name)` in scripts, for values one script hands a later one. See [Keep and recall](#keep-and-recall).                            |
 | `trace`          | `{ level: 'failure' }` | The tool calls `codecall:execute` lists in its result, and the spans it sends. See [Trace](#trace).                                                             |
 | `review`         | off                    | Review each script and each call with the server's rules before it runs. See [Review](#review).                                                                 |
+| `budgets`        | off                    | Limit what each caller does across runs, such as records changed an hour. See [Budgets](#budgets).                                                              |
 
 ```ts
 CodeCallPlugin.init({
@@ -349,6 +350,64 @@ Without either, a destructive call is `denied`, and the reason says why.
 `codecall:invoke` is reviewed as the one-call script it stands for, with the same rules, reviewers and approvals; a
 refusal is an error result whose structured content is the same payload. Tools a client calls directly (listed in
 `codecall_opt_in` or `metadata_driven`, or with `visibleInListTools: true`) are not reviewed yet.
+
+## Budgets
+
+Limits inside one script, such as `vm.maxToolCalls`, don't stop an agent that sends 40 scripts. A budget limits what
+each caller does across all of its scripts and `codecall:invoke` calls, in a fixed window. Each caller may change at
+most 200 records an hour:
+
+```ts
+CodeCallPlugin.init({
+  budgets: {
+    limits: [{ name: 'records-per-hour', counts: 'recordsChanged', limit: 200, windowSeconds: 3600 }],
+    storage: { type: 'redis', redis: { url: process.env.REDIS_URL } },
+  },
+});
+```
+
+A tool that writes reports how many records it changed:
+
+```ts
+async execute({ ids }: { ids: string[] }) {
+  const archived = await this.get(TicketStore).archive(ids);
+  this.reportRecordsChanged(archived.length);
+  return { archived: archived.length };
+}
+```
+
+| Option                           | Default              | Description                                                                                   |
+| -------------------------------- | -------------------- | --------------------------------------------------------------------------------------------- |
+| `budgets.limits[].name`          |                      | Names the budget in answers and in its keys: letters, digits, `_` and `-`, unique.            |
+| `budgets.limits[].counts`        |                      | `'toolCalls'` or `'recordsChanged'`.                                                          |
+| `budgets.limits[].limit`         |                      | The most a caller may use in one window.                                                      |
+| `budgets.limits[].windowSeconds` |                      | The window's length. Windows are fixed, from the Unix epoch: `3600` is each hour on the hour. |
+| `budgets.limits[].onExceeded`    | `'needs_approval'`   | What a call gets once its caller reached the limit: `'needs_approval'` or `'denied'`.         |
+| `budgets.storage`                | `{ type: 'auto' }`   | Where counts are kept, through `createStorage()`. Share it across instances.                  |
+| `budgets.namespace`              | `'codecall-budgets'` | The key prefix of counts in the storage.                                                      |
+
+- **What counts.** `toolCalls` counts each call that reaches its tool. A call refused before its tool runs (by the
+  CodeCall policy, its input, an unknown name, or a rate or quota limit) doesn't count. `recordsChanged` counts what the
+  call's tool reports with `this.reportRecordsChanged(n)`, which reaches CodeCall with the call through the SDK, never
+  through the result: what a tool returns, or what a script or client sends, is never counted. Reports after the tool
+  returned, a remote tool's reports, and calls a client makes directly are not counted.
+- **Before each call.** Once the caller is at or over a budget's limit in the current window, the call doesn't run. It
+  gets the budget's answer at that call, as a review decision there would be, with or without `review` (with it, the
+  budgets answer first): `needs_approval` stops the run after the calls before it, and `denied` throws in the script,
+  which may catch it, and ends the run with `denied` when it doesn't. The finding (`budget-exceeded`) names the budget
+  and when it resets. A budget's `needs_approval` has no `approval` id yet: the window resets it. Budgets count per
+  caller, not per run, so they carry across runs that resume.
+- **The call that crosses the limit runs.** A call's records changed are known only once it ran, so the call that
+  takes a caller past a `recordsChanged` limit runs, and the next one is stopped. Calls that start together, in a
+  `parallel()` or in two scripts at once, are each checked before any of them is counted, and can go past a limit by
+  the calls in flight.
+- **Who is a caller.** A signed-in user, or an API key in `static` auth, is one caller across its sessions. An
+  anonymous caller counts per verified session; anonymous calls without a session share one count.
+- **Shared counts.** Each count is one key per budget, caller (as a SHA-256) and window, added to with an atomic
+  increment and kept for at least the window. On Redis or SQLite every instance on the store counts together; in
+  memory each instance counts alone. CodeCall's reserved names are never counted.
+- **A store that fails closes.** When the counts can't be read, the call is `denied` (`budget-unavailable`), and
+  once a count couldn't be kept, the rest of that run is too. An approval wouldn't fix a store, so it isn't asked for.
 
 ## Runtime and process boundary
 

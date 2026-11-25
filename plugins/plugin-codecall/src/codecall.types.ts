@@ -489,6 +489,37 @@ export const codeCallKeepOptionsSchema = z
   })
   .prefault({});
 
+export const codeCallBudgetSchema = z.object({
+  /** Names the budget in refusals and in its storage keys: letters, digits, `_` and `-`. */
+  name: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/, 'must be 1 to 64 letters, digits, "_" or "-"'),
+  /** 'toolCalls': each call that reaches its tool; 'recordsChanged': what tools report with `this.reportRecordsChanged(n)`. */
+  counts: z.enum(['toolCalls', 'recordsChanged']),
+  /** The most a caller may use in one window. */
+  limit: z.number().int().min(1),
+  /** The length of a window, in seconds; windows are fixed, from the Unix epoch. */
+  windowSeconds: z.number().int().min(1),
+  /** What a call gets once its caller reached the limit: 'needs_approval' (the default) or 'denied'. */
+  onExceeded: z.enum(['needs_approval', 'denied']).default('needs_approval'),
+});
+
+export const codeCallBudgetsOptionsSchema = z.object({
+  /** The budgets each caller has, across all of its scripts and `codecall:invoke` calls. */
+  limits: z
+    .array(codeCallBudgetSchema)
+    .min(1)
+    .refine((limits) => new Set(limits.map((budget) => budget.name)).size === limits.length, {
+      message: 'budget names must be unique',
+    }),
+  /** Where counts are kept, through `createStorage()` from `@frontmcp/utils` ({ type: 'auto' }); share it across instances. */
+  storage: z
+    .custom<StorageConfig>((value) => typeof value === 'object' && value !== null && !Array.isArray(value), {
+      message: 'must be a storage config, such as { type: "redis", redis: { url } }',
+    })
+    .default({ type: 'auto' }),
+  /** The key prefix of counts in the storage ('codecall-budgets'). */
+  namespace: z.string().min(1).default('codecall-budgets'),
+});
+
 /** Which runs' tool calls `codecall:execute` lists in its result. */
 export const codeCallTraceLevelSchema = z.enum(['off', 'failure', 'calls']);
 
@@ -637,6 +668,9 @@ const codeCallPluginOptionsObjectSchema = z.object({
 
   /** Review of each script and each call before it runs; off unless set. */
   review: codeCallReviewOptionsSchema.optional(),
+
+  /** Limits on what each caller does across runs, counted in fixed windows; off unless set. */
+  budgets: codeCallBudgetsOptionsSchema.optional(),
 });
 
 // Default values for plugin options
@@ -672,6 +706,8 @@ export type CodeCallTraceLevel = z.infer<typeof codeCallTraceLevelSchema>;
 export type CodeCallTraceOptions = z.infer<typeof codeCallTraceOptionsSchema>;
 export type CodeCallReviewOptions = z.infer<typeof codeCallReviewOptionsSchema>;
 export type CodeCallReviewRules = z.infer<typeof codeCallReviewRulesSchema>;
+export type CodeCallBudget = z.infer<typeof codeCallBudgetSchema>;
+export type CodeCallBudgetsOptions = z.infer<typeof codeCallBudgetsOptionsSchema>;
 export type CodeCallReviewerFunction = (request: ReviewerRequest) => ReviewDecision | Promise<ReviewDecision>;
 
 export type CodeCallEmbeddingOptions = z.infer<typeof codeCallEmbeddingOptionsSchema>;

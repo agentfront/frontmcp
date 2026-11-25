@@ -3,6 +3,8 @@
 import { getCallSurface, toMcpError, Tool, ToolContext, type McpError, type ToolEntry } from '@frontmcp/sdk';
 import { escapeControlCharacters, sha256Hex } from '@frontmcp/utils';
 
+import { budgetMeterOf, withBudgets } from '../budgets/budget-meter';
+import { CodeCallBudgetStoreToken } from '../budgets/budget-store';
 import type { CodeCallToolDescription, CodeCallVmEnvironment } from '../codecall.symbol';
 import {
   createPublicToolCallError,
@@ -278,6 +280,7 @@ export default class ExecuteTool extends ToolContext {
     const allowedToolSet = allowedTools ? new Set(allowedTools) : null;
     // `getTool` answers synchronously, so the tools the caller's authorities withhold are judged now.
     const withheld = await toolsWithheldByAuthorities(this.scope, this.authInfo);
+    const budgets = budgetMeterOf(this.tryGet(CodeCallBudgetStoreToken), this, this.logger);
 
     const environment: CodeCallVmEnvironment = {
       callTool: async <TInput, TResult>(
@@ -338,6 +341,7 @@ export default class ExecuteTool extends ToolContext {
         toolCallCount += 1;
         audit?.logToolCallStart(executionId, name, callDepth);
         const toolCallStartedAt = Date.now();
+        const budgetedCall = budgets?.startCall();
 
         try {
           // Build MCP-compatible CallToolRequest
@@ -354,6 +358,7 @@ export default class ExecuteTool extends ToolContext {
           const ctx = asCodeCallDispatch({
             authInfo: this.authInfo,
             surface: callerSurface,
+            onRecordsChanged: budgetedCall?.onRecordsChanged,
           });
 
           // Execute through the flow system - this runs all stages:
@@ -361,6 +366,7 @@ export default class ExecuteTool extends ToolContext {
           // EXECUTE: validateInput → execute → validateOutput
           // FINALIZE: releaseSemaphore → releaseQuota → finalize
           const mcpResult = await this.scope.runFlow('tools:call-tool', { request, ctx });
+          await budgetedCall?.end();
 
           if (!mcpResult) {
             audit?.logToolCallFailure(
@@ -388,6 +394,7 @@ export default class ExecuteTool extends ToolContext {
           }
           return { success: true, data: result as TResult };
         } catch (error: unknown) {
+          await budgetedCall?.end(error);
           // ============================================================
           // Error sanitization - NEVER expose internal details
           // ============================================================
@@ -497,12 +504,14 @@ export default class ExecuteTool extends ToolContext {
 
     audit?.logExecutionStart(executionId, script);
 
+    const hooks = withBudgets(review?.hooks, budgets);
+
     try {
       const executionResult = await enclaveService.execute(
         script,
         environment,
         journal,
-        review && { hooks: review.hooks, context: reviewContextOf(this, callerSurface) },
+        hooks && { hooks, context: reviewContextOf(this, callerSurface) },
       );
       const durationMs = elapsed(executionResult.stats?.duration);
 
