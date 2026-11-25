@@ -5,6 +5,8 @@ module.exports = {
   maxWorkers: '50%',
   // The flow specs start real servers on both runtimes; recycling a worker past this heap keeps a coverage run in memory
   workerIdleMemoryLimit: '512MB',
+  // A spec's first script pays the sandbox's cold start, which can pass Jest's 5 s default on a loaded CI runner
+  testTimeout: 20_000,
   transformIgnorePatterns: ['node_modules/(?!(jose|@enclave-vm)/)'],
   moduleNameMapper: {
     ...require('../../jest.imports-mapper'),
