@@ -156,11 +156,12 @@ carries `runId`. The record holds the owner, the script's SHA-256, the status, t
 `null` with `review` and `budgets` off), the return value's size, and a journal with one entry per tool
 call: its position (in the order the host's tool handler was entered, on either runtime), the tool, a SHA-256 of the
 arguments, the outcome (`success`, `failure` or `unfinished`), the phase of a failure (`access`, `input`, `limit` or
-`execute`), the duration and the result's size. With `runs.resume` (on by default) the record also keeps each call's
+`execute`), the duration and the result's size. With `runs.resume` (on by default) a run also holds each call's
 result, or the error the script got, and the values the script read from `Date` and `Math.random()`, in order: what
-it takes to run the script again and answer its calls from the record (see [Replay](#replay)). A `keep` or `recall` is
-journaled too, under its reserved tool name (`codecall:keep`, `codecall:recall`) with `kind` (`'keep'` or `'recall'`)
-and the `name` it kept or read; it is not a tool call, and its arguments and result never appear in a trace.
+it takes to run the script again and answer its calls from the record (see [Replay](#replay)). It holds them in
+memory while it runs, and keeps none of them in its record, which has the journal's metadata only. A `keep` or
+`recall` is journaled too, under its reserved tool name (`codecall:keep`, `codecall:recall`) with `kind` (`'keep'` or
+`'recall'`) and the `name` it kept or read; it is not a tool call, and its arguments and result never appear in a trace.
 
 Records are kept like result handles: encrypted under keys derived from the run id and the owner, readable only by
 that owner (`this.get(CodeCallRunStoreToken).read(runId, this)`), until they expire.
@@ -170,7 +171,7 @@ that owner (`this.get(CodeCallRunStoreToken).read(runId, this)`), until they exp
 | `runs.enabled`        | `true`             | `false` keeps no records, and results carry no `runId`.                                                                           |
 | `runs.ttlSeconds`     | `600`              | How long a record can be read.                                                                                                    |
 | `runs.maxRecordBytes` | `262144` (256 KiB) | The most one record takes; journal entries past it are left out and counted. A record whose metadata alone is over it isn't kept. |
-| `runs.resume`         | `true`             | Keep each call's result or error, and the script's clock and random values, to replay the run.                                    |
+| `runs.resume`         | `true`             | Make runs replayable: each call's result or error, and the script's clock and random values, in memory while the run runs.        |
 | `runs.storage`        | `{ type: 'auto' }` | Where records are kept, through `createStorage()`; at most 1000 records in memory.                                                |
 | `runs.namespace`      | `'codecall-runs'`  | The key prefix of records in the storage.                                                                                         |
 
@@ -190,6 +191,7 @@ as each tool finishes (Enclave's `toolResultOrder: 'call'`): a slow call holds b
 never the calls themselves. A runtime that cannot give the script the host's clock keeps no clock or random values,
 runs scripts as before, and refuses to replay a run. A run without an owner keeps no record, so it is not made
 replayable either.
+
 ## Keep and recall
 
 Each `codecall:execute` starts fresh. A script keeps a value for the caller's later scripts with `keep`, and a later

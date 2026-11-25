@@ -160,7 +160,6 @@ describe.each(RUNTIMES)('codecall:execute run records on the %s runtime', (runti
           outcome: 'success',
           durationMs: expect.any(Number),
           resultBytes: jsonBytes({ id, name: `user-${id}` }),
-          result: { id, name: `user-${id}` },
         })),
       );
 
@@ -170,7 +169,7 @@ describe.each(RUNTIMES)('codecall:execute run records on the %s runtime', (runti
       expect(await readRun(otherCaller, outcome.runId ?? '')).toBeNull();
     });
 
-    it("keeps each call's result and what the script read from the clock and Math.random()", async () => {
+    it('keeps no call results, and nothing the script read from the clock or Math.random(), in its record', async () => {
       const owner = await open(config, 'reads-session');
       const outcome = await execute(
         owner,
@@ -178,9 +177,10 @@ describe.each(RUNTIMES)('codecall:execute run records on the %s runtime', (runti
       );
 
       const record = await readRun(owner, outcome.runId ?? '');
-      const [at, id] = outcome.result as [number, number];
-      expect(record).toMatchObject({ clock: [at], random: [expect.any(Number)] });
-      expect(record?.journal[0].result).toEqual({ id, name: `user-${id}` });
+      expect(record?.journal).toHaveLength(1);
+      expect(record?.journal[0]).not.toHaveProperty('result');
+      expect(record).not.toHaveProperty('clock');
+      expect(record).not.toHaveProperty('random');
     });
 
     it('forgets a record after its TTL', async () => {
@@ -245,13 +245,14 @@ describe.each(RUNTIMES)('codecall:execute run records on the %s runtime', (runti
 });
 
 describe('run record options', () => {
-  it('keeps each call result in its journal entry with runs.resume', async () => {
+  it('keeps no call result in the record of a run that did not pause, with runs.resume', async () => {
     const config = serverConfig({ runs: { storage: { type: 'memory' }, resume: true } });
     const client = await open(config, 'resume-session');
     const outcome = await execute(client, "return await callTool('users.get', { id: 4 });");
 
     const record = await readRun(client, outcome.runId ?? '');
-    expect(record?.journal[0]?.result).toEqual({ id: 4, name: 'user-4' });
+    expect(record?.journal[0]).toMatchObject({ tool: 'users.get', outcome: 'success' });
+    expect(record?.journal[0]).not.toHaveProperty('result');
   });
 
   it('keeps no record and returns no run id when its metadata alone is over runs.maxRecordBytes', async () => {

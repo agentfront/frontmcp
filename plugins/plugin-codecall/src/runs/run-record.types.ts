@@ -40,9 +40,9 @@ export interface CodeCallJournalEntry {
   durationMs: number;
   /** UTF-8 bytes of the result's JSON, for a call that succeeded. */
   resultBytes?: number;
-  /** The result itself, only with `runs.resume`. */
+  /** The result itself, kept only in the record of a run that can be replayed. */
   result?: unknown;
-  /** The error the script got for a failed call, only with `runs.resume`. */
+  /** The error the script got for a failed call, kept only in the record of a run that can be replayed. */
   error?: CodeCallScriptError;
 }
 
@@ -65,9 +65,9 @@ export interface CodeCallRunRecord {
   journal: CodeCallJournalEntry[];
   /** Journal entries left out because the record reached `runs.maxRecordBytes`. */
   omittedEntries?: number;
-  /** What the script's `Date` read, in order, with `runs.resume` on a runtime that replays runs. */
+  /** What the script's `Date` read, in order, kept only in the record of a run that can be replayed. */
   clock?: number[];
-  /** What the script's `Math.random()` returned, in order, with `runs.resume` on a runtime that replays runs. */
+  /** What the script's `Math.random()` returned, in order, kept only in the record of a run that can be replayed. */
   random?: number[];
 }
 

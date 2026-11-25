@@ -37,7 +37,7 @@ import { reviewDecisionOf, reviewResultOf } from '../review/review-result';
 import CodeCallReviewService from '../review/review.service';
 import { reviewOutcomeOf, type PendingApproval, type RunReview } from '../review/run-review';
 import { withCallIdempotencyKey, type ScriptToolCall } from '../runs/call-idempotency-key';
-import { jsonBytes, RunJournal } from '../runs/run-journal';
+import { journalMetadataOf, jsonBytes, RunJournal } from '../runs/run-journal';
 import type { CodeCallRunInput, CodeCallRunStore } from '../runs/run-record.store';
 import { CodeCallRunStoreToken } from '../runs/run-record.types';
 import { RUN_DIVERGED, RunReplay } from '../runs/run-replay';
@@ -174,8 +174,7 @@ export default class ExecuteTool extends ToolContext {
         runId: this.scriptRunId,
         reviewDecision: review || budgets ? reviewDecisionOf(result) : null,
         ...(result.status === 'ok' && { resultBytes: jsonBytes(result.result) }),
-        journal: [...journal.close()],
-        ...journal.replay?.recordedReads(),
+        journal: journalMetadataOf(journal.close()),
       };
       runId = runs ? await this.keepRun(runs, run) : undefined;
       const traceLines = traceOf(result.status, journal, trace);
