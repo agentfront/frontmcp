@@ -237,7 +237,7 @@ describe('RunReview', () => {
     expect(review.pendingApproval).toBeUndefined();
   });
 
-  it('asks for the approval after tools with effects ran in a run that can pause there, naming them on it', async () => {
+  it('asks for the approval after tools with effects ran in a run that can pause there', async () => {
     const review = reviewWith({ rules: true, effectsSoFar: () => ['mail.send'], canPause: () => true });
 
     const decision = await review.pre({
@@ -249,10 +249,8 @@ describe('RunReview', () => {
     });
 
     expect(decision.decision).toBe('needs_approval');
-    expect(review.pendingApproval).toMatchObject({
-      call: { toolName: 'users.close', args: { id: 'u1' } },
-      effectsBefore: ['mail.send'],
-    });
+    expect(review.pendingApproval).toMatchObject({ call: { toolName: 'users.close', args: { id: 'u1' } } });
+    expect(review.effectsSoFar()).toEqual(['mail.send']);
   });
 
   it('names at most ten earlier tools', async () => {

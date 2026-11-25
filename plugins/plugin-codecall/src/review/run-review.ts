@@ -81,8 +81,6 @@ export function reviewOutcomeOf(
 export interface PendingApproval {
   reference: CodeCallApprovalReference;
   call?: ApprovalCall;
-  /** The tools with effects that ran before the call: a run that is not paused would run them again once approved. */
-  effectsBefore?: readonly string[];
 }
 
 /** The review of one run: the built-in rules, then the server's reviewers, with the approvals people granted. */
@@ -91,6 +89,11 @@ export class RunReview {
   pendingApproval?: PendingApproval;
 
   constructor(private readonly options: RunReviewOptions) {}
+
+  /** The tools that are not read-only and reached their tool in the run so far, in the order they first did. */
+  effectsSoFar(): readonly string[] {
+    return this.options.effectsSoFar?.() ?? [];
+  }
 
   /** How long one review hook may take, in ms. */
   get timeoutMs(): number {
@@ -158,7 +161,7 @@ export class RunReview {
     if (pending.call && repeated.length > 0 && !this.options.canPause?.()) {
       return needsOwnScript(pending.call.toolName, repeated);
     }
-    this.pendingApproval = { ...pending, ...(repeated.length > 0 && { effectsBefore: repeated }) };
+    this.pendingApproval = pending;
     return request;
   }
 }

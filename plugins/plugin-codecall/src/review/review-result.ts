@@ -46,14 +46,19 @@ export function reviewResultOf(outcome: CodeCallReviewOutcome, pending?: Pending
 }
 
 /**
- * A run's result once it is known whether it was kept paused: a `needs_approval` after calls with effects, in a run
- * that was not, asks for the call in a script of its own, since approving it would run those calls again.
+ * The result of a run that was not kept paused: a `needs_approval` of a call, after the run's calls with `effects`
+ * (all it made, also after that call, in a `parallel()`), asks for the call in a script of its own, since approving it
+ * would run those calls again.
  */
-export function unpausedResultOf(result: CodeCallExecuteResult, pending?: PendingApproval): CodeCallExecuteResult {
-  if (result.status !== 'needs_approval' || !pending?.call || !pending.effectsBefore?.length) return result;
+export function unpausedResultOf(
+  result: CodeCallExecuteResult,
+  pending: PendingApproval | undefined,
+  effects: readonly string[],
+): CodeCallExecuteResult {
+  if (result.status !== 'needs_approval' || !pending?.call || effects.length === 0) return result;
   return {
     status: 'needs_changes',
-    findings: approvalAfterEffectsFindings(pending.call.toolName, pending.effectsBefore),
+    findings: approvalAfterEffectsFindings(pending.call.toolName, effects),
   };
 }
 

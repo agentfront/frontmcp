@@ -176,7 +176,7 @@ export abstract class CodeCallScriptTool extends ToolContext {
         ...(answer.status === 'ok' && { resultBytes: jsonBytes(answer.result) }),
         journal: journalMetadataOf(journal.close()),
       });
-      const unpaused = unpausedResultOf(ended, review?.pendingApproval);
+      const unpaused = unpausedResultOf(ended, review?.pendingApproval, review?.effectsSoFar() ?? []);
       const paused = runs && this.pausedRunOf(runs, runOf(ended), ended.status, journal, input, resumed?.source);
       run = paused?.run ?? runOf(unpaused);
       runId = runs ? await this.keepRun(runs, run, paused?.ttlSeconds) : undefined;
