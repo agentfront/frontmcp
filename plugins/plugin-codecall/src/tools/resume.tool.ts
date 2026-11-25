@@ -30,10 +30,11 @@ import { resumeToolDescription, resumeToolInputSchema, type ResumeToolInput } fr
   outputSchema: executeToolOutputSchema,
 })
 export default class ResumeTool extends CodeCallScriptTool {
-  async execute({ runId, arguments: correctedArguments }: ResumeToolInput): Promise<CodeCallExecuteResult> {
+  async execute({ runId, arguments: sentArguments }: ResumeToolInput): Promise<CodeCallExecuteResult> {
     const runs = this.tryGet(CodeCallRunStoreToken);
     if (!runs?.keepsResultsOf(this)) throw runNotFoundError(runId);
     const run = await readPausedRun(runs, runId, this);
+    const correctedArguments = sentArguments ?? run.pause.arguments;
     const refusedTool = await this.toolNoLongerAllowed(run);
     if (refusedTool) {
       return {

@@ -216,7 +216,8 @@ input, uncaught. The answer keeps its status (`needs_approval`, `tool_error`, ..
 `codecall:resume` with that `runId` runs the same script again: the calls before the paused one get their recorded
 results without running again, `Date` and `Math.random()` read their recorded values, and the paused call runs live,
 then the rest of the script. Its optional `arguments` replace the paused call's arguments, and only that call's; the
-recorded results and the script's variables never change. The answer is a `codecall:execute` result, which may pause
+recorded results and the script's variables never change. A run that pauses at that same call again keeps them, so a
+later resume without `arguments` runs the call with them. The answer is a `codecall:execute` result, which may pause
 again at a later call. `codecall:status` reads a run's status (`paused` and until when, `resuming` while a resume
 runs it, `cancelled`, or how it ended), and `codecall:cancel` ends a paused run.
 

@@ -176,7 +176,7 @@ export abstract class CodeCallScriptTool extends ToolContext {
         ...(result.status === 'ok' && { resultBytes: jsonBytes(result.result) }),
         journal: journalMetadataOf(journal.close()),
       };
-      const paused = runs && this.pausedRunOf(runs, run, result.status, journal, input);
+      const paused = runs && this.pausedRunOf(runs, run, result.status, journal, input, resumed?.source);
       run = paused?.run ?? run;
       runId = runs ? await this.keepRun(runs, run, paused?.ttlSeconds) : undefined;
       const traceLines = traceOf(result.status, journal, trace);
@@ -305,9 +305,10 @@ export abstract class CodeCallScriptTool extends ToolContext {
     answer: CodeCallExecuteResult['status'],
     journal: RunJournal,
     input: ExecuteToolInput,
+    previous: RunReplaySource | undefined,
   ): PausedRun | undefined {
     if (!journal.replay) return undefined;
-    const paused = pausedRunOf(run, answer, journal, input, this.get(CodeCallConfig).getAll().runs.pause);
+    const paused = pausedRunOf(run, answer, journal, input, this.get(CodeCallConfig).getAll().runs.pause, previous);
     return paused && runs.fitsWhole(this, paused.run) ? paused : undefined;
   }
 

@@ -309,13 +309,18 @@ describe.each<CodeCallVmRuntime>(['node-vm', 'interpreter'])('pausing and resumi
     expect(called('orders.refund')).toBe(1);
   });
 
-  it('pauses again when the resumed call is refused again, and keeps the first start', async () => {
+  it('pauses again when the resumed call is refused again, keeping the first start and the corrected arguments', async () => {
     const client = await open(serverConfig(options()), `again-${runtime}`);
     const { runId } = await call(client, 'codecall:execute', { script: PAUSING_SCRIPT });
 
     const second = await call(client, 'codecall:resume', { runId, arguments: { id: 'o1', cents: 0 } });
 
     expect(second).toMatchObject({ status: 'tool_error', runId, paused: { call: { position: 3 } } });
+    const pauseOf = async () =>
+      (await call<{ record: CodeCallRunRecord }>(client, 'runs.read', { runId })).record.pause;
+    expect(await pauseOf()).toMatchObject({ arguments: { id: 'o1', cents: 0 } });
+    expect(await call(client, 'codecall:resume', { runId })).toMatchObject({ status: 'tool_error', paused: {} });
+    expect(await pauseOf()).toMatchObject({ arguments: { id: 'o1', cents: 0 } });
     expect(await call(client, 'codecall:resume', { runId, arguments: { id: 'o1', cents: 5 } })).toMatchObject({
       status: 'ok',
     });

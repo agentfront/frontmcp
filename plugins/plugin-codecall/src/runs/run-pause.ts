@@ -105,6 +105,7 @@ export function pausedRunOf(
   journal: RunJournal,
   script: { script: string; allowedTools?: string[] },
   limits: CodeCallRunsOptions['pause'],
+  previous?: RunReplaySource,
   now = Date.now(),
 ): PausedRun | undefined {
   const pending = pendingCallOf(answer, journal);
@@ -114,7 +115,7 @@ export function pausedRunOf(
     Date.parse(run.startedAt) + limits.lifetimeSeconds * 1000,
   );
   if (!(expiresAt > now)) return undefined;
-  const { journal: entries, clock, random, outputs, pending: resumed } = resumeSourceOf(journal, pending);
+  const { journal: entries, clock, random, outputs, pending: resumed } = resumeSourceOf(journal, pending, previous);
   const pause: CodeCallRunPause = {
     id: randomUUID(),
     call: resumed.call,
@@ -122,6 +123,7 @@ export function pausedRunOf(
     expiresAt: new Date(expiresAt).toISOString(),
     script: script.script,
     ...(script.allowedTools && { allowedTools: script.allowedTools }),
+    ...(resumed.arguments && { arguments: resumed.arguments }),
   };
   return {
     run: { ...run, status: 'paused', journal: [...entries], clock, random, outputs, pause },

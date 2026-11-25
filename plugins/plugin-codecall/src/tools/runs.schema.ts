@@ -16,7 +16,9 @@ export const resumeToolInputSchema = {
   arguments: z
     .record(z.string(), z.unknown())
     .optional()
-    .describe('Corrected arguments for the call the run paused before; every other call keeps its own'),
+    .describe(
+      'Corrected arguments for the call the run paused before; every other call keeps its own. A run paused at that call again keeps the ones sent last',
+    ),
 };
 
 export type ResumeToolInput = z.infer<z.ZodObject<typeof resumeToolInputSchema>>;

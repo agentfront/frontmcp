@@ -2,12 +2,14 @@ import type { PreReviewInput, ReviewDecision } from '@enclave-vm/core/worker';
 
 import { createToolCallError, TOOL_CALL_ERROR_CODES, type ToolCallErrorCode } from '../errors';
 import { argumentsHashOf, RunJournal } from '../runs/run-journal';
-import { pausableSoFar, pendingCallOf, resumeSourceOf, retrySourceOf } from '../runs/run-pause';
+import { pausableSoFar, pausedRunOf, pendingCallOf, resumeSourceOf, retrySourceOf } from '../runs/run-pause';
+import type { CodeCallRunInput } from '../runs/run-record.store';
 import type { CodeCallCallDecision } from '../runs/run-record.types';
 import { journaledReviewHooks, RunReplay, type RunReplaySource, type RunReplayToolLimits } from '../runs/run-replay';
 
 const APPROVAL: CodeCallCallDecision = { decision: 'needs_approval', reason: 'destructive' };
 const DENIAL: CodeCallCallDecision = { decision: 'denied', reason: 'not now' };
+const LIMITS = { waitSeconds: 60, lifetimeSeconds: 60 };
 
 function journalWithReplay(source?: RunReplaySource, toolLimits?: RunReplayToolLimits): RunJournal {
   const replay = new RunReplay(source, toolLimits);
@@ -246,5 +248,24 @@ describe('resumeSourceOf', () => {
       pending: { call: expect.objectContaining({ position: 2 }), arguments: { id: 'o2' } },
     });
     expect(resumeSourceOf(journal, pending).pending).not.toHaveProperty('arguments');
+  });
+});
+
+describe('pausedRunOf', () => {
+  it('keeps the corrected arguments a resume sent when the run pauses at that same call again', () => {
+    const journal = journalWithReplay();
+    journal.refuse('orders.void', { id: 'o1' }, 0, APPROVAL);
+    const previous: RunReplaySource = {
+      journal: [],
+      pending: { call: { position: 1, tool: 'orders.void', argumentsHash: 'x' }, arguments: { id: 'o2' } },
+    };
+    const startedAt = new Date().toISOString();
+    const run = { scriptHash: 'x', status: 'needs_approval', startedAt, endedAt: startedAt, journal: [] };
+    const pauseOf = (source?: RunReplaySource) =>
+      pausedRunOf(run as unknown as CodeCallRunInput, 'needs_approval', journal, { script: 'x' }, LIMITS, source)?.run
+        .pause;
+
+    expect(pauseOf(previous)).toMatchObject({ call: { position: 1 }, arguments: { id: 'o2' } });
+    expect(pauseOf()).not.toHaveProperty('arguments');
   });
 });
