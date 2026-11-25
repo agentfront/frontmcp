@@ -414,6 +414,7 @@ describe('CodeCall runs options', () => {
       ttlSeconds: 600,
       maxRecordBytes: 256 * 1024,
       resume: true,
+      pause: { waitSeconds: 1800, lifetimeSeconds: 1800 },
       storage: { type: 'auto', memory: { maxEntries: DEFAULT_RUNS_MEMORY_MAX_ENTRIES } },
       namespace: 'codecall-runs',
     });

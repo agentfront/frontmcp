@@ -169,10 +169,20 @@ const timeoutErrorPayloadSchema = z.object({
   message: z.string(),
 });
 
+/** A run paused before a call that did not run: `codecall:resume` with its `runId` runs it again from that call. */
+export const pausedRunSchema = z.object({
+  /** The call the run stopped before: its position in the run, from 1, and its tool. */
+  call: z.object({ position: z.number(), tool: z.string() }),
+  /** ISO 8601: after it, the run cannot be resumed. */
+  expiresAt: z.string(),
+});
+
 /** What every result carries besides its status. */
 const runFields = {
   /** The id of the run's record, set when one was kept. */
   runId: z.string().optional(),
+  /** Set when the run paused before a call that did not run; resume it with `codecall:resume`. */
+  paused: pausedRunSchema.optional(),
   /** A line per tool call (position, tool, outcome, duration, size), when the server's `trace.level` shows them. */
   trace: z.array(z.string()).optional(),
   /** The names the script kept with `keep()`, never their values. */

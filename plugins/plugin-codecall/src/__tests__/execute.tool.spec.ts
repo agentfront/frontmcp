@@ -1135,16 +1135,20 @@ describe('ExecuteTool', () => {
         expect.any(RunJournal),
         undefined,
       );
-      expect(keep).toHaveBeenCalledWith(tool, {
-        runId: expect.stringMatching(/^[0-9a-f-]{36}$/),
-        scriptHash: expect.stringMatching(/^[0-9a-f]{64}$/),
-        status: 'ok',
-        startedAt: expect.any(String),
-        endedAt: expect.any(String),
-        reviewDecision: null,
-        resultBytes: '{"total":3}'.length,
-        journal: [],
-      });
+      expect(keep).toHaveBeenCalledWith(
+        tool,
+        {
+          runId: expect.stringMatching(/^[0-9a-f-]{36}$/),
+          scriptHash: expect.stringMatching(/^[0-9a-f]{64}$/),
+          status: 'ok',
+          startedAt: expect.any(String),
+          endedAt: expect.any(String),
+          reviewDecision: null,
+          resultBytes: '{"total":3}'.length,
+          journal: [],
+        },
+        undefined,
+      );
     });
 
     it('returns no run id when the store keeps nothing for the caller', async () => {

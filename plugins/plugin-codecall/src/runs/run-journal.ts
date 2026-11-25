@@ -3,7 +3,12 @@ import { canonicalJson, sha256Hex } from '@frontmcp/utils';
 import { TOOL_CALL_ERROR_CODES } from '../errors';
 import { keptValueCallOf } from '../kept-values/kept-value-script';
 import { toPlainJson } from '../utils/plain-json';
-import type { CodeCallCallPhase, CodeCallJournalEntry, CodeCallScriptError } from './run-record.types';
+import type {
+  CodeCallCallDecision,
+  CodeCallCallPhase,
+  CodeCallJournalEntry,
+  CodeCallScriptError,
+} from './run-record.types';
 import type { RunReplay } from './run-replay';
 
 const PHASE_BY_ERROR_CODE: Partial<Record<string, CodeCallCallPhase>> = {
@@ -102,20 +107,19 @@ export class RunJournal {
   }
 
   /**
-   * Records a call as the tool handler is entered; a `keep` or `recall` never shows its values in the trace, which are
-   * kept data, and keeps its result for a replay only as any call does.
+   * Records a call as the tool handler is entered, at its position when Enclave numbered it (`callIndex`); a `keep` or
+   * `recall` never shows its values in the trace, which are kept data, and keeps its result for a replay as any call does.
    */
-  begin(tool: string, args: unknown): RunJournalCall {
+  begin(tool: string, args: unknown, callIndex?: number): RunJournalCall {
     const keptValueCall = keptValueCallOf(tool, args);
-    const entry: CodeCallJournalEntry = {
-      position: this.entries.length + 1,
+    const entry = this.add({
+      position: callIndex === undefined ? this.entries.length + 1 : callIndex + 1,
       tool: journalToolNameOf(tool),
       ...keptValueCall,
       argumentsHash: argumentsHashOf(args),
       outcome: 'unfinished',
       durationMs: 0,
-    };
-    this.entries.push(entry);
+    });
     this.unsettledStartTimes.set(entry, Date.now());
     if (this.options.keepValues && !keptValueCall.kind) this.values.set(entry, { arguments: args });
     this.options.observer?.callStarted(entry);
@@ -140,6 +144,22 @@ export class RunJournal {
     };
   }
 
+  /** Records a call a call-phase decision (the review's, or a budget's) refused before it reached the tool handler. */
+  refuse(tool: string, args: unknown, callIndex: number, decision: CodeCallCallDecision): void {
+    if (this.closed) return;
+    const entry = this.add({
+      position: callIndex + 1,
+      tool: journalToolNameOf(tool),
+      argumentsHash: argumentsHashOf(args),
+      outcome: 'failure',
+      phase: 'review',
+      durationMs: 0,
+      ...(this.options.keepResults && { decision: toPlainJson<CodeCallCallDecision>(decision) }),
+    });
+    this.options.observer?.callStarted(entry);
+    this.ended(entry);
+  }
+
   /** The entries so far, without closing the journal. */
   entriesSoFar(): readonly CodeCallJournalEntry[] {
     return this.entries;
@@ -158,6 +178,14 @@ export class RunJournal {
     }
     this.closed = true;
     return this.entries;
+  }
+
+  /** Adds an entry in position order: calls reach the tool handler out of order when a review hook answers late. */
+  private add(entry: CodeCallJournalEntry): CodeCallJournalEntry {
+    let index = this.entries.length;
+    while (index > 0 && this.entries[index - 1].position > entry.position) index--;
+    this.entries.splice(index, 0, entry);
+    return entry;
   }
 
   private ended(entry: CodeCallJournalEntry): void {

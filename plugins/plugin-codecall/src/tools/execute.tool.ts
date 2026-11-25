@@ -37,10 +37,12 @@ import { reviewDecisionOf, reviewResultOf } from '../review/review-result';
 import CodeCallReviewService from '../review/review.service';
 import { reviewOutcomeOf, type PendingApproval, type RunReview } from '../review/run-review';
 import { withCallIdempotencyKey, type ScriptToolCall } from '../runs/call-idempotency-key';
+import { markInputRefusal, trackCallStage } from '../runs/call-stage';
 import { journalMetadataOf, jsonBytes, RunJournal } from '../runs/run-journal';
+import { pausedAnswerOf, pausedRunOf, type PausedRun } from '../runs/run-pause';
 import type { CodeCallRunInput, CodeCallRunStore } from '../runs/run-record.store';
 import { CodeCallRunStoreToken } from '../runs/run-record.types';
-import { RUN_DIVERGED, RunReplay } from '../runs/run-replay';
+import { RUN_DIVERGED, RunReplay, type RunReplaySource } from '../runs/run-replay';
 import { RunSpans, RunTelemetryToken } from '../runs/run-spans';
 import { traceOf } from '../runs/run-trace';
 import {
@@ -66,9 +68,10 @@ import {
   type ExecuteToolInput,
 } from './execute.schema';
 
-/** What records a run for replaying it, when its calls' results are kept. */
-function replayOf(keepResults: boolean): RunReplay | undefined {
-  return keepResults ? new RunReplay() : undefined;
+/** A paused run that `codecall:resume` runs again: its first start, and what it replays. */
+export interface ResumedRun {
+  startedAt: string;
+  source: RunReplaySource;
 }
 
 /** One run of the script, with its journal and, when they are on, its review and its budgets. */
@@ -121,21 +124,8 @@ function toolCallErrorOf(error: unknown, toolName: string): ToolCallError {
     : createToolCallError(code, toolName);
 }
 
-@Tool({
-  name: 'codecall:execute',
-  cache: {
-    ttl: 0, // No caching - each execution is unique
-    slideWindow: false,
-  },
-  codecall: {
-    enabledInCodeCall: false,
-    visibleInListTools: true,
-  },
-  description: executeToolDescription,
-  inputSchema: executeToolInputSchema,
-  outputSchema: executeToolOutputSchema,
-})
-export default class ExecuteTool extends ToolContext {
+/** The run of a script, shared by `codecall:execute` and `codecall:resume`: its review, journal, record and answer. */
+export abstract class CodeCallScriptTool extends ToolContext {
   /** The id of this call's run: its record's, and what each call's idempotency key is derived from. */
   protected scriptRunId: string = randomUUID();
 
@@ -151,15 +141,21 @@ export default class ExecuteTool extends ToolContext {
     return checkCodeCallToolAccess<ToolEntry>(this.scope, this.get(CodeCallConfig), name, { surface });
   }
 
-  async execute(input: ExecuteToolInput): Promise<CodeCallExecuteResult> {
+  /** Runs the script, or replays a paused run of it, keeps the run's record, paused when it stopped before a call. */
+  protected async runAndKeep(input: ExecuteToolInput, resumed?: ResumedRun): Promise<CodeCallExecuteResult> {
     const { resolvedVm, trace } = this.get(CodeCallConfig).getAll();
     const scriptHash = sha256Hex(input.script);
     const runs = this.tryGet(CodeCallRunStoreToken);
     const spans = this.startRunSpans(scriptHash, resolvedVm.runtime);
     const keepResults = runs?.keepsResultsOf(this) === true;
     const newJournal = () =>
-      new RunJournal({ keepResults, keepValues: trace.values, observer: spans, replay: replayOf(keepResults) });
-    const startedAt = new Date();
+      new RunJournal({
+        keepResults,
+        keepValues: trace.values,
+        observer: spans,
+        replay: keepResults ? new RunReplay(resumed?.source) : undefined,
+      });
+    const startedAt = resumed ? new Date(resumed.startedAt) : new Date();
     let attempt: ReviewedAttempt | undefined;
     let run: CodeCallRunInput | undefined;
     let runId: string | undefined;
@@ -176,13 +172,17 @@ export default class ExecuteTool extends ToolContext {
         ...(result.status === 'ok' && { resultBytes: jsonBytes(result.result) }),
         journal: journalMetadataOf(journal.close()),
       };
-      runId = runs ? await this.keepRun(runs, run) : undefined;
+      const paused = runs && this.pausedRunOf(runs, run, result.status, journal, input);
+      run = paused?.run ?? run;
+      runId = runs ? await this.keepRun(runs, run, paused?.ttlSeconds) : undefined;
       const traceLines = traceOf(result.status, journal, trace);
       if ((review || budgets) && 'findings' in result && result.findings) spans?.recordFindings(result.findings);
       const kept = keptNamesOf(run.journal);
+      const pausedAnswer = runId && run.pause && { paused: pausedAnswerOf(run.pause) };
       return {
         ...result,
         ...(runId && { runId }),
+        ...pausedAnswer,
         ...(kept.length > 0 && { kept }),
         ...(traceLines && { trace: traceLines }),
       };
@@ -274,10 +274,27 @@ export default class ExecuteTool extends ToolContext {
     });
   }
 
+  /** The run saved `paused`, when it stopped before a call it can resume at and its record fits whole. */
+  private pausedRunOf(
+    runs: CodeCallRunStore,
+    run: CodeCallRunInput,
+    answer: CodeCallExecuteResult['status'],
+    journal: RunJournal,
+    input: ExecuteToolInput,
+  ): PausedRun | undefined {
+    if (!journal.replay) return undefined;
+    const paused = pausedRunOf(run, answer, journal, input, this.get(CodeCallConfig).getAll().runs.pause);
+    return paused && runs.fitsWhole(this, paused.run) ? paused : undefined;
+  }
+
   /** Keeps the run's record for its owner; a store that fails is logged, and the result goes out without a run id. */
-  private async keepRun(runs: CodeCallRunStore, run: CodeCallRunInput): Promise<string | undefined> {
+  private async keepRun(
+    runs: CodeCallRunStore,
+    run: CodeCallRunInput,
+    ttlSeconds?: number,
+  ): Promise<string | undefined> {
     try {
-      return await runs.keep(this, run);
+      return await runs.keep(this, run, ttlSeconds);
     } catch (error: unknown) {
       this.logger?.warn('codecall: could not keep the run record', {
         error: error instanceof Error ? error.message : String(error),
@@ -375,6 +392,7 @@ export default class ExecuteTool extends ToolContext {
         audit?.logToolCallStart(executionId, name, callDepth);
         const toolCallStartedAt = Date.now();
         const budgetedCall = budgets?.startCall({ toolName: name, args: toolInput, callIndex: call?.callIndex });
+        let failedInputValidation = (): boolean => false;
 
         try {
           // Build MCP-compatible CallToolRequest
@@ -393,6 +411,7 @@ export default class ExecuteTool extends ToolContext {
             this.scriptRunId,
             call,
           );
+          failedInputValidation = trackCallStage(ctx);
 
           // Execute through the flow system - this runs all stages:
           // PRE: parseInput → findTool → createToolCallContext → acquireQuota → acquireSemaphore
@@ -433,6 +452,7 @@ export default class ExecuteTool extends ToolContext {
           // ============================================================
 
           const sanitizedError = toolCallErrorOf(error, name);
+          if (failedInputValidation()) markInputRefusal(sanitizedError);
 
           audit?.logToolCallFailure(executionId, name, callDepth, Date.now() - toolCallStartedAt, sanitizedError.code);
 
@@ -671,5 +691,25 @@ export default class ExecuteTool extends ToolContext {
         },
       };
     }
+  }
+}
+
+@Tool({
+  name: 'codecall:execute',
+  cache: {
+    ttl: 0, // No caching - each execution is unique
+    slideWindow: false,
+  },
+  codecall: {
+    enabledInCodeCall: false,
+    visibleInListTools: true,
+  },
+  description: executeToolDescription,
+  inputSchema: executeToolInputSchema,
+  outputSchema: executeToolOutputSchema,
+})
+export default class ExecuteTool extends CodeCallScriptTool {
+  async execute(input: ExecuteToolInput): Promise<CodeCallExecuteResult> {
+    return this.runAndKeep(input);
   }
 }

@@ -4,3 +4,6 @@ export { default as SearchKnowledgeTool } from './search-knowledge.tool';
 export { default as DescribeTool } from './describe.tool';
 export { default as ExecuteTool } from './execute.tool';
 export { default as InvokeTool } from './invoke.tool';
+export { default as ResumeTool } from './resume.tool';
+export { default as StatusTool } from './status.tool';
+export { default as CancelTool } from './cancel.tool';

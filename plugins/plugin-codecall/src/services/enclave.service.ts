@@ -12,7 +12,7 @@ import { isKeptValueCall } from '../kept-values/kept-value-script';
 import type CodeCallConfig from '../providers/code-call.config';
 import { extractionThresholdOf, MAX_ITERATIONS_PER_LOOP } from '../providers/code-call.config';
 import { RunJournal } from '../runs/run-journal';
-import { replayedEnvironment, type RunDivergedError, type RunReplay } from '../runs/run-replay';
+import { callOrReplay, journaledReviewHooks, quietWhileReplaying, type RunDivergedError } from '../runs/run-replay';
 import { findScriptPolicyIssues } from '../security/script-policy';
 import { toSandboxToolNamespaces } from '../utils/build-tool-namespaces';
 import { withScriptLines } from '../utils/script-lines';
@@ -322,7 +322,7 @@ export default class EnclaveService {
     }
 
     const { replay } = journal;
-    if (replay) environment = replayedEnvironment(environment, replay);
+    if (replay) environment = quietWhileReplaying(environment, replay);
     const { keptValues } = environment;
     const { script, preloadReferences } = keptValues
       ? await keptValues.prepare(code)
@@ -338,12 +338,13 @@ export default class EnclaveService {
     const toolFailures: ToolFailure[] = [];
     const maxResultValues = this.vmOptions.maxSanitizeProperties;
     const toolHandler: ToolHandler = gate.guardToolHandler(async (toolName, args, toolCall) => {
-      const call = journal.begin(toolName, args);
+      const call = journal.begin(toolName, args, toolCall?.callIndex);
       try {
-        const result =
+        const result = await callOrReplay(replay, toolCall, toolName, args, (callArgs) =>
           keptValues && isKeptValueCall(toolName)
-            ? await keptValues.call(toolName, args)
-            : await environment.callTool(toolName, args, undefined, toolCall);
+            ? keptValues.call(toolName, callArgs)
+            : environment.callTool(toolName, callArgs, undefined, toolCall),
+        );
         const resultValues = countResultValues(result);
         if (resultValues > maxResultValues) {
           throw createPublicToolCallError(
@@ -409,7 +410,7 @@ export default class EnclaveService {
         ...(rapidEnumerationThreshold !== undefined && { threshold: rapidEnumerationThreshold }),
         ...(rapidEnumerationOverrides !== undefined && { overrides: rapidEnumerationOverrides }),
       },
-      ...(review && { review: review.hooks, reviewContext: review.context }),
+      ...(review && { review: journaledReviewHooks(review.hooks, journal), reviewContext: review.context }),
       ...replay?.hooks,
     };
 

@@ -13,12 +13,15 @@ import { App, FrontMcpInstance, LogLevel, Tool, ToolContext, z, type DirectMcpSe
 import CodeCallPlugin from '../codecall.plugin';
 
 const CODECALL_TOOLS = [
+  'codecall:cancel',
   'codecall:describe',
   'codecall:execute',
   'codecall:invoke',
+  'codecall:resume',
   'codecall:search',
   'codecall:searchKnowledge',
   'codecall:searchSkills',
+  'codecall:status',
 ];
 
 @Tool({

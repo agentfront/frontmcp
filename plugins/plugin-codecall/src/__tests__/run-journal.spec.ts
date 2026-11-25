@@ -21,6 +21,26 @@ describe('RunJournal', () => {
     ]);
   });
 
+  it("places each call at Enclave's position for it, also when a review hook let a later call reach the handler first", () => {
+    const journal = new RunJournal({ keepResults: true });
+    journal.begin('users.get', { id: 2 }, 1).succeed({ id: 2 });
+    journal.begin('users.get', { id: 1 }, 0).succeed({ id: 1 });
+    journal.refuse('users.delete', { id: 1 }, 2, { decision: 'needs_approval', reason: 'destructive' });
+
+    expect(
+      journal.close().map(({ position, outcome, phase, decision }) => ({ position, outcome, phase, decision })),
+    ).toEqual([
+      { position: 1, outcome: 'success', phase: undefined, decision: undefined },
+      { position: 2, outcome: 'success', phase: undefined, decision: undefined },
+      {
+        position: 3,
+        outcome: 'failure',
+        phase: 'review',
+        decision: { decision: 'needs_approval', reason: 'destructive' },
+      },
+    ]);
+  });
+
   it('hashes the canonical JSON of the arguments, so key order does not change the hash', () => {
     const journal = new RunJournal();
     journal.begin('users.find', { name: 'Ada', limit: 2 });
