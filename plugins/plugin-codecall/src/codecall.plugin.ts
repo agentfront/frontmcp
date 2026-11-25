@@ -22,6 +22,7 @@ import {
   type ToolEntry,
   type ToolType,
 } from '@frontmcp/sdk';
+import { createStorage } from '@frontmcp/utils';
 
 import {
   codeCallPluginOptionsSchema,
@@ -85,7 +86,7 @@ function keptValueStoreProvider(keep: CodeCallKeepOptions): ProviderType {
     scope: ProviderScope.GLOBAL,
     inject: () => [] as const,
     useFactory: async () =>
-      new KeptValueStore(await createResultHandleStore({ storage, namespace, ttlSeconds }), { ttlSeconds, maxBytes }),
+      new KeptValueStore((await createStorage(storage)).namespace(namespace), { ttlSeconds, maxBytes }),
   });
 }
 

@@ -231,6 +231,22 @@ describe('node-vm runtime', () => {
     expect(Enclave).not.toHaveBeenCalled();
   });
 
+  it('refuses to start a run with kept sidecar references on an Enclave before 2.21', async () => {
+    const Enclave = jest.fn();
+    const preloadReferences = [
+      { id: '__REF_0b8e2f6a-1c2d-4e5f-8a9b-0c1d2e3f4a5b__', data: 'doc', source: 'tool-result' as const },
+    ];
+    const error = await refusalOf(
+      createNodeVmRuntime(async () => ({ Enclave }) as never).createRunner(
+        spec({ sidecar: { enabled: true }, preloadReferences }),
+      ),
+    );
+
+    expect(error.code).toBe('RUNTIME_FEATURE_UNSUPPORTED');
+    expect(error.message).toContain('2.21 or later');
+    expect(Enclave).not.toHaveBeenCalled();
+  });
+
   it("gives the real Enclave the review hooks and the run's review context", async () => {
     const pre = jest.fn(async () => ({ decision: 'denied' as const, reason: 'no scripts today' }));
     const runner = await createNodeVmRuntime().createRunner(

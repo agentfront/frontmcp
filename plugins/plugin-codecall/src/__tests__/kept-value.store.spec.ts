@@ -1,8 +1,8 @@
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { createResultHandleStore, ResultHandleStore, type ResultOwner } from '@frontmcp/plugin-result-handles';
-import { createMemoryStorage, mkdtemp, rm, type StorageConfig } from '@frontmcp/utils';
+import type { ResultOwner } from '@frontmcp/plugin-result-handles';
+import { createMemoryStorage, createStorage, mkdtemp, rm, type StorageConfig } from '@frontmcp/utils';
 
 import { KeptValueStore } from '../kept-values/kept-value.store';
 import type { KeptValue } from '../kept-values/kept-value.types';
@@ -36,12 +36,8 @@ describe.each<[string, () => StorageConfig]>([
   let store: KeptValueStore;
 
   beforeAll(async () => {
-    const handles = await createResultHandleStore({
-      storage: storageConfig(),
-      namespace: 'codecall-kept',
-      ttlSeconds: 60,
-    });
-    store = new KeptValueStore(handles, { ttlSeconds: 60, maxBytes: 1024 * 1024 });
+    const storage = (await createStorage(storageConfig())).namespace('codecall-kept');
+    store = new KeptValueStore(storage, { ttlSeconds: 60, maxBytes: 1024 * 1024 });
   });
 
   afterAll(async () => {
@@ -92,11 +88,8 @@ describe('KeptValueStore limits', () => {
   async function memoryStore(maxBytes: number) {
     const root = createMemoryStorage();
     await root.connect();
-    const store = new KeptValueStore(new ResultHandleStore(root.namespace('codecall-kept'), 60), {
-      ttlSeconds: 60,
-      maxBytes,
-    });
-    return { root, store };
+    const storage = root.namespace('codecall-kept');
+    return { root, storage, store: new KeptValueStore(storage, { ttlSeconds: 60, maxBytes }) };
   }
 
   it('refuses a value that would take the owner past maxBytes, and keeps what it had', async () => {
@@ -123,13 +116,39 @@ describe('KeptValueStore limits', () => {
     expect(await store.recall(alice, 'progress')).toEqual({ value: '4'.repeat(600) });
   });
 
-  it('stops counting a value once it expired', async () => {
+  it('stops counting a value at most twice its TTL after it was kept', async () => {
     const { store } = await memoryStore(1024);
     await store.keep(alice, 'old', { value: 'a'.repeat(600) });
     const now = Date.now();
-    jest.spyOn(Date, 'now').mockReturnValue(now + 61_000);
+    jest.spyOn(Date, 'now').mockReturnValue(now + 121_000);
 
     await expect(store.keep(alice, 'new', { value: 'b'.repeat(600) })).resolves.toBeUndefined();
+  });
+
+  it('counts every value of keeps that run at the same time, on two instances', async () => {
+    const { storage, store } = await memoryStore(1024);
+    const otherInstance = new KeptValueStore(storage, { ttlSeconds: 60, maxBytes: 1024 });
+
+    await Promise.all([
+      store.keep(alice, 'a', { value: 'a'.repeat(400) }),
+      otherInstance.keep(alice, 'b', { value: 'b'.repeat(400) }),
+    ]);
+
+    await expect(store.keep(alice, 'c', { value: 'c'.repeat(400) })).rejects.toBeInstanceOf(RangeError);
+    expect(await store.recall(alice, 'a')).toEqual({ value: 'a'.repeat(400) });
+    expect(await store.recall(alice, 'b')).toEqual({ value: 'b'.repeat(400) });
+  });
+
+  it('releases what a keep reserved when its value cannot be written, and still counts the value it would replace', async () => {
+    const { storage, store } = await memoryStore(1024);
+    await store.keep(alice, 'report', { value: 'a'.repeat(400) });
+    jest.spyOn(storage, 'set').mockRejectedValueOnce(new Error('storage down'));
+
+    await expect(store.keep(alice, 'report', { value: 'b'.repeat(400) })).rejects.toThrow('storage down');
+
+    expect(await store.recall(alice, 'report')).toEqual({ value: 'a'.repeat(400) });
+    await expect(store.keep(alice, 'other', { value: 'c'.repeat(400) })).resolves.toBeUndefined();
+    await expect(store.keep(alice, 'third', { value: 'd'.repeat(400) })).rejects.toBeInstanceOf(RangeError);
   });
 
   it('keeps values encrypted, under keys that name neither the value nor its owner', async () => {

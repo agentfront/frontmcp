@@ -1,4 +1,4 @@
-import { ResultHandleStore, type ResultOwner } from '@frontmcp/plugin-result-handles';
+import type { ResultOwner } from '@frontmcp/plugin-result-handles';
 import type { FrontMcpLogger } from '@frontmcp/sdk';
 import { createMemoryStorage } from '@frontmcp/utils';
 
@@ -11,7 +11,7 @@ const TOKEN = /^__REF_[0-9a-f-]{36}__$/;
 async function memoryStore(maxBytes = 1024 * 1024): Promise<KeptValueStore> {
   const root = createMemoryStorage();
   await root.connect();
-  return new KeptValueStore(new ResultHandleStore(root.namespace('codecall-kept'), 60), { ttlSeconds: 60, maxBytes });
+  return new KeptValueStore(root.namespace('codecall-kept'), { ttlSeconds: 60, maxBytes });
 }
 
 describe('KeptValueCalls', () => {

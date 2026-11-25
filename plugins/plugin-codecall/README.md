@@ -197,9 +197,10 @@ return overdue.filter((invoice) => invoice.amount > 1000);
   are. A call with neither, a stateless anonymous one, is refused (`ACCESS_DENIED`): nobody could recall what it kept.
   `result_query` refuses such a call the same way.
 - **How long, how much.** A value can be recalled for `keep.ttlSeconds`, and keeping a name again replaces its value
-  and restarts its time. What one owner keeps at once counts against `keep.maxBytes`; a `keep` past it fails with
-  `RESULT_TOO_LARGE` and keeps nothing. Two runs of one owner that keep at the same moment can each count without the
-  other, so the limit can be passed by what they keep together.
+  and restarts its time. What one owner keeps counts against `keep.maxBytes`; a `keep` past it fails with
+  `RESULT_TOO_LARGE` and keeps nothing. The bytes are reserved in an atomic counter before the value is written, so
+  keeps that run at the same time, on any server instance, each count; a value counts for at most twice
+  `keep.ttlSeconds`, and a value kept again under its name stops counting the one it replaced.
 - **Large strings.** With the [sidecar](#options) on, a string of at least `sidecar.extractionThreshold` bytes is kept
   as a sidecar reference. A later script that recalls it by a literal name (`recall('doc')`) starts with that
   reference, and `recall` returns its token: the script can pass it to a tool, which receives the whole string, but the
@@ -218,9 +219,10 @@ return overdue.filter((invoice) => invoice.amount > 1000);
 | `keep.storage`    | `{ type: 'auto' }` | Where kept values are kept, through `createStorage()`; at most 1000 entries in memory. |
 | `keep.namespace`  | `'codecall-kept'`  | The key prefix of kept values in the storage.                                          |
 
-Kept values are stored like run records: each one encrypted under keys derived from its name and its owner, with an
-index per owner of the names it keeps and their sizes. A store that fails is logged as a warning, and the `keep` or
-`recall` fails with `EXECUTION`.
+Kept values are stored like run records: each one encrypted under keys derived from its name and its owner. The
+bytes an owner keeps are counted with `incrBy`, which every built-in storage has but Cloudflare KV. A store that fails
+is logged as a warning, and the `keep` or `recall` fails with `EXECUTION`; a `keep` that fails releases what it
+reserved, and the value it would have replaced stays kept and counted.
 
 ## Trace
 
