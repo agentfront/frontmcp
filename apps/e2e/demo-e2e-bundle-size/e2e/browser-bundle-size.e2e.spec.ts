@@ -21,9 +21,9 @@ import {
 } from './helpers/browser-bundle';
 
 const BUDGETS: Array<{ entry: string; label: string; maxBytes: number }> = [
-  // +385 / +384 bytes (#1315): the task index never shortens a TTL (an atomic extendTtl in the storage adapters) and jumps runs of gone tasks
-  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_344_378 },
-  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_351_609 },
+  // +141 bytes each (#1315): an expired task's index cleanup is best-effort, and the index's skips and ready marker follow its count
+  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_344_519 },
+  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_351_750 },
 ];
 
 // +372 bytes (#1315): the task index never shortens a TTL (an atomic extendTtl in the storage adapters) and jumps runs of gone tasks
