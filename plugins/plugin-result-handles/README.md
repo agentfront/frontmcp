@@ -117,12 +117,13 @@ validate it. A tool whose schema doesn't admit it is sent whole, and the plugin 
 It answers `{ path, value, total?, offset?, nextOffset? }`: `total` is the length of the list or string, and
 `nextOffset` is set while there is more to read. Its errors carry a remedy for the model:
 
-| Code                      | When                                                                                        |
-| ------------------------- | ------------------------------------------------------------------------------------------- |
-| `RESULT_HANDLE_NOT_FOUND` | The handle expired, was never issued, or belongs to another session or caller.              |
-| `RESULT_PATH_NOT_FOUND`   | The path isn't a dot path or a JSON pointer, or names nothing in the answer.                |
-| `RESULT_SLICE_TOO_LARGE`  | The slice is larger than `thresholdBytes`: read fewer items, fewer fields or a deeper path. |
-| `INVALID_INPUT`           | Both `page` and `offset` were given, or an argument is out of range.                        |
+| Code                           | When                                                                                                 |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| `RESULT_HANDLE_NOT_FOUND`      | The handle expired, was never issued, or belongs to another session or caller.                       |
+| `RESULT_HANDLE_OWNER_REQUIRED` | The call has neither a verified session nor an authenticated caller, so no answer was folded for it. |
+| `RESULT_PATH_NOT_FOUND`        | The path isn't a dot path or a JSON pointer, or names nothing in the answer.                         |
+| `RESULT_SLICE_TOO_LARGE`       | The slice is larger than `thresholdBytes`: read fewer items, fewer fields or a deeper path.          |
+| `INVALID_INPUT`                | Both `page` and `offset` were given, or an argument is out of range.                                 |
 
 ## Who can read a handle
 

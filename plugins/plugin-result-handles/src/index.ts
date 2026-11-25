@@ -15,6 +15,7 @@ export { createResultHandleStore, type ResultHandleStoreOptions } from './result
 export { ResultHandlesConfigToken, ResultHandleStoreToken } from './result-handles.symbols';
 export {
   ResultHandleNotFoundError,
+  ResultHandleOwnerRequiredError,
   ResultHandlesConfigurationError,
   ResultPathNotFoundError,
   ResultSliceTooLargeError,

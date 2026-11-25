@@ -3,7 +3,11 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 
 import { jsonBytes } from './folded-answer';
 import { foldingStoresOf, resultOwnerOf } from './result-handle.store';
-import { ResultHandleNotFoundError, ResultSliceTooLargeError } from './result-handles.errors';
+import {
+  ResultHandleNotFoundError,
+  ResultHandleOwnerRequiredError,
+  ResultSliceTooLargeError,
+} from './result-handles.errors';
 import { ResultHandlesConfigToken, ResultHandleStoreToken } from './result-handles.symbols';
 import { DEFAULT_CHAR_LIMIT, DEFAULT_ITEM_LIMIT, queryResult, type ResultSlice } from './result-query';
 
@@ -73,6 +77,7 @@ type ResultQueryInput = {
 export default class ResultQueryTool extends ToolContext {
   async execute({ handle, ...query }: ResultQueryInput): Promise<ResultSlice> {
     const owner = resultOwnerOf(this);
+    if (owner.session === undefined && owner.caller === undefined) throw new ResultHandleOwnerRequiredError();
     let stored: { value: unknown } | undefined;
     for (const store of new Set([this.get(ResultHandleStoreToken), ...foldingStoresOf(this.scope)])) {
       stored = await store.read(handle, owner);

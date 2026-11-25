@@ -18,8 +18,10 @@ import {
 
 import { foldedAnswerSchema, type FoldedAnswer } from '../folded-answer';
 import { ResultHandleStore } from '../result-handle.store';
+import { ResultHandleOwnerRequiredError } from '../result-handles.errors';
 import { RESULT_HANDLE_META_KEY, type FoldContext } from '../result-handles.options';
 import ResultHandlesPlugin from '../result-handles.plugin';
+import ResultQueryTool from '../result-query.tool';
 
 const warnings: string[] = [];
 
@@ -528,6 +530,19 @@ describe('ResultHandlesPlugin', () => {
 
       await plugin.foldAnswer(flowCtx);
       expect(respond).not.toHaveBeenCalled();
+    });
+
+    it('is refused by result_query, which says it needs a session or a signed-in caller', async () => {
+      const anonymousStateless = {
+        tryGetContext: () => undefined,
+        auth: { isAnonymous: true, user: { sub: 'anon:1' } },
+      };
+
+      const refusal = ResultQueryTool.prototype.execute.call(anonymousStateless, {
+        handle: '0b8e2f6a-1c2d-4e5f-8a9b-0c1d2e3f4a5b',
+      });
+      await expect(refusal).rejects.toBeInstanceOf(ResultHandleOwnerRequiredError);
+      await expect(refusal).rejects.toThrow('result_query needs a session or a signed-in caller');
     });
   });
 });

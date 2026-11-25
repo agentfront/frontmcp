@@ -15,6 +15,21 @@ export class ResultHandleNotFoundError extends PublicMcpError {
   }
 }
 
+/** A `result_query` from a call with no session and no signed-in caller, for which no answer is ever folded. */
+export class ResultHandleOwnerRequiredError extends PublicMcpError {
+  override readonly name = 'ResultHandleOwnerRequiredError';
+
+  constructor() {
+    super(
+      'result_query needs a session or a signed-in caller to read answers for, and this call has neither.',
+      'RESULT_HANDLE_OWNER_REQUIRED',
+      403,
+      undefined,
+      { say: 'Answers are folded only for a session or a signed-in caller; without one they are sent whole.' },
+    );
+  }
+}
+
 /** A `result_query` path that is not a dot path or a JSON pointer, or that names nothing in the result. */
 export class ResultPathNotFoundError extends PublicMcpError {
   override readonly name = 'ResultPathNotFoundError';
