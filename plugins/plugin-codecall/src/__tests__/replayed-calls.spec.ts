@@ -8,7 +8,7 @@ import type { CodeCallJournalEntry } from '../runs/run-record.types';
 import { RunReplay, type RunReplaySource } from '../runs/run-replay';
 import EnclaveService from '../services/enclave.service';
 import { AGENT_SCRIPT_RUNNER_EXPORT, createInterpreterRuntime } from '../services/runtime/interpreter.runtime';
-import { createNodeVmRuntime, supportsReplayedCalls } from '../services/runtime/node-vm.runtime';
+import { createNodeVmRuntime, replaysCallTimesOf } from '../services/runtime/node-vm.runtime';
 import type { CodeCallScriptRunSpec } from '../services/runtime/runtime.types';
 
 function entry(position: number, tool: string, arrivedAtMs?: number): CodeCallJournalEntry {
@@ -135,31 +135,33 @@ describe('the interpreter runtime', () => {
 });
 
 describe('the node-vm runtime', () => {
-  it('takes the option from Enclave 2.21.1, prereleases included', () => {
-    expect(['2.21.0', '2.20.9', 'x'].map(supportsReplayedCalls)).toEqual([false, false, false]);
-    expect(['2.21.1-rc.0', '2.21.1', '2.22.0', '3.0.0'].map(supportsReplayedCalls)).toEqual([true, true, true, true]);
-  });
-
   it.each([
-    ['2.21.1', true],
-    ['2.21.0', false],
-  ])('on Enclave %s, passes the replayed calls: %s', async (version, passed) => {
+    ['with replayed-calls in its run features', ['replayed-calls'], true],
+    ['without run features, as 2.21.0', undefined, false],
+  ])('on an Enclave %s, passes the replayed calls: %s', async (_, features, passed) => {
     const run = jest.fn().mockResolvedValue({ success: true, value: 1, stats: {} });
     class Enclave {
       run = run;
       dispose(): void {}
     }
     const runtime = createNodeVmRuntime(
-      async () => ({ Enclave, REVIEW_ERROR_CODES: {} }) as never,
-      async () => version,
+      async () => ({ Enclave, REVIEW_ERROR_CODES: {}, ENCLAVE_RUN_FEATURES: features }) as never,
     );
     const runner = await runtime.createRunner(spec(new RunReplay(timed).hooks));
     await runner.run('return 1;');
 
     expect(runner.replaysCallTimes).toBe(passed);
+    expect(await runtime.replaysCallTimes?.()).toBe(passed);
     expect(run.mock.calls[0][2]).toEqual(
       passed ? expect.objectContaining({ replayedCalls }) : { reviewContext: undefined },
     );
+  });
+
+  it('reads the run features as the Enclave exports them, and none from one it cannot load', async () => {
+    expect(replaysCallTimesOf({ ENCLAVE_RUN_FEATURES: Object.freeze(['replayed-calls']) })).toBe(true);
+    expect(replaysCallTimesOf({ ENCLAVE_RUN_FEATURES: 'replayed-calls' as never })).toBe(false);
+    expect(replaysCallTimesOf(undefined)).toBe(false);
+    expect(await createNodeVmRuntime(() => Promise.reject(new Error('x'))).replaysCallTimes?.()).toBe(false);
   });
 });
 

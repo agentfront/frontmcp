@@ -35,6 +35,8 @@ export interface NodeVmModule {
   Enclave: new (options: CreateEnclaveOptions) => Pick<Enclave, 'run' | 'dispose'>;
   /** Exported since 2.21, whose `review` option runs its hooks and whose `run()` takes `preloadReferences`. */
   REVIEW_ERROR_CODES?: unknown;
+  /** What `run()` takes since Enclave 2.21.1: `replayed-calls` for the `replayedCalls` option. */
+  ENCLAVE_RUN_FEATURES?: readonly string[];
 }
 
 /**
@@ -128,35 +130,18 @@ function createEnclave(module: NodeVmModule, options: CreateEnclaveOptions): Pic
   }
 }
 
-/** How the runtime reads the installed Enclave's version; replaced in tests. */
-export type NodeVmVersionLoader = () => Promise<string | undefined>;
-
-const loadNodeVmVersion: NodeVmVersionLoader = async () =>
-  ((await importAtRuntime(`${NODE_VM_PACKAGE}/package.json`)) as { version?: string }).version;
-
-/** The first Enclave whose detectors take the `replayedCalls` run option. */
-const REPLAYED_CALLS_VERSION = [2, 21, 1];
-
-/** Whether Enclave `version` (its release, a prerelease of it counting) gives its detectors the `replayedCalls` run option. */
-export function supportsReplayedCalls(version: string | undefined): boolean {
-  const release = /^(\d+)\.(\d+)\.(\d+)/
-    .exec(version ?? '')
-    ?.slice(1)
-    .map(Number);
-  if (!release) return false;
-  const differing = release.findIndex((part, index) => part !== REPLAYED_CALLS_VERSION[index]);
-  return differing === -1 || release[differing] > REPLAYED_CALLS_VERSION[differing];
+/** Whether the loaded Enclave judges replayed calls by their recorded times: its run features name `replayed-calls`. */
+export function replaysCallTimesOf(module: Pick<NodeVmModule, 'ENCLAVE_RUN_FEATURES'> | undefined): boolean {
+  const features: unknown = module?.ENCLAVE_RUN_FEATURES;
+  return Array.isArray(features) && features.includes('replayed-calls');
 }
 
 /** The `node-vm` runtime. */
-export function createNodeVmRuntime(
-  loader: NodeVmModuleLoader = loadNodeVmModule,
-  versionLoader: NodeVmVersionLoader = loadNodeVmVersion,
-): CodeCallScriptRuntime {
+export function createNodeVmRuntime(loader: NodeVmModuleLoader = loadNodeVmModule): CodeCallScriptRuntime {
   return {
     name: 'node-vm',
     async replaysCallTimes(): Promise<boolean> {
-      return !isCloudflareWorkersRuntime() && supportsReplayedCalls(await versionLoader().catch(() => undefined));
+      return !isCloudflareWorkersRuntime() && replaysCallTimesOf(await loader().catch(() => undefined));
     },
     async createRunner(spec: CodeCallScriptRunSpec): Promise<CodeCallScriptRunner> {
       if (isCloudflareWorkersRuntime()) {
@@ -196,7 +181,7 @@ export function createNodeVmRuntime(
       }
       const enclave = createEnclave(module, toEnclaveOptions(spec));
       const replays = spec.clock !== undefined;
-      const replaysCallTimes = replays && supportsReplayedCalls(await versionLoader().catch(() => undefined));
+      const replaysCallTimes = replays && replaysCallTimesOf(module);
       const runOptions: EnclaveRunOptions & { replayedCalls?: readonly CodeCallReplayedCall[] } = {
         ...runOptionsOf(spec),
         ...(replaysCallTimes && spec.replayedCalls && { replayedCalls: spec.replayedCalls }),
