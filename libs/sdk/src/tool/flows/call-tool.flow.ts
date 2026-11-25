@@ -50,6 +50,7 @@ import {
   type FlowRunOptions,
   type ScopeEntry,
   type Token,
+  type ToolCallExtra,
 } from '../../common';
 import { callSurfaceOf, entryUnavailableError, isOfferedOnSurface } from '../../common/availability';
 import { resolveInputUndeclaredKeysPolicy } from '../../common/metadata/input-policy';
@@ -1072,6 +1073,8 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       context._jsonRpcRequestIdInternal = this.state.jsonRpcRequestId;
       // A hook that answers with `respond(value)` ends the call before validateOutput records the output
       context._onRespondInternal = (value) => this.state.set('rawOutput', value);
+      const { onRecordsChanged } = ctx as Partial<ToolCallExtra>;
+      if (typeof onRecordsChanged === 'function') context._onRecordsChangedInternal = onRecordsChanged;
 
       // Wire transport to FrontMcpContext for elicitation support
       // The transport is stored in authInfo.transport by the local adapter
