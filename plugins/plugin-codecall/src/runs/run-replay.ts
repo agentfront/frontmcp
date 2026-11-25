@@ -1,6 +1,7 @@
 import type { PostReviewAction, ReviewDecision, ReviewOptions } from '@enclave-vm/core/worker';
 
 import type { CodeCallVmEnvironment } from '../codecall.symbol';
+import type { CodeCallReplayedCall } from '../services/runtime/runtime.types';
 import type { ScriptToolCall } from './call-idempotency-key';
 import { isRefusedBeforeTool } from './call-stage';
 import { argumentsHashOf, journalToolNameOf, type RunJournal } from './run-journal';
@@ -22,6 +23,8 @@ export interface RunReplayHooks {
   toolResultOrder: 'call';
   clock: () => number;
   random: () => number;
+  /** The recorded calls, with when each first reached the host, when the record has every time. */
+  replayedCalls?: readonly CodeCallReplayedCall[];
 }
 
 /** The code of a run that diverged from the journal it replays: it ends with that, whatever the review decided. */
@@ -36,6 +39,7 @@ interface RunPoint {
   random: number;
   outputs: number;
   operations: number;
+  hostFunctionCalls: number;
   at: number;
 }
 
@@ -83,6 +87,8 @@ export class RunReplay {
   private startedAt = Date.now();
   private firstOperationAt?: number;
   private operations = 0;
+  private hostFunctionCalls = 0;
+  private callTimesApplied = false;
   private readonly refusalsBeforeTool = new Set<number>();
   private callsReached = 0;
   private divergence?: RunDivergedError;
@@ -105,14 +111,22 @@ export class RunReplay {
     return this.applied;
   }
 
-  /** The runtime options that make the run replayable: results in call order, and this replay's clock and random. */
+  /**
+   * The runtime options that make the run replayable: results in call order, this replay's clock and random, and the
+   * calls it replays with when each first reached the host, for Enclave's detectors.
+   */
   get hooks(): RunReplayHooks {
-    return { toolResultOrder: 'call', clock: this.clock, random: this.random };
+    const replayedCalls = this.replayedCalls();
+    return { toolResultOrder: 'call', clock: this.clock, random: this.random, ...(replayedCalls && { replayedCalls }) };
   }
 
-  /** Records whether the runtime applied {@link hooks}: a runtime that did not leaves nothing to replay. */
-  appliedByRuntime(applied: boolean): void {
+  /**
+   * Records whether the runtime applied {@link hooks}, without which there is nothing to replay, and whether its
+   * detectors judge replayed calls by their recorded times (`callTimes`).
+   */
+  appliedByRuntime(applied: boolean, callTimes = false): void {
     this.applied = applied;
+    this.callTimesApplied = callTimes && (this.source === undefined || this.replayedCalls() !== undefined);
     this.startedAt = Date.now();
   }
 
@@ -142,18 +156,22 @@ export class RunReplay {
     return this.pendingAt(callIndex) && this.pendingMismatchOf(toolName, args) ? ALLOW : undefined;
   }
 
-  /** Counts a call into a host function, which Enclave's rate limit counts with tool calls. */
+  /** Counts a call into a host function, which Enclave's rate limit counts with tool calls, also on replay. */
   hostFunctionCalled(): void {
+    this.hostFunctionCalls++;
     this.operated();
   }
 
   /**
    * Whether replaying the run up to the call at `callIndex` stays clear of Enclave's sequence detectors and rate limits,
-   * which read the real clock: its operations before that call, from its first, took less than the shortest detector
-   * window, were fewer than the rate limit allows a second, and called no tool more often than it allows in its window.
+   * which read the real clock. Where the runtime judges replayed calls by their recorded times, only its host function
+   * calls, which run again, count against the rate limit; elsewhere its operations before that call, from its first,
+   * took less than the shortest detector window, were fewer than the rate limit allows a second, and called no tool more
+   * often than it allows in its window.
    */
   replaysWithinDetectors(callIndex: number): boolean {
     const point = this.pointAtCall.get(callIndex) ?? this.pointNow();
+    if (this.callTimesApplied) return point.hostFunctionCalls < MAX_OPERATIONS_PER_SECOND;
     const span = point.at - (this.firstOperationAt ?? point.at);
     return (
       span < DETECTOR_WINDOW_MS && point.operations < MAX_OPERATIONS_PER_SECOND && this.withinToolLimits(callIndex)
@@ -277,8 +295,20 @@ export class RunReplay {
       random: this.randomReads.length,
       outputs: this.outputsWritten,
       operations: this.operations,
+      hostFunctionCalls: this.hostFunctionCalls,
       at: Date.now(),
     };
+  }
+
+  /** The calls this run replays, for Enclave's detectors, or undefined when its record lacks a time. */
+  private replayedCalls(): CodeCallReplayedCall[] | undefined {
+    const entries = this.source?.journal ?? [];
+    if (entries.length === 0 || entries.some((entry) => entry.arrivedAtMs === undefined)) return undefined;
+    let elapsedMs = 0;
+    return entries.map((entry) => {
+      elapsedMs = Math.max(elapsedMs, entry.arrivedAtMs ?? 0);
+      return { callIndex: entry.position - 1, toolName: entry.tool, elapsedMs };
+    });
   }
 
   private pendingAt(callIndex: number): boolean {

@@ -32,6 +32,7 @@ import {
   CODECALL_ENCLAVE_SECURITY_LEVEL,
   runOptionsOf,
   type CodeCallHostFunction,
+  type CodeCallReplayedCall,
   type CodeCallScriptRunner,
   type CodeCallScriptRunSpec,
   type CodeCallScriptRuntime,
@@ -59,7 +60,9 @@ export type AgentScriptRunnerCapability =
   /** Sidecar entries an earlier run kept, which the run starts with. */
   | 'kept-references'
   /** `toolResultOrder: 'call'` and the host's `clock` and `random`, which a replayed run needs. */
-  | 'replay';
+  | 'replay'
+  /** The `replayedCalls` run option: Enclave's detectors judge replayed calls by when they first reached the host. */
+  | 'replayed-calls';
 
 /** The options CodeCall gives the runner. */
 export interface AgentScriptRunnerOptions {
@@ -94,7 +97,11 @@ export interface AgentScriptRunnerInstance {
   run<T = unknown>(
     code: string,
     toolHandler?: ToolHandler,
-    options?: { reviewContext?: ReviewContext; preloadReferences?: readonly ReferenceEntry[] },
+    options?: {
+      reviewContext?: ReviewContext;
+      preloadReferences?: readonly ReferenceEntry[];
+      replayedCalls?: readonly CodeCallReplayedCall[];
+    },
   ): Promise<ExecutionResult<T>>;
   dispose(): void;
 }
@@ -212,12 +219,18 @@ export function createInterpreterRuntime(loader: WorkerEntryLoader = loadWorkerE
         );
       }
       const replays = spec.clock !== undefined && Runner.capabilities.includes('replay');
+      const replaysCallTimes = replays && Runner.capabilities.includes('replayed-calls');
+      const runOptions = {
+        ...runOptionsOf(spec),
+        ...(replaysCallTimes && spec.replayedCalls && { replayedCalls: spec.replayedCalls }),
+      };
       // A runner without 'replay' runs the script as before, and the run cannot be replayed
       const runner = createRunner(Runner, toRunnerOptions(replays ? spec : { ...spec, clock: undefined }));
       return {
-        run: (code) => runner.run<unknown>(code, undefined, runOptionsOf(spec)),
+        run: (code) => runner.run<unknown>(code, undefined, runOptions),
         dispose: () => runner.dispose(),
         replays,
+        replaysCallTimes,
       };
     },
   };

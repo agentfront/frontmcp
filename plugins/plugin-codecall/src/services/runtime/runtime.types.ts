@@ -110,6 +110,16 @@ export interface CodeCallScriptRunSpec {
   clock?: () => number;
   /** What the script's `Math.random()` returns, for a run that may be replayed. */
   random?: () => number;
+  /** The calls a resumed run answers from its record, with when each first reached the host, for Enclave's detectors. */
+  replayedCalls?: readonly CodeCallReplayedCall[];
+}
+
+/** A call Enclave's detectors judge by when it first reached the host: Enclave's `ReplayedCall`. */
+export interface CodeCallReplayedCall {
+  callIndex: number;
+  toolName: string;
+  /** When the call reached the host, in ms from the start of the run that first made it. */
+  elapsedMs: number;
 }
 
 /** The outcome of one run, in Enclave's `ExecutionResult` shape. */
@@ -122,6 +132,8 @@ export interface CodeCallScriptRunner {
   dispose(): void;
   /** Whether the runner applies the spec's `toolResultOrder`, `clock` and `random`, which a replayed run needs. */
   readonly replays?: boolean;
+  /** Whether the runner gives Enclave's detectors the spec's `replayedCalls` (Enclave 2.21.1 and later). */
+  readonly replaysCallTimes?: boolean;
 }
 
 /** A runtime CodeCall can execute scripts in. */

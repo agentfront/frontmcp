@@ -230,10 +230,12 @@ runs it, `cancelled`, or how it ended), and `codecall:cancel` ends a paused run.
   that cannot pause answers as it did before.
 - **Clear of Enclave's detectors.** Enclave's rate limit (100 operations a second) and its sequence detectors (calls
   to one tool, a read then a send, within 5 to 30 seconds) read the real clock, and a replay answers its recorded calls
-  at once. So a run pauses only when it made its tool and host function calls up to the paused call within 5 seconds,
-  fewer than 100 of them, and no more calls to one tool than `vm.rapidEnumerationThreshold` (and its overrides) allow:
-  replaying them faster cannot trip a detector they passed. A paused record keeps when each
-  call reached the host, for an Enclave that can replay calls at their own times.
+  at once. A paused record keeps when each call reached the host, and Enclave 2.21.1 and later judge the replayed calls
+  by those times (`replayedCalls`); host function calls (`getTool`, `mcpLog`, `mcpNotify`) do run again, so a run
+  pauses only after fewer than 100 of them. With an older Enclave, or a record without those times, a run pauses only
+  when it made its tool and host function calls up to the paused call within 5 seconds, fewer than 100 of them, and no
+  more calls to one tool than `vm.rapidEnumerationThreshold` (and its overrides) allow: replaying them faster cannot trip
+  a detector they passed.
 - **Once.** A resume claims the pause in the run storage, setting a key only where none is: of two resumes, on this
   instance or another one sharing the storage, one runs the run and the other is told the run is not paused. The run is
   then kept `resuming` until the resumed run ends, and its claim lasts until the pause would have expired plus the

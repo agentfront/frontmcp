@@ -15,12 +15,13 @@
 // threads do not contain either outcome. The `interpreter` runtime does not depend on that boundary
 // for this class of failure.
 
-import type { CreateEnclaveOptions, Enclave } from '@enclave-vm/core';
+import type { CreateEnclaveOptions, Enclave, EnclaveRunOptions } from '@enclave-vm/core';
 
 import { CodeCallRuntimeError } from './runtime.errors';
 import {
   CODECALL_ENCLAVE_SECURITY_LEVEL,
   runOptionsOf,
+  type CodeCallReplayedCall,
   type CodeCallScriptRunner,
   type CodeCallScriptRunSpec,
   type CodeCallScriptRuntime,
@@ -127,8 +128,31 @@ function createEnclave(module: NodeVmModule, options: CreateEnclaveOptions): Pic
   }
 }
 
+/** How the runtime reads the installed Enclave's version; replaced in tests. */
+export type NodeVmVersionLoader = () => Promise<string | undefined>;
+
+const loadNodeVmVersion: NodeVmVersionLoader = async () =>
+  ((await importAtRuntime(`${NODE_VM_PACKAGE}/package.json`)) as { version?: string }).version;
+
+/** The first Enclave whose detectors take the `replayedCalls` run option. */
+const REPLAYED_CALLS_VERSION = [2, 21, 1];
+
+/** Whether Enclave `version` (its release, a prerelease of it counting) gives its detectors the `replayedCalls` run option. */
+export function supportsReplayedCalls(version: string | undefined): boolean {
+  const release = /^(\d+)\.(\d+)\.(\d+)/
+    .exec(version ?? '')
+    ?.slice(1)
+    .map(Number);
+  if (!release) return false;
+  const differing = release.findIndex((part, index) => part !== REPLAYED_CALLS_VERSION[index]);
+  return differing === -1 || release[differing] > REPLAYED_CALLS_VERSION[differing];
+}
+
 /** The `node-vm` runtime. */
-export function createNodeVmRuntime(loader: NodeVmModuleLoader = loadNodeVmModule): CodeCallScriptRuntime {
+export function createNodeVmRuntime(
+  loader: NodeVmModuleLoader = loadNodeVmModule,
+  versionLoader: NodeVmVersionLoader = loadNodeVmVersion,
+): CodeCallScriptRuntime {
   return {
     name: 'node-vm',
     async createRunner(spec: CodeCallScriptRunSpec): Promise<CodeCallScriptRunner> {
@@ -168,10 +192,17 @@ export function createNodeVmRuntime(loader: NodeVmModuleLoader = loadNodeVmModul
         );
       }
       const enclave = createEnclave(module, toEnclaveOptions(spec));
+      const replays = spec.clock !== undefined;
+      const replaysCallTimes = replays && supportsReplayedCalls(await versionLoader().catch(() => undefined));
+      const runOptions: EnclaveRunOptions & { replayedCalls?: readonly CodeCallReplayedCall[] } = {
+        ...runOptionsOf(spec),
+        ...(replaysCallTimes && spec.replayedCalls && { replayedCalls: spec.replayedCalls }),
+      };
       return {
-        run: (code) => enclave.run<unknown>(code, undefined, runOptionsOf(spec)),
+        run: (code) => enclave.run<unknown>(code, undefined, runOptions),
         dispose: () => enclave.dispose(),
-        replays: spec.clock !== undefined,
+        replays,
+        replaysCallTimes,
       };
     },
   };

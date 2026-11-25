@@ -423,7 +423,7 @@ export default class EnclaveService {
       throw error;
     }
 
-    replay?.appliedByRuntime(runner.replays === true);
+    replay?.appliedByRuntime(runner.replays === true, runner.replaysCallTimes === true);
     if (replay?.replaysRun && !runner.replays) {
       gate.close();
       runner.dispose();
