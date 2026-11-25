@@ -1,7 +1,7 @@
 import { randomUUID } from '@frontmcp/utils';
 
 import type { CodeCallRunsOptions } from '../codecall.types';
-import type { RunJournal } from './run-journal';
+import { reachedTool, type RunJournal } from './run-journal';
 import type { CodeCallRunInput } from './run-record.store';
 import type { CodeCallJournalEntry, CodeCallRunPause, CodeCallRunStatus } from './run-record.types';
 import { isReplayable, type RunReplayPending, type RunReplaySource } from './run-replay';
@@ -90,7 +90,6 @@ export function retrySourceOf(
   const pending = pendingCallOf(status, journal);
   if (pending) return { source: resumeSourceOf(journal, pending, previous) };
   const replayed = previous?.journal.length ?? 0;
-  const reachedTool = (entry: CodeCallJournalEntry) => entry.outcome !== 'failure' || entry.phase === 'execute';
   const ranLive = journal.entriesSoFar().some((entry) => entry.position > replayed && reachedTool(entry));
   return ranLive ? undefined : { source: previous };
 }

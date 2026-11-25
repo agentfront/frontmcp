@@ -17,8 +17,13 @@ const PHASE_BY_ERROR_CODE: Partial<Record<string, CodeCallCallPhase>> = {
   [TOOL_CALL_ERROR_CODES.NOT_FOUND]: 'access',
   [TOOL_CALL_ERROR_CODES.VALIDATION]: 'input',
   [TOOL_CALL_ERROR_CODES.RATE_LIMITED]: 'limit',
-  [TOOL_CALL_ERROR_CODES.RESULT_TOO_LARGE]: 'limit',
+  [TOOL_CALL_ERROR_CODES.RESULT_TOO_LARGE]: 'result',
 };
+
+/** Whether an entry's call reached its tool: it succeeded, is still running, or failed once its tool had run. */
+export function reachedTool(entry: CodeCallJournalEntry): boolean {
+  return entry.outcome !== 'failure' || entry.phase === 'execute' || entry.phase === 'result';
+}
 
 /** The longest tool name a journal entry keeps: a script can pass any string as one. */
 const MAX_TOOL_NAME_CHARS = 128;

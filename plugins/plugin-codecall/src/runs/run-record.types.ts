@@ -20,9 +20,10 @@ export type CodeCallCallOutcome = 'success' | 'failure' | 'unfinished';
 
 /**
  * Where a failed call failed: `access` (policy or not found), `input`, `limit` (rate or quota), `execute` (the tool),
- * or `review` (a call-phase decision of the review or a budget, before the call reached the tool handler).
+ * `result` (its tool ran, and its result was refused), or `review` (a call-phase decision of the review or a budget,
+ * before the call reached the tool handler).
  */
-export type CodeCallCallPhase = 'access' | 'input' | 'limit' | 'execute' | 'review';
+export type CodeCallCallPhase = 'access' | 'input' | 'limit' | 'execute' | 'result' | 'review';
 
 /** A call-phase decision that refused a call: the review's, or a budget's, in the review's shape. */
 export type CodeCallCallDecision = Exclude<ReviewDecision, { decision: 'allow' }>;

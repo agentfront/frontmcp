@@ -1,5 +1,6 @@
 import type { PreReviewInput, ReviewDecision } from '@enclave-vm/core/worker';
 
+import { createToolCallError, TOOL_CALL_ERROR_CODES, type ToolCallErrorCode } from '../errors';
 import { argumentsHashOf, RunJournal } from '../runs/run-journal';
 import { pausableSoFar, pendingCallOf, resumeSourceOf, retrySourceOf } from '../runs/run-pause';
 import type { CodeCallCallDecision } from '../runs/run-record.types';
@@ -114,6 +115,18 @@ describe('retrySourceOf', () => {
     journal.refuse('orders.void', {}, 1, APPROVAL);
 
     expect(retrySourceOf('needs_approval', journal, previous)).toEqual({ source: previous });
+  });
+
+  it('runs no attempt again after a call after the approved one whose result was refused once its tool ran', () => {
+    const attemptWith = (code: ToolCallErrorCode) => {
+      const journal = journalWithReplay();
+      journal.refuse('orders.void', {}, 0, APPROVAL);
+      journal.begin('orders.export', {}, 1).fail(createToolCallError(code, 'orders.export'));
+      return journal;
+    };
+
+    expect(retrySourceOf('needs_approval', attemptWith(TOOL_CALL_ERROR_CODES.RESULT_TOO_LARGE))).toBeUndefined();
+    expect(retrySourceOf('needs_approval', attemptWith(TOOL_CALL_ERROR_CODES.RATE_LIMITED))).toEqual({});
   });
 });
 

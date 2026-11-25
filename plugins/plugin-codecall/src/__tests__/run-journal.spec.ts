@@ -66,6 +66,7 @@ describe('RunJournal', () => {
     [TOOL_CALL_ERROR_CODES.NOT_FOUND, 'access'],
     [TOOL_CALL_ERROR_CODES.VALIDATION, 'input'],
     [TOOL_CALL_ERROR_CODES.RATE_LIMITED, 'limit'],
+    [TOOL_CALL_ERROR_CODES.RESULT_TOO_LARGE, 'result'],
     [TOOL_CALL_ERROR_CODES.EXECUTION, 'execute'],
     [TOOL_CALL_ERROR_CODES.TIMEOUT, 'execute'],
   ])('records a call that failed with %s in the %s phase', (code, phase) => {

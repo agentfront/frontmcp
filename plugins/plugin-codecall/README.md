@@ -154,20 +154,19 @@ CodeCallPlugin.init({
 
 ## Run records
 
-Each `codecall:execute` that has an owner (a session, or a signed-in caller) leaves a run record, and its result
-carries `runId`. The record holds the owner, the script's SHA-256, the status, the start and end times,
-`reviewDecision` (the [review](#review)'s or a [budget](#budgets)'s status, `'allow'` when they let the script run,
-`null` with `review` and `budgets` off), the return value's size, and a journal with one entry per tool
-call: its position (in the order calls reached the host, Enclave's `callIndex` + 1, on either runtime), the tool, a
-SHA-256 of the arguments, the outcome (`success`, `failure` or `unfinished`), the phase of a failure (`access`, `input`,
-`limit`, `execute`, or `review` for a call a call-phase decision refused before it reached its tool), the duration and
-the result's size. With `runs.resume` (on by default) a run also holds each call's
-result, or the error the script got, and the values the script read from `Date` and `Math.random()`, in order: what
-it takes to run the script again and answer its calls from the record (see [Replay](#replay)). It holds them in
-memory while it runs, and keeps none of them in its record, which has the journal's metadata only, unless the run
-[pauses](#pause-and-resume). A `keep` or `recall` is journaled too, under its reserved tool name (`codecall:keep`,
-`codecall:recall`) with `kind` (`'keep'` or `'recall'`) and the `name` it kept or read; it is not a tool call, and its
-arguments and result never appear in a trace.
+Each `codecall:execute` that has an owner (a session, or a signed-in caller) leaves a run record, and its result carries
+`runId`. The record holds the owner, the script's SHA-256, the status, the start and end times, `reviewDecision` (the
+[review](#review)'s or a [budget](#budgets)'s status, `'allow'` when they let the script run, `null` with `review` and
+`budgets` off), the return value's size, and a journal with one entry per tool call: its position (in the order calls
+reached the host, Enclave's `callIndex` + 1, on either runtime), the tool, a SHA-256 of the arguments, the outcome
+(`success`, `failure` or `unfinished`), the phase of a failure (`access`, `input`, `limit`, `execute`, `result` for a
+result refused after its tool ran, or `review` for a call a call-phase decision refused before it reached its tool), the
+duration and the result's size. With `runs.resume` (on by default) a run also holds each call's result, or the error the
+script got, and the values the script read from `Date` and `Math.random()`, in order: what it takes to run the script
+again and answer its calls from the record (see [Replay](#replay)). It holds them in memory while it runs, and keeps
+none of them in its record, which has the journal's metadata only, unless the run [pauses](#pause-and-resume). A `keep`
+or `recall` is journaled too, under its reserved tool name (`codecall:keep`, `codecall:recall`) with `kind` (`'keep'` or
+`'recall'`) and the `name` it kept or read; it is not a tool call, and its arguments and result never appear in a trace.
 
 Records are kept like result handles: encrypted under keys derived from the run id and the owner, readable only by
 that owner (`this.get(CodeCallRunStoreToken).read(runId, this)`), until they expire.
