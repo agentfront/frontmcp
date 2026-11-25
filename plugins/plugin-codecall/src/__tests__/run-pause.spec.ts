@@ -66,6 +66,57 @@ describe('pendingCallOf', () => {
   });
 });
 
+describe('the detector window of a paused run', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('starts at the run first operation, not when the runtime started', () => {
+    const start = Date.now();
+    const now = jest.spyOn(Date, 'now').mockReturnValue(start);
+    const journal = journalWithReplay();
+    now.mockReturnValue(start + 6000);
+    journal.replay?.decisionOf(0, 'orders.get', {});
+    journal.begin('orders.get', {}, 0).succeed({});
+    now.mockReturnValue(start + 6100);
+    journal.replay?.decisionOf(1, 'orders.void', {});
+    journal.refuse('orders.void', {}, 1, APPROVAL);
+
+    expect(pendingCallOf('needs_approval', journal)).toMatchObject({ position: 2 });
+  });
+});
+
+describe('arrival times', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('keeps when each call reached the host after the run started, and continues the timeline on resume', () => {
+    const start = Date.now();
+    const now = jest.spyOn(Date, 'now').mockReturnValue(start);
+    const first = journalWithReplay();
+    now.mockReturnValue(start + 40);
+    first.replay?.decisionOf(0, 'orders.get', {});
+    first.begin('orders.get', {}, 0).succeed({ id: 'o1' });
+    now.mockReturnValue(start + 90);
+    first.replay?.decisionOf(1, 'orders.void', {});
+    first.refuse('orders.void', {}, 1, APPROVAL);
+    const source = resumeSourceOf(first, first.entriesSoFar()[1]);
+    expect(source.journal[0].arrivedAtMs).toBe(40);
+    expect(source.pending.call.arrivedAtMs).toBe(90);
+
+    now.mockReturnValue(start + 60_000);
+    const resumed = journalWithReplay(source);
+    resumed.replay?.decisionOf(0, 'orders.get', {});
+    now.mockReturnValue(start + 60_010);
+    resumed.replay?.decisionOf(1, 'orders.void', {});
+    now.mockReturnValue(start + 60_030);
+    resumed.replay?.decisionOf(2, 'orders.note', {});
+
+    expect([0, 1, 2].map((callIndex) => resumed.replay?.arrivalOf(callIndex))).toEqual([40, 90, 110]);
+  });
+});
+
 describe('replaying refusals', () => {
   const source: RunReplaySource = {
     journal: [

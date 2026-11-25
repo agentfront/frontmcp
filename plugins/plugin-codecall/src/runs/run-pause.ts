@@ -4,7 +4,7 @@ import type { CodeCallRunsOptions } from '../codecall.types';
 import type { RunJournal } from './run-journal';
 import type { CodeCallRunInput } from './run-record.store';
 import type { CodeCallJournalEntry, CodeCallRunPause, CodeCallRunStatus } from './run-record.types';
-import { isReplayable, type RunReplaySource } from './run-replay';
+import { isReplayable, type RunReplayPending, type RunReplaySource } from './run-replay';
 
 /** What the agent is told about a paused run, besides its `runId`. */
 export interface CodeCallPausedAnswer {
@@ -61,12 +61,17 @@ export function resumeSourceOf(
   journal: RunJournal,
   pending: CodeCallJournalEntry,
   previous?: RunReplaySource,
-): RunReplaySource {
-  const call = { position: pending.position, tool: pending.tool, argumentsHash: pending.argumentsHash };
+): RunReplaySource & { pending: RunReplayPending } {
+  const arrivalOf = (position: number) => journal.replay?.arrivalOf(position - 1);
+  const { position, tool, argumentsHash } = pending;
+  const call = { position, tool, argumentsHash, arrivedAtMs: arrivalOf(position) };
   const sameCall = previous?.pending?.call.position === pending.position;
   const corrected = sameCall ? previous?.pending?.arguments : undefined;
   return {
-    journal: journal.entriesSoFar().filter((entry) => entry.position < pending.position),
+    journal: journal
+      .entriesSoFar()
+      .filter((entry) => entry.position < pending.position)
+      .map((entry) => ({ ...entry, arrivedAtMs: arrivalOf(entry.position) })),
     ...journal.replay?.readsBefore(pending.position - 1),
     pending: { call, ...(corrected && { arguments: corrected }) },
   };
@@ -92,10 +97,10 @@ export function pausedRunOf(
     Date.parse(run.startedAt) + limits.lifetimeSeconds * 1000,
   );
   if (!(expiresAt > now)) return undefined;
-  const { journal: entries, clock, random } = resumeSourceOf(journal, pending);
+  const { journal: entries, clock, random, pending: resumed } = resumeSourceOf(journal, pending);
   const pause: CodeCallRunPause = {
     id: randomUUID(),
-    call: { position: pending.position, tool: pending.tool, argumentsHash: pending.argumentsHash },
+    call: resumed.call,
     answer,
     expiresAt: new Date(expiresAt).toISOString(),
     script: script.script,

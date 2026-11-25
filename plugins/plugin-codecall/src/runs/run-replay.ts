@@ -71,7 +71,8 @@ export class RunReplay {
   private readonly randomReads: number[] = [];
   private readonly recorded = new Map<number, CodeCallJournalEntry>();
   private readonly pointAtCall = new Map<number, RunPoint>();
-  private readonly startedAt = Date.now();
+  private startedAt = Date.now();
+  private firstOperationAt?: number;
   private operations = 0;
   private readonly inputRefusals = new Set<number>();
   private callsReached = 0;
@@ -100,6 +101,7 @@ export class RunReplay {
   /** Records whether the runtime applied {@link hooks}: a runtime that did not leaves nothing to replay. */
   appliedByRuntime(applied: boolean): void {
     this.applied = applied;
+    this.startedAt = Date.now();
   }
 
   readonly clock = (): number => this.read(this.clockReads, this.source?.clock, Date.now);
@@ -125,17 +127,35 @@ export class RunReplay {
 
   /** Counts a call into a host function, which Enclave's rate limit counts with tool calls. */
   hostFunctionCalled(): void {
-    this.operations++;
+    this.operated();
   }
 
   /**
    * Whether replaying the run up to the call at `callIndex` stays clear of Enclave's sequence detectors and rate limit,
-   * which read the real clock: it reached that call within the shortest detector window, in fewer operations than the
-   * rate limit allows a second.
+   * which read the real clock: its operations before that call, from its first, took less than the shortest detector
+   * window, and were fewer than the rate limit allows a second.
    */
   replaysWithinDetectors(callIndex: number): boolean {
     const point = this.pointAtCall.get(callIndex) ?? this.pointNow();
-    return point.at - this.startedAt < DETECTOR_WINDOW_MS && point.operations < MAX_OPERATIONS_PER_SECOND;
+    const span = point.at - (this.firstOperationAt ?? point.at);
+    return span < DETECTOR_WINDOW_MS && point.operations < MAX_OPERATIONS_PER_SECOND;
+  }
+
+  /**
+   * When the call at `callIndex` reached the host, in ms after the run started, on the run's timeline without its
+   * pauses: a replayed call keeps the time its record has, and a call after the paused one follows on from the time the
+   * paused call first reached the host.
+   */
+  arrivalOf(callIndex: number): number | undefined {
+    const recorded = this.recorded.get(callIndex)?.arrivedAtMs;
+    if (recorded !== undefined) return recorded;
+    const point = this.pointAtCall.get(callIndex);
+    if (!point) return undefined;
+    const pending = this.source?.pending?.call;
+    const resumedAt = pending && this.pointAtCall.get(pending.position - 1)?.at;
+    if (pending?.arrivedAtMs !== undefined && resumedAt !== undefined)
+      return pending.arrivedAtMs + point.at - resumedAt;
+    return point.at - this.startedAt;
   }
 
   /** The arguments the call at `callIndex` runs with: the agent's corrected ones for the pending call. */
@@ -213,6 +233,11 @@ export class RunReplay {
     this.callsReached = Math.max(this.callsReached, callIndex + 1);
     if (this.pointAtCall.has(callIndex)) return;
     this.pointAtCall.set(callIndex, this.pointNow());
+    this.operated();
+  }
+
+  private operated(): void {
+    this.firstOperationAt ??= Date.now();
     this.operations++;
   }
 

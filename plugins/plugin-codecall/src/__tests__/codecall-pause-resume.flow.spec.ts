@@ -252,7 +252,12 @@ describe.each<CodeCallVmRuntime>(['node-vm', 'interpreter'])('pausing and resumi
     const runId = paused.runId as string;
     expect(await call(client, 'codecall:status', { runId })).toMatchObject({ status: 'paused', calls: 2 });
     const record = (await call<{ record: CodeCallRunRecord }>(client, 'runs.read', { runId })).record;
-    expect(record).toMatchObject({ status: 'paused', clock: [expect.any(Number)] });
+    expect(record).toMatchObject({
+      status: 'paused',
+      clock: [expect.any(Number)],
+      journal: [{ arrivedAtMs: expect.any(Number) }, { arrivedAtMs: expect.any(Number) }],
+      pause: { call: { position: 3, arrivedAtMs: expect.any(Number) } },
+    });
 
     const resumed = await call(client, 'codecall:resume', { runId, arguments: { id: 'o1', cents: 1250 } });
 

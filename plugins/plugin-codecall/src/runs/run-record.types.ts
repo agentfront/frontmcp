@@ -60,6 +60,8 @@ export interface CodeCallJournalEntry {
   error?: CodeCallScriptError;
   /** The call-phase decision that refused the call (`phase: 'review'`), only with `runs.resume`. */
   decision?: CodeCallCallDecision;
+  /** When the call reached the host, in ms after the run started, on its timeline without pauses: in a paused record. */
+  arrivedAtMs?: number;
 }
 
 /** The call a paused run stopped before: it did not reach its tool. */
@@ -68,6 +70,8 @@ export interface CodeCallPendingCall {
   tool: string;
   /** SHA-256 (hex) of the arguments the script passed. */
   argumentsHash: string;
+  /** When the call first reached the host, in ms after the run started, on its timeline without pauses. */
+  arrivedAtMs?: number;
 }
 
 /** What a paused run keeps to be resumed. */
