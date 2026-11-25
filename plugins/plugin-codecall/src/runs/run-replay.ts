@@ -14,9 +14,12 @@ export interface RunReplayHooks {
   random: () => number;
 }
 
+/** The code of a run that diverged from the journal it replays: it ends with that, whatever the review decided. */
+export const RUN_DIVERGED = 'RUN_DIVERGED';
+
 /** The error a run ends with when its script does not make the call its journal recorded at a position. */
 export class RunDivergedError extends Error {
-  readonly code = 'RUN_DIVERGED';
+  readonly code = RUN_DIVERGED;
 
   constructor(message: string) {
     super(message);

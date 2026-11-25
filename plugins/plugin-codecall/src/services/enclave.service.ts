@@ -434,8 +434,8 @@ export default class EnclaveService {
       const { pendingToolCalls } = gate.close();
       const mapped = this.mapEnclaveResult(result, logs, toolFailures, script, pendingToolCalls);
       const divergence = replay?.divergenceOf(mapped.timedOut);
-      if (divergence) return divergedResult(divergence, mapped);
-      return result.review ? { ...mapped, review: result.review } : mapped;
+      const ended = divergence ? divergedResult(divergence, mapped) : mapped;
+      return result.review ? { ...ended, review: result.review } : ended;
     } finally {
       gate.close();
       journal.close();

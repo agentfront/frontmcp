@@ -40,7 +40,7 @@ import { withCallIdempotencyKey, type ScriptToolCall } from '../runs/call-idempo
 import { jsonBytes, RunJournal } from '../runs/run-journal';
 import type { CodeCallRunInput, CodeCallRunStore } from '../runs/run-record.store';
 import { CodeCallRunStoreToken } from '../runs/run-record.types';
-import { RunReplay } from '../runs/run-replay';
+import { RUN_DIVERGED, RunReplay } from '../runs/run-replay';
 import { RunSpans, RunTelemetryToken } from '../runs/run-spans';
 import { traceOf } from '../runs/run-trace';
 import {
@@ -549,9 +549,10 @@ export default class ExecuteTool extends ToolContext {
       );
       const durationMs = elapsed(executionResult.stats?.duration);
 
-      const reviewOutcome = executionResult.review
-        ? reviewOutcomeOf(executionResult.review.decisions, executionResult.error)
-        : undefined;
+      const reviewOutcome =
+        executionResult.review && executionResult.error?.code !== RUN_DIVERGED
+          ? reviewOutcomeOf(executionResult.review.decisions, executionResult.error)
+          : undefined;
       if (reviewOutcome) {
         audit?.logExecutionFailure(executionId, script, durationMs, `review: ${reviewOutcome.status}`);
         const pending = budgets?.pendingApprovalAt(reviewOutcome.callIndex) ?? review?.pendingApproval;

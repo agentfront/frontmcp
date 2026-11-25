@@ -125,6 +125,19 @@ describe.each(['node-vm', 'interpreter'] as const)('replaying a run on the %s ru
     });
     expect(env.callTool).not.toHaveBeenCalled();
   });
+
+  it('keeps the review decisions of a run that diverged', async () => {
+    const first = await recordedRun();
+    const changed = SCRIPT.replace("callTool('tickets.read', { id: 7 })", "callTool('tickets.read', { id: 8 })");
+    const review = { hooks: { pre: async () => ({ decision: 'allow' as const }) }, context: {} };
+
+    const diverged = await service.execute(changed, environment(), recordingJournal(first.source), review);
+
+    expect(diverged).toMatchObject({ success: false, error: { code: 'RUN_DIVERGED' } });
+    expect(diverged.review?.decisions).toEqual(
+      expect.arrayContaining([expect.objectContaining({ phase: 'call', callIndex: 0, decision: 'allow' })]),
+    );
+  });
 });
 
 describe('a runtime that cannot replay', () => {
