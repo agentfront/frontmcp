@@ -188,6 +188,13 @@ function createRunner(Runner: AgentScriptRunnerClass, options: AgentScriptRunner
 export function createInterpreterRuntime(loader: WorkerEntryLoader = loadWorkerEntry): CodeCallScriptRuntime {
   return {
     name: 'interpreter',
+    async replaysCallTimes(): Promise<boolean> {
+      const Runner = await loader().then(
+        (entry) => entry[AGENT_SCRIPT_RUNNER_EXPORT],
+        () => undefined,
+      );
+      return isRunnerClass(Runner) && ['replay', 'replayed-calls'].every((name) => Runner.capabilities.includes(name));
+    },
     async createRunner(spec: CodeCallScriptRunSpec): Promise<CodeCallScriptRunner> {
       let entry: Record<string, unknown>;
       try {

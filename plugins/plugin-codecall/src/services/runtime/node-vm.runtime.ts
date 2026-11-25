@@ -155,6 +155,9 @@ export function createNodeVmRuntime(
 ): CodeCallScriptRuntime {
   return {
     name: 'node-vm',
+    async replaysCallTimes(): Promise<boolean> {
+      return !isCloudflareWorkersRuntime() && supportsReplayedCalls(await versionLoader().catch(() => undefined));
+    },
     async createRunner(spec: CodeCallScriptRunSpec): Promise<CodeCallScriptRunner> {
       if (isCloudflareWorkersRuntime()) {
         throw new CodeCallRuntimeError('RUNTIME_UNAVAILABLE', 'node-vm', UNAVAILABLE_IN_WORKERS);

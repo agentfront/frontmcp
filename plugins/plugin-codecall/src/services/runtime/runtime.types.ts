@@ -144,6 +144,8 @@ export interface CodeCallScriptRuntime {
    * unavailable here or cannot enforce every part of the spec.
    */
   createRunner(spec: CodeCallScriptRunSpec): Promise<CodeCallScriptRunner>;
+  /** Whether its Enclave judges replayed calls by their recorded times (`replayedCalls`); false when it cannot load. */
+  replaysCallTimes?(): Promise<boolean>;
 }
 
 /** The options of one run: the review hooks' context, and the sidecar entries the run starts with. */

@@ -444,6 +444,15 @@ export default class EnclaveService {
     }
   }
 
+  /** Whether the configured runtime's Enclave judges replayed calls by their recorded times, which some paused runs need. */
+  async replaysCallTimes(): Promise<boolean> {
+    try {
+      return (await this.runtimes[runtimeSettingsOf(this.vmOptions).runtime].replaysCallTimes?.()) === true;
+    } catch {
+      return false;
+    }
+  }
+
   /**
    * The host functions a script may call: `getTool` always, `mcpLog` and `mcpNotify` when the
    * environment has them. Each is closed with the execution.

@@ -11,9 +11,10 @@ import type { CodeCallPausedRunRecord } from '../runs/run-record.store';
 import { CodeCallRunStoreToken } from '../runs/run-record.types';
 import { checkCodeCallToolAccess, isBlockedSelfReference } from '../security';
 import { toolsWithheldByAuthorities } from '../security/codecall-discovery-authorities';
+import EnclaveService from '../services/enclave.service';
 import { executeToolOutputSchema, type CodeCallExecuteResult } from './execute.schema';
 import { CodeCallScriptTool } from './execute.tool';
-import { claimPausedRun, readPausedRun, runNotFoundError } from './paused-runs';
+import { claimPausedRun, readPausedRun, runNeedsReplayedCallsError, runNotFoundError } from './paused-runs';
 import { resumeToolDescription, resumeToolInputSchema, type ResumeToolInput } from './runs.schema';
 
 /**
@@ -34,6 +35,9 @@ export default class ResumeTool extends CodeCallScriptTool {
     const runs = this.tryGet(CodeCallRunStoreToken);
     if (!runs?.keepsResultsOf(this)) throw runNotFoundError(runId);
     const run = await readPausedRun(runs, runId, this);
+    if (run.pause.needsReplayedCalls && !(await this.get(EnclaveService).replaysCallTimes())) {
+      throw runNeedsReplayedCallsError(runId);
+    }
     const correctedArguments = sentArguments ?? run.pause.arguments;
     const refusedTool = await this.toolNoLongerAllowed(run);
     if (refusedTool) {

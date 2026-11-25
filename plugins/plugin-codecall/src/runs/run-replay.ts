@@ -172,6 +172,20 @@ export class RunReplay {
   replaysWithinDetectors(callIndex: number): boolean {
     const point = this.pointAtCall.get(callIndex) ?? this.pointNow();
     if (this.callTimesApplied) return point.hostFunctionCalls < MAX_OPERATIONS_PER_SECOND;
+    return this.passesFallbackGuard(callIndex, point);
+  }
+
+  /**
+   * Whether replaying the run up to the call at `callIndex` needs a runtime that judges replayed calls by their recorded
+   * times: it may pause there only because this one does.
+   */
+  needsCallTimes(callIndex: number): boolean {
+    return (
+      this.callTimesApplied && !this.passesFallbackGuard(callIndex, this.pointAtCall.get(callIndex) ?? this.pointNow())
+    );
+  }
+
+  private passesFallbackGuard(callIndex: number, point: RunPoint): boolean {
     const span = point.at - (this.firstOperationAt ?? point.at);
     return (
       span < DETECTOR_WINDOW_MS && point.operations < MAX_OPERATIONS_PER_SECOND && this.withinToolLimits(callIndex)

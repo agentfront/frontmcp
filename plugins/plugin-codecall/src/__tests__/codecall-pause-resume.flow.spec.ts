@@ -29,6 +29,8 @@ import type { CodeCallPluginOptionsInput, CodeCallVmRuntime } from '../codecall.
 import { KeptValueCalls } from '../kept-values/kept-value-calls';
 import { callIdempotencyKey } from '../runs/call-idempotency-key';
 import { CodeCallRunStoreToken, type CodeCallRunRecord } from '../runs/run-record.types';
+import { RunReplay } from '../runs/run-replay';
+import EnclaveService from '../services/enclave.service';
 
 jest.setTimeout(30000);
 
@@ -449,6 +451,25 @@ describe.each<CodeCallVmRuntime>(['node-vm', 'interpreter'])('resuming safely on
     ).toMatchObject({
       status: 'ok',
       result: { sent: 'ops@example.com' },
+    });
+  });
+
+  it('refuses up front to resume a run whose replay needs replayed calls on an Enclave without them, and keeps it paused', async () => {
+    jest.spyOn(RunReplay.prototype, 'needsCallTimes').mockReturnValue(true);
+    const client = await open(serverConfig({ vm, runs: { storage: { type: 'memory' } } }), `needs-times-${runtime}`);
+    const { runId } = await call(client, 'codecall:execute', { script: PAUSING_SCRIPT });
+    jest.restoreAllMocks();
+
+    const refused = await call(client, 'codecall:resume', { runId, arguments: { id: 'o1', cents: 1 } });
+
+    expect(refused).toMatchObject({
+      error: { message: expect.stringContaining('needs @enclave-vm/core 2.21.1 or later') },
+    });
+    expect(await call(client, 'codecall:status', { runId })).toMatchObject({ status: 'paused' });
+    expect(called('orders.refund')).toBe(0);
+    jest.spyOn(EnclaveService.prototype, 'replaysCallTimes').mockResolvedValue(true);
+    expect(await call(client, 'codecall:resume', { runId, arguments: { id: 'o1', cents: 1 } })).toMatchObject({
+      status: 'ok',
     });
   });
 

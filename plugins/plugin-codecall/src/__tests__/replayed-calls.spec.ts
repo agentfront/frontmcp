@@ -2,9 +2,11 @@
  * Enclave's `replayedCalls` run option (2.21.1): a resumed run gives each runtime its recorded calls with when they first
  * reached the host, where the runtime takes it, and then needs no detector guard to pause; elsewhere the guard stays.
  */
+import CodeCallConfig from '../providers/code-call.config';
 import { argumentsHashOf } from '../runs/run-journal';
 import type { CodeCallJournalEntry } from '../runs/run-record.types';
 import { RunReplay, type RunReplaySource } from '../runs/run-replay';
+import EnclaveService from '../services/enclave.service';
 import { AGENT_SCRIPT_RUNNER_EXPORT, createInterpreterRuntime } from '../services/runtime/interpreter.runtime';
 import { createNodeVmRuntime, supportsReplayedCalls } from '../services/runtime/node-vm.runtime';
 import type { CodeCallScriptRunSpec } from '../services/runtime/runtime.types';
@@ -67,6 +69,24 @@ describe('the calls a resumed run replays', () => {
     for (let index = 0; index < 100; index++) judged.hostFunctionCalled();
     judged.decisionOf(41, 'orders.void', {});
     expect(judged.replaysWithinDetectors(41)).toBe(false);
+    jest.restoreAllMocks();
+  });
+
+  it('mark a pause that only a runtime judging them by their times can replay', () => {
+    const start = Date.now();
+    const now = jest.spyOn(Date, 'now').mockReturnValue(start);
+    const judged = new RunReplay();
+    const guarded = new RunReplay();
+    judged.appliedByRuntime(true, true);
+    guarded.appliedByRuntime(true, false);
+    for (const replay of [judged, guarded]) replay.answerOf({ callIndex: 0 }, 'orders.list', {});
+    expect(judged.needsCallTimes(0)).toBe(false);
+
+    now.mockReturnValue(start + 6000);
+    for (const replay of [judged, guarded]) replay.decisionOf(1, 'mail.send', {});
+
+    expect(judged.needsCallTimes(1)).toBe(true);
+    expect(guarded.needsCallTimes(1)).toBe(false);
     jest.restoreAllMocks();
   });
 
@@ -140,5 +160,26 @@ describe('the node-vm runtime', () => {
     expect(run.mock.calls[0][2]).toEqual(
       passed ? expect.objectContaining({ replayedCalls }) : { reviewContext: undefined },
     );
+  });
+});
+
+describe('EnclaveService.replaysCallTimes', () => {
+  function serviceWith(replaysCallTimes?: () => Promise<boolean>): EnclaveService {
+    const runtime = {
+      name: 'node-vm' as const,
+      createRunner: jest.fn(),
+      ...(replaysCallTimes && { replaysCallTimes }),
+    };
+    return new EnclaveService(new CodeCallConfig({ vm: { preset: 'secure', runtime: 'node-vm' } }), undefined, {
+      'node-vm': runtime,
+      interpreter: runtime as never,
+    });
+  }
+
+  it('answers what the configured runtime says, and false for one that cannot tell or fails', async () => {
+    expect(await serviceWith(async () => true).replaysCallTimes()).toBe(true);
+    expect(await serviceWith(async () => false).replaysCallTimes()).toBe(false);
+    expect(await serviceWith().replaysCallTimes()).toBe(false);
+    expect(await serviceWith(() => Promise.reject(new Error('x'))).replaysCallTimes()).toBe(false);
   });
 });

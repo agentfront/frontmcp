@@ -131,6 +131,7 @@ export function pausedRunOf(
     script: script.script,
     ...(script.allowedTools && { allowedTools: script.allowedTools }),
     ...(resumed.arguments && { arguments: resumed.arguments }),
+    ...(journal.replay?.needsCallTimes(pending.position - 1) && { needsReplayedCalls: true }),
   };
   return {
     run: { ...run, status: 'paused', journal: [...entries], clock, random, outputs, pause },
