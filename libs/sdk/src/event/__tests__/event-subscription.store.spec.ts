@@ -16,8 +16,8 @@ function subscription(overrides: Partial<EventSubscriptionRecord> = {}): EventSu
   const now = Date.now();
   return {
     id: 'sub_0001',
-    principalKey: 'principal:https://auth.example.com#ada',
-    subscriber: { sub: 'ada', roles: ['admin'], permissions: [], scopes: [], claims: {} },
+    principalKey: 'principal:https://auth.example.com#ada.lovelace',
+    subscriber: { sub: 'ada.lovelace', roles: ['admin'], permissions: [], scopes: [], claims: {} },
     eventName: 'order.created',
     arguments: { status: 'paid' },
     argumentsKey: '{"status":"paid"}',
@@ -87,7 +87,7 @@ describe.each([
     await store.upsert(subscription({ id: 'sub_0002' }));
     await store.upsert(subscription({ id: 'sub_0003', principalKey: 'principal:bob' }));
 
-    await expect(store.countByPrincipal('principal:https://auth.example.com#ada')).resolves.toBe(2);
+    await expect(store.countByPrincipal('principal:https://auth.example.com#ada.lovelace')).resolves.toBe(2);
     await expect(store.countByPrincipal('principal:bob')).resolves.toBe(1);
     await expect(store.countByPrincipal('principal:eve')).resolves.toBe(0);
   });
@@ -139,7 +139,7 @@ describe.each([
       await expect(store.get('sub_old')).resolves.toBeUndefined();
       await expect(store.update('sub_old', { active: false })).resolves.toBeUndefined();
       expect((await store.listByEvent('order.created')).map((record) => record.id)).toEqual(['sub_live']);
-      await expect(store.countByPrincipal('principal:https://auth.example.com#ada')).resolves.toBe(1);
+      await expect(store.countByPrincipal('principal:https://auth.example.com#ada.lovelace')).resolves.toBe(1);
     });
 
     it('lists it as expired until it is removed', async () => {
@@ -220,7 +220,7 @@ describe('StorageEventSubscriptionStore at rest', () => {
 
     expect(everything).not.toContain(record.delivery.secret);
     expect(everything).not.toContain('hooks.example.com');
-    expect(everything).not.toContain('ada');
+    expect(everything).not.toContain('ada.lovelace');
     expect(everything).not.toContain('order.created');
     await store.close();
   });
