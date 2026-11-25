@@ -21,9 +21,9 @@ import {
 } from './helpers/browser-bundle';
 
 const BUDGETS: Array<{ entry: string; label: string; maxBytes: number }> = [
-  // +1,193 bytes each (#1345): tools/list and tools/call hold back a tool meant for the MCP Apps page, also from a client without clientInfo
-  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_341_778 },
-  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_349_009 },
+  // +990 / +991 bytes (#1348): ctx.resolveResource and ctx.removeTool let a hook stand in for a stage
+  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_342_768 },
+  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_350_000 },
 ];
 
 // +36 bytes (#1345): tools/list and tools/call hold back a tool meant for the MCP Apps page, also from a client without clientInfo

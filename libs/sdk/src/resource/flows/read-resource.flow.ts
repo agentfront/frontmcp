@@ -27,6 +27,7 @@ import { availabilityForCall, callSurfaceOf, entryUnavailableError } from '../..
 import { getPinnedPublicUrl } from '../../common/utils/path.utils';
 import { runOnSurface } from '../../context/call-surface';
 import {
+  InternalMcpError,
   InvalidInputError,
   InvalidMethodError,
   isClientFacingError,
@@ -36,7 +37,7 @@ import {
 import { invalidOutputFromParseFailure } from '../../errors/mcp.error';
 import { ResolvedEntries } from '../../flows/resolved-entries';
 import { entryClassHooksJoin } from '../../hooks/entry-class-hooks';
-import { hooksBoundTo } from '../../hooks/hooks.utils';
+import { hooksBoundTo, staticHooksFor } from '../../hooks/hooks.utils';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
 import { assertEntryEnabled } from '../../surface';
 import { isUIResourceUri } from '../../tool/ui/ui-shared';
@@ -112,6 +113,17 @@ const { Stage } = FlowHooksOf<'resources:read-resource'>(name);
 /** Resources `resolveHookOwnerId` matched, reused by the same run's `findResource`. */
 const resolvedResources = new ResolvedEntries<{ instance: ResourceEntry; params: Record<string, string> }>();
 
+/** The app and `static` class hooks each run installed, for the resource its URI matched when it started. */
+const installedEntryHooks = new WeakMap<object, readonly unknown[]>();
+
+/** The app and `static` class hooks of `resources:read-resource` a read of `resource` installs; every app's for none. */
+function entryHooksOf(scope: ScopeEntry, resource: ResourceEntry | undefined): readonly unknown[] {
+  const { hooks, resources } = scope;
+  const ownerId = resource ? appOwnerIdOf(resources.lineageOf(resource) ?? [], resource.owner) : undefined;
+  const classHooks = resource ? staticHooksFor(hooks.getClsHooks(resource.record.provide), name) : [];
+  return [...(hooks.getFlowHooksForOwner(name, ownerId) ?? []), ...classHooks];
+}
+
 @Flow({
   name,
   plan,
@@ -139,8 +151,15 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
   /** The class of the resource the URI matches, whose `static` hooks run from `parseInput` on (#701). */
   static override resolveHookEntryClass(rawInput: unknown, scope: ScopeEntry): Token | undefined {
     const uri = (rawInput as { request?: { params?: { uri?: unknown } } } | undefined)?.request?.params?.uri;
-    if (typeof uri !== 'string') return undefined;
-    return (resolvedResources.peek(rawInput, uri) ?? scope.resources.findResourceForUri(uri))?.instance.record.provide;
+    const resource =
+      typeof uri === 'string'
+        ? (resolvedResources.peek(rawInput, uri) ?? scope.resources.findResourceForUri(uri))?.instance
+        : undefined;
+    // The hooks the runner installs from the owner and class resolved here, which `ctx.resolveResource()` compares with
+    if (typeof rawInput === 'object' && rawInput !== null) {
+      installedEntryHooks.set(rawInput, entryHooksOf(scope, resource));
+    }
+    return resource?.record.provide;
   }
 
   logger = this.scopeLogger.child('ReadResourceFlow');
@@ -256,9 +275,32 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
       throw new ResourceNotFoundError(uri);
     }
 
+    this.settleResource(match.instance, match.params);
+    this.logger.verbose('findResource:done');
+  }
+
+  /**
+   * Hand over the resource a hook standing in for `findResource` found, settled as that stage settles one. Refused when
+   * its app or class has hooks this read did not install from the URI, since its guards would not run.
+   */
+  resolveResource({ resource, params = {} }: { resource: ResourceEntry; params?: Record<string, string> }): void {
+    const installedHooks = new Set(installedEntryHooks.get(this.rawInput as object) ?? []);
+    if (entryHooksOf(this.scope, resource).some((hook) => !installedHooks.has(hook))) {
+      throw new InternalMcpError(
+        `ctx.resolveResource() was handed resource "${resource.name}", whose app or class hooks this read did not install`,
+        'RESOURCE_HANDOFF_SKIPS_HOOKS',
+      );
+    }
+    this.settleResource(resource, params);
+  }
+
+  /** Settle the resource this read gets, as `findResource` does: its `availableWhen` checked, the hook owner set. */
+  private settleResource(resource: ResourceEntry, params: Record<string, string> = {}): void {
+    const { uri } = this;
+    const loggedUri = escapeControlCharacters(uri);
     // `availableWhen` gates reads by URI, not only the listings: a surface the resource isn't offered
     // on answers like an unknown URI, and a process-wide axis answers EntryUnavailableError.
-    const { availableWhen } = match.instance.metadata;
+    const { availableWhen } = resource.metadata;
     const callSurface = callSurfaceOf(this.input.ctx);
     const availability = availabilityForCall(availableWhen, callSurface);
     if (availability === 'not-offered') {
@@ -268,7 +310,7 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
     if (availability === 'unavailable') {
       this.logger.warn(`findResource: resource for URI "${loggedUri}" is unavailable in this environment`);
       throw entryUnavailableError(
-        match.instance.isTemplate ? 'ResourceTemplate' : 'Resource',
+        resource.isTemplate ? 'ResourceTemplate' : 'Resource',
         uri,
         availableWhen,
         callSurface,
@@ -276,17 +318,13 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
     }
 
     // Store resource owner ID in flow state for hook filtering
-    if (match.instance.owner) {
-      this.state.set('resourceOwnerId', match.instance.owner.id);
+    if (resource.owner) {
+      this.state.set('resourceOwnerId', resource.owner.id);
     }
 
     this.logger = this.logger.child(`ReadResourceFlow(${loggedUri})`);
-    this.state.set('resource', match.instance);
-    this.state.set('params', match.params);
-    this.logger.verbose(
-      `findResource: resource "${match.instance.name}" found (template: ${match.instance.isTemplate})`,
-    );
-    this.logger.verbose('findResource:done');
+    this.state.set({ resource, params });
+    this.logger.verbose(`findResource: resource "${resource.name}" found (template: ${resource.isTemplate})`);
   }
 
   /** Whether `uri` names a tool's widget, kept for 'finalize'; any other `ui://` URI is looked up as a resource. */

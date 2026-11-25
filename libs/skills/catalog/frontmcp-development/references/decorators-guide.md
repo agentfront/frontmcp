@@ -769,6 +769,7 @@ Register the plugin in `@App({ plugins: [AuditPlugin] })`, or in `@FrontMcp({ pl
 A hook method receives the running flow, typed `FlowCtxOf<'<flow-name>'>`. The decorator checks the parameter: the flow's ctx, a structural subset of it, `unknown` or none compiles, and a property the flow does not have (or keeps protected, or of the wrong type) fails to compile (up to 1.10.15 any parameter compiled).
 
 - `ctx.toolName` and `ctx.toolInput` (`tools:call-tool`), `ctx.uri` (`resources:read-resource`) and `ctx.promptName` (`prompts:get-prompt`) name the entry and its input.
+- `ctx.resolveResource({ resource, params })` (`resources:read-resource`) hands over the resource an `@Around('findResource')` hook found, its `availableWhen` checked, and `ctx.removeTool(name)` (`tools:list-tools`) leaves a tool out of the listing.
 - `ctx.request` holds the request's `sessionId`, `clientInfo`, `metadata` (user agent, client IP, `x-frontmcp-*` headers and those `http.forwardHeaders` keeps) and `protocol`; each is `undefined` when the run has none.
 - `ctx.notify.listChanged('tools' | 'resources' | 'prompts')` tells every connected client the list changed.
 - `ctx.state` holds the flow's data (for `tools:call-tool`: `input`, `tool`, `toolContext`, ...); `ctx.state.required.<key>` throws when the key is unset.

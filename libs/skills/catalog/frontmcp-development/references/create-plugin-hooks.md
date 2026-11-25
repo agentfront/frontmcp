@@ -480,6 +480,24 @@ The entry flows also name their entry:
 | `resources:read-resource` | `uri`        | The URI the read asks for                                                                                                            |
 | `prompts:get-prompt`      | `promptName` | The prompt's name: the one `findPrompt` resolved, else the name the request asks for                                                 |
 
+A hook that stands in for a stage hands its result over through the flow, never by splicing the state:
+
+| Flow                      | Method                                  | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ------------------------- | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `resources:read-resource` | `resolveResource({ resource, params })` | Settles the resource the read gets, with its URI template `params`, as `findResource` does: its `availableWhen` is checked (a surface it is not offered on answers "Resource not found"), and the stages after it (`enabled`, authorities) check it as usual. Call it from an `@Around('findResource')` hook that does not call `next()`. It refuses a resource whose app or class has `resources:read-resource` hooks the read did not install when it started, from the URI the request named (an internal error, `RESOURCE_HANDOFF_SKIPS_HOOKS`), since those guards would not run; a hook that rewrites the URI does not change which hooks were installed. |
+| `tools:list-tools`        | `removeTool(name)`                      | Leaves a tool out of this listing, by its listed name or its own: from a hook on any stage up to `parseTools`.                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+
+```typescript
+@ResourceHook.Around('findResource')
+async readAlias(ctx: FlowCtxOf<'resources:read-resource'>, next: () => Promise<void>) {
+  const match = ctx.uri === 'docs://latest' ? ctx.get(ScopeEntry).resources.findResourceForUri('docs://v3') : undefined;
+  if (!match) return next();
+  ctx.resolveResource({ resource: match.instance, params: match.params });
+}
+```
+
+Up to 1.12.2 such a hook set `ctx.state` itself, which skipped the stage's `availableWhen` check, and narrowed a listing by splicing `ctx.state.resolvedTools`.
+
 `ctx.request` holds:
 
 - `sessionId`: the session the server verified for the request; `undefined` for a request without one (the stateless transports, MCP 2026-07-28, an `mcp-session-id` the server did not accept).

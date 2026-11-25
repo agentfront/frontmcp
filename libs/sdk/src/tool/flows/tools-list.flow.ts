@@ -126,6 +126,9 @@ const { Stage } = FlowHooksOf('tools:list-tools');
 export default class ToolsListFlow extends FlowBase<typeof name> {
   logger = this.scopeLogger.child('ToolsListFlow');
 
+  /** The names hooks asked `removeTool` to leave out, applied to the tools whenever `findTools` finds them. */
+  private readonly removedToolNames = new Set<string>();
+
   private sample<T>(arr: T[], n = 5): T[] {
     return arr.slice(0, n);
   }
@@ -311,7 +314,10 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
         this.logger.warn('findTools: no tools found across apps');
       }
 
-      this.state.set('tools', tools);
+      this.state.set(
+        'tools',
+        tools.filter(({ tool }) => !this.isRemoved(tool)),
+      );
       this.state.set('foundTools', tools);
       this.logger.verbose('findTools:done');
     } catch (error) {
@@ -380,6 +386,21 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
         isPubliclyListed(publicAccess, 'tools', [tool.fullName, tool.name]),
       ),
     );
+  }
+
+  /** Leave a tool out of this listing, by its listed or its own name: for a hook on any stage up to `parseTools`. */
+  removeTool(name: string): void {
+    this.removedToolNames.add(name);
+    const { tools, resolvedTools } = this.state;
+    const keptTools = tools?.filter(({ tool }) => !this.isRemoved(tool));
+    const keptResolvedTools = resolvedTools?.filter(({ tool, finalName }) => !this.isRemoved(tool, finalName));
+    if (keptTools) this.state.set('tools', keptTools);
+    if (keptResolvedTools) this.state.set('resolvedTools', keptResolvedTools);
+  }
+
+  private isRemoved(tool: { fullName: string; metadata: { id?: string; name: string } }, finalName?: string): boolean {
+    const names = [finalName, tool.fullName, tool.metadata.id ?? tool.metadata.name];
+    return names.some((name) => name !== undefined && this.removedToolNames.has(name));
   }
 
   /** A tool for the MCP Apps page only (`_meta.ui.visibility: ['app']`) is listed only to a client that renders it. */
