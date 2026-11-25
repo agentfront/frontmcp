@@ -37,9 +37,9 @@ export interface RunReviewCaller {
   journal?: RunJournal;
 }
 
-/** Whether a journal entry's call reached its tool: it succeeded, is still running, or the tool itself failed. */
+/** Whether a journal entry's tool call reached its tool: it succeeded, is still running, or the tool itself failed. */
 function reachedTool(entry: CodeCallJournalEntry): boolean {
-  return entry.outcome !== 'failure' || entry.phase === 'execute';
+  return entry.kind === undefined && (entry.outcome !== 'failure' || entry.phase === 'execute');
 }
 
 /** The tool context a review runs for: the call it serves, and who made it. */

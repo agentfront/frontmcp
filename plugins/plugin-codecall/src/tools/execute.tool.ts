@@ -13,7 +13,10 @@ import {
   type ToolCallErrorCode,
   type ToolCallResult,
 } from '../errors';
-import CodeCallConfig from '../providers/code-call.config';
+import type { KeptValueCalls } from '../kept-values/kept-value-calls';
+import { keptNamesOf } from '../kept-values/kept-value-script';
+import { KeptValueStoreToken } from '../kept-values/kept-value.types';
+import CodeCallConfig, { extractionThresholdOf } from '../providers/code-call.config';
 import { approvalAnswerSchema, approvalQuestionOf, clientCanElicit } from '../review/approval-elicitation';
 import { createRunReview, reviewContextOf } from '../review/create-run-review';
 import { ApprovalServiceViewToken } from '../review/review-approvals';
@@ -145,7 +148,13 @@ export default class ExecuteTool extends ToolContext {
       runId = runs ? await this.keepRun(runs, run) : undefined;
       const traceLines = traceOf(result.status, journal, trace);
       if (review && 'findings' in result && result.findings) spans?.recordFindings(result.findings);
-      return { ...result, ...(runId && { runId }), ...(traceLines && { trace: traceLines }) };
+      const kept = keptNamesOf(run.journal);
+      return {
+        ...result,
+        ...(runId && { runId }),
+        ...(kept.length > 0 && { kept }),
+        ...(traceLines && { trace: traceLines }),
+      };
     } finally {
       attempt?.journal.close();
       spans?.end(run, runId);
@@ -220,6 +229,15 @@ export default class ExecuteTool extends ToolContext {
       'codecall.vm.runtime': runtime,
     });
     return new RunSpans(runSpan);
+  }
+
+  /** `keep` and `recall` for this caller, while `keep.enabled` is true. */
+  private keptValueCalls(): KeptValueCalls | undefined {
+    const { sidecar } = this.get(CodeCallConfig).getAll();
+    return this.tryGet(KeptValueStoreToken)?.callsFor(this, {
+      referenceThreshold: sidecar.enabled ? extractionThresholdOf(sidecar) : undefined,
+      logger: this.logger,
+    });
   }
 
   /** Keeps the run's record for its owner; a store that fails is logged, and the result goes out without a run id. */
@@ -432,6 +450,8 @@ export default class ExecuteTool extends ToolContext {
         // Send notifications through FrontMCP notification system if available
         this.logger?.debug('Notification sent', { event, payload });
       },
+
+      keptValues: this.keptValueCalls(),
     };
 
     // Build namespaced bindings for AgentScript ergonomics. Tools named

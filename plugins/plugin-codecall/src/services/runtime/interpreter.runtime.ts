@@ -19,11 +19,18 @@
 // built-in. Only types come from the full barrel, and they are erased.
 
 import type { ConsoleHandler, ReferenceSidecarOptions } from '@enclave-vm/core';
-import type { ExecutionResult, ReviewContext, ReviewOptions, ToolHandler } from '@enclave-vm/core/worker';
+import type {
+  ExecutionResult,
+  ReferenceEntry,
+  ReviewContext,
+  ReviewOptions,
+  ToolHandler,
+} from '@enclave-vm/core/worker';
 
 import { CodeCallRuntimeError } from './runtime.errors';
 import {
   CODECALL_ENCLAVE_SECURITY_LEVEL,
+  runOptionsOf,
   type CodeCallHostFunction,
   type CodeCallScriptRunner,
   type CodeCallScriptRunSpec,
@@ -48,7 +55,9 @@ export type AgentScriptRunnerCapability =
   /** The per-tool rapid-enumeration threshold and overrides. */
   | 'rapid-enumeration'
   /** Review hooks before the run and each tool call. */
-  | 'review';
+  | 'review'
+  /** Sidecar entries an earlier run kept, which the run starts with. */
+  | 'kept-references';
 
 /** The options CodeCall gives the runner. */
 export interface AgentScriptRunnerOptions {
@@ -80,7 +89,7 @@ export interface AgentScriptRunnerInstance {
   run<T = unknown>(
     code: string,
     toolHandler?: ToolHandler,
-    options?: { reviewContext?: ReviewContext },
+    options?: { reviewContext?: ReviewContext; preloadReferences?: readonly ReferenceEntry[] },
   ): Promise<ExecutionResult<T>>;
   dispose(): void;
 }
@@ -109,6 +118,7 @@ export function requiredCapabilities(spec: CodeCallScriptRunSpec): AgentScriptRu
   if (spec.sidecar) required.push('sidecar');
   if (spec.consoleHandler) required.push('console');
   if (spec.review) required.push('review');
+  if (spec.preloadReferences) required.push('kept-references');
   return required;
 }
 
@@ -197,7 +207,7 @@ export function createInterpreterRuntime(loader: WorkerEntryLoader = loadWorkerE
       }
       const runner = createRunner(Runner, toRunnerOptions(spec));
       return {
-        run: (code) => runner.run<unknown>(code, undefined, { reviewContext: spec.reviewContext }),
+        run: (code) => runner.run<unknown>(code, undefined, runOptionsOf(spec)),
         dispose: () => runner.dispose(),
       };
     },

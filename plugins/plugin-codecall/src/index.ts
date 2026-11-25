@@ -10,6 +10,7 @@ export {
   type CodeCallCallOutcome,
   type CodeCallCallPhase,
   type CodeCallJournalEntry,
+  type CodeCallKeptValueCallKind,
   type CodeCallRunRecord,
   type CodeCallRunStatus,
 } from './runs/run-record.types';

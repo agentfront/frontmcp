@@ -34,8 +34,24 @@ const REVIEW_LINE =
   'needs_approval: a person approves, then send the same script again. ' +
   'denied: do not retry. review_failed: its message says whether anything ran.';
 
-/** The `codecall:execute` description for the server's resolved `vm` options, and whether its `review` is on. */
-export function buildExecuteToolDescription(vmOptions: ResolvedCodeCallVmOptions, reviewed = false): string {
+/** How a script keeps values for the caller's later scripts, for `keep.ttlSeconds`. */
+function keepLineOf(ttlSeconds: number): string {
+  return (
+    `\nKEEP: await keep(name, value) keeps a value for your later scripts for ${ttlSeconds}s; ` +
+    'await recall(name) returns it, or undefined when nothing is kept under that name (expired, or never kept). ' +
+    'The result lists the names kept, never their values.'
+  );
+}
+
+/**
+ * The `codecall:execute` description for the server's resolved `vm` options, whether its `review` is on, and how long
+ * kept values last while `keep` is on.
+ */
+export function buildExecuteToolDescription(
+  vmOptions: ResolvedCodeCallVmOptions,
+  reviewed = false,
+  keepTtlSeconds?: number,
+): string {
   const loops = vmOptions.allowLoops ? 'for, for-of' : 'for-of';
   const blockedLoops = vmOptions.allowLoops ? 'while, do-while' : 'while, do-while, for';
   const blockedNames = new Set([...ALWAYS_BLOCKED_NAMES, ...vmOptions.disabledBuiltins, ...vmOptions.disabledGlobals]);
@@ -63,7 +79,7 @@ for (const u of users.items) {
 return results;
 
 ALLOWED: ${loops}, arrow fn, map/filter/reduce/find, ${namespaces.join('')}if/else, destructuring, spread, template literals
-BLOCKED: ${blockedLoops}, ${blockedConsole}function decl, ${[...blockedNames].join(', ')}${unavailableGlobalsLine()}${consoleLine}
+BLOCKED: ${blockedLoops}, ${blockedConsole}function decl, ${[...blockedNames].join(', ')}${unavailableGlobalsLine()}${consoleLine}${keepTtlSeconds === undefined ? '' : keepLineOf(keepTtlSeconds)}
 
 ERRORS: NOT_FOUND | VALIDATION | EXECUTION | TIMEOUT | ACCESS_DENIED | RATE_LIMITED | RESULT_TOO_LARGE
 STATUS: ok | syntax_error | illegal_access | runtime_error | tool_error | timeout${reviewed ? REVIEW_STATUSES : ''}
@@ -144,6 +160,8 @@ const runFields = {
   runId: z.string().optional(),
   /** A line per tool call (position, tool, outcome, duration, size), when the server's `trace.level` shows them. */
   trace: z.array(z.string()).optional(),
+  /** The names the script kept with `keep()`, never their values. */
+  kept: z.array(z.string()).optional(),
 };
 
 /** What a review found: the rule, what is wrong, where, and how to fix it. */

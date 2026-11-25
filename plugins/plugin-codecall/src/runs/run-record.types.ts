@@ -13,11 +13,18 @@ export type CodeCallCallOutcome = 'success' | 'failure' | 'unfinished';
 /** Where a failed call failed: `access` (policy or not found), `input`, `limit` (rate or quota) or `execute` (the tool). */
 export type CodeCallCallPhase = 'access' | 'input' | 'limit' | 'execute';
 
+/** A call CodeCall answers itself under a reserved name: `keep(name, value)` or `recall(name)`, never a tool call. */
+export type CodeCallKeptValueCallKind = 'keep' | 'recall';
+
 /** One tool call of a run. */
 export interface CodeCallJournalEntry {
   /** The call's place in the run, from 1: the order in which the host's tool handler was entered. */
   position: number;
   tool: string;
+  /** Set for `keep` and `recall`, which are not tool calls: no tool runs, and no budget counts them. */
+  kind?: CodeCallKeptValueCallKind;
+  /** The name a `keep` kept or a `recall` read. */
+  name?: string;
   /** SHA-256 (hex) of the arguments' canonical JSON. */
   argumentsHash: string;
   outcome: CodeCallCallOutcome;

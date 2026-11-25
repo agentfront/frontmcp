@@ -8,8 +8,9 @@ import { Provider, ProviderScope, type FrontMcpLogger } from '@frontmcp/sdk';
 import type { CodeCallVmEnvironment, ResolvedCodeCallVmOptions } from '../codecall.symbol';
 import type { CodeCallSidecarOptions } from '../codecall.types';
 import { createPublicToolCallError, TOOL_CALL_ERROR_CODES } from '../errors';
+import { isKeptValueCall } from '../kept-values/kept-value-script';
 import type CodeCallConfig from '../providers/code-call.config';
-import { MAX_ITERATIONS_PER_LOOP } from '../providers/code-call.config';
+import { extractionThresholdOf, MAX_ITERATIONS_PER_LOOP } from '../providers/code-call.config';
 import { RunJournal } from '../runs/run-journal';
 import { findScriptPolicyIssues } from '../security/script-policy';
 import { toSandboxToolNamespaces } from '../utils/build-tool-namespaces';
@@ -319,6 +320,11 @@ export default class EnclaveService {
       throw error;
     }
 
+    const { keptValues } = environment;
+    const { script, preloadReferences } = keptValues
+      ? await keptValues.prepare(code)
+      : { script: code, preloadReferences: [] };
+
     // The host side of this execution. Once the run returns, a continuation of the script that is
     // still scheduled reaches none of the closures below, whatever the runtime.
     const gate = new ExecutionGate();
@@ -331,7 +337,10 @@ export default class EnclaveService {
     const toolHandler: ToolHandler = gate.guardToolHandler(async (toolName: string, args: Record<string, unknown>) => {
       const call = journal.begin(toolName, args);
       try {
-        const result = await environment.callTool(toolName, args);
+        const result =
+          keptValues && isKeptValueCall(toolName)
+            ? await keptValues.call(toolName, args)
+            : await environment.callTool(toolName, args);
         const resultValues = countResultValues(result);
         if (resultValues > maxResultValues) {
           throw createPublicToolCallError(
@@ -361,7 +370,7 @@ export default class EnclaveService {
           enabled: true,
           maxTotalSize: this.sidecarOptions.maxTotalSize,
           maxReferenceSize: this.sidecarOptions.maxReferenceSize,
-          extractionThreshold: this.sidecarOptions.extractionThreshold,
+          extractionThreshold: extractionThresholdOf(this.sidecarOptions),
           maxResolvedSize: this.sidecarOptions.maxResolvedSize,
           allowComposites: this.sidecarOptions.allowComposites,
         }
@@ -392,6 +401,7 @@ export default class EnclaveService {
       // sandbox's tool-call cap, rate limit, suspicious-sequence checks and `throwOnError`.
       toolNamespaces: toSandboxToolNamespaces(environment.toolNamespaces, Object.keys(hostFunctions)),
       sidecar,
+      ...(preloadReferences.length > 0 && { preloadReferences }),
       rapidEnumeration: {
         ...(rapidEnumerationThreshold !== undefined && { threshold: rapidEnumerationThreshold }),
         ...(rapidEnumerationOverrides !== undefined && { overrides: rapidEnumerationOverrides }),
@@ -409,9 +419,9 @@ export default class EnclaveService {
     }
 
     try {
-      const result = await runner.run(code);
+      const result = await runner.run(script);
       const { pendingToolCalls } = gate.close();
-      const mapped = this.mapEnclaveResult(result, logs, toolFailures, code, pendingToolCalls);
+      const mapped = this.mapEnclaveResult(result, logs, toolFailures, script, pendingToolCalls);
       return result.review ? { ...mapped, review: result.review } : mapped;
     } finally {
       gate.close();

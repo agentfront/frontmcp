@@ -39,26 +39,44 @@ describe('CodeCallPlugin', () => {
         'codecall:audit-logger',
         'codecall:tool-search',
         'codecall:runs',
+        'codecall:kept-values',
       ]);
     });
 
     it.each([
-      ['redis', { type: 'redis', redis: { url: 'redis://127.0.0.1:6379' } }, "runs.storage: { type: 'redis' }"],
-      ['sqlite', { type: 'sqlite', sqlite: { path: '/var/lib/app/runs.sqlite' } }, "runs.storage: { type: 'sqlite' }"],
+      ['redis', { type: 'redis', redis: { url: 'redis://127.0.0.1:6379' } }, "{ type: 'redis' }"],
+      ['sqlite', { type: 'sqlite', sqlite: { path: '/var/lib/app/runs.sqlite' } }, "{ type: 'sqlite' }"],
       ['memory', { type: 'memory' }, undefined],
-    ] as const)('names a runs.storage on %s among the stores a browser refuses', (_, storage, option) => {
-      expect(CodeCallPlugin.browserStores({ runs: { storage } })).toEqual([
-        { plugin: 'CodeCallPlugin', option, memory: "runs.storage: { type: 'memory' }" },
-      ]);
-    });
+    ] as const)(
+      'names a runs.storage and a keep.storage on %s among the stores a browser refuses',
+      (_, storage, type) => {
+        expect(CodeCallPlugin.browserStores({ runs: { storage }, keep: { storage } })).toEqual([
+          {
+            plugin: 'CodeCallPlugin',
+            option: type && `runs.storage: ${type}`,
+            memory: "runs.storage: { type: 'memory' }",
+          },
+          {
+            plugin: 'CodeCallPlugin',
+            option: type && `keep.storage: ${type}`,
+            memory: "keep.storage: { type: 'memory' }",
+          },
+        ]);
+      },
+    );
 
-    it('names no store a browser refuses with runs.enabled false', () => {
-      expect(CodeCallPlugin.browserStores({ runs: { enabled: false } })).toEqual([]);
+    it('names no store a browser refuses with runs.enabled and keep.enabled false', () => {
+      expect(CodeCallPlugin.browserStores({ runs: { enabled: false }, keep: { enabled: false } })).toEqual([]);
     });
 
     it('registers no run store with runs.enabled false', () => {
       const providers = CodeCallPlugin.dynamicProviders({ runs: { enabled: false } });
       expect(providers.map((p) => p.name)).not.toContain('codecall:runs');
+    });
+
+    it('registers no kept-value store with keep.enabled false', () => {
+      const providers = CodeCallPlugin.dynamicProviders({ keep: { enabled: false } });
+      expect(providers.map((p) => p.name)).not.toContain('codecall:kept-values');
     });
 
     it('should include codecall:config provider', () => {

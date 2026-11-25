@@ -116,6 +116,7 @@ The plugin adds a `codecall` field to `@Tool`:
 | `topK`           | `8`                    | Results per query when a `codecall:search` call doesn't give its own `topK`.                                                                                    |
 | `maxDefinitions` | `8`                    | Most tools one `codecall:describe` call may name.                                                                                                               |
 | `runs`           | `{ enabled: true }`    | A record of each `codecall:execute` run, with a journal of its tool calls. See [Run records](#run-records).                                                     |
+| `keep`           | `{ enabled: true }`    | `keep(name, value)` and `recall(name)` in scripts, for values one script hands a later one. See [Keep and recall](#keep-and-recall).                            |
 | `trace`          | `{ level: 'failure' }` | The tool calls `codecall:execute` lists in its result, and the spans it sends. See [Trace](#trace).                                                             |
 | `review`         | off                    | Review each script and each call with the server's rules before it runs. See [Review](#review).                                                                 |
 
@@ -153,7 +154,9 @@ carries `runId`. The record holds the owner, the script's SHA-256, the status, t
 `reviewDecision` (the [review](#review)'s status, `'allow'` when it let the script run, `null` with `review` off), the return value's size, and a journal with one entry per tool
 call: its position (in the order the host's tool handler was entered, on either runtime), the tool, a SHA-256 of the
 arguments, the outcome (`success`, `failure` or `unfinished`), the phase of a failure (`access`, `input`, `limit` or
-`execute`), the duration and the result's size. Results are kept only with `runs.resume: true`.
+`execute`), the duration and the result's size. Results are kept only with `runs.resume: true`. A `keep` or `recall` is journaled
+too, under its reserved tool name (`codecall:keep`, `codecall:recall`) with `kind` (`'keep'` or `'recall'`) and the
+`name` it kept or read; it is not a tool call, and its arguments and result never appear in a trace.
 
 Records are kept like result handles: encrypted under keys derived from the run id and the owner, readable only by
 that owner (`this.get(CodeCallRunStoreToken).read(runId, this)`), until they expire.
@@ -168,6 +171,63 @@ that owner (`this.get(CodeCallRunStoreToken).read(runId, this)`), until they exp
 | `runs.namespace`      | `'codecall-runs'`  | The key prefix of records in the storage.                                                                                         |
 
 A store that fails is logged as a warning, and the result goes out without `runId`.
+
+## Keep and recall
+
+Each `codecall:execute` starts fresh. A script keeps a value for the caller's later scripts with `keep`, and a later
+script reads it back with `recall`:
+
+```js
+// Script 1
+const overdue = await callTool('invoices:list', { status: 'overdue' });
+await keep('overdue', overdue.items);
+return overdue.items.length;
+
+// Script 2
+const overdue = await recall('overdue');
+return overdue.filter((invoice) => invoice.amount > 1000);
+```
+
+- **Both are async.** `await keep(name, value)` resolves to `undefined` once the value is kept; `await recall(name)`
+  resolves to the value. A name is a string of 1 to 128 characters; a value is any JSON value but `undefined`.
+- **Not found is `undefined`.** `recall` resolves to `undefined` for a name nothing is kept under: never kept, expired,
+  or kept by another session or caller. The three look the same.
+- **What the agent sees.** The result lists the names the script kept (`kept: ['overdue']`), never their values.
+- **Who.** Values are bound to the session and the signed-in caller that kept them, as [run records](#run-records)
+  are. A call with neither, a stateless anonymous one, is refused (`ACCESS_DENIED`): nobody could recall what it kept.
+  `result_query` refuses such a call the same way.
+- **How long, how much.** A value can be recalled for `keep.ttlSeconds`, and keeping a name again replaces its value
+  and restarts its time. What one owner keeps counts against `keep.maxBytes`; a `keep` past it fails with
+  `RESULT_TOO_LARGE` and keeps nothing. The bytes are reserved in an atomic counter before the value is written, so
+  keeps that run at the same time, on any server instance, each count; a value counts for at most twice
+  `keep.ttlSeconds`, and a value kept again under its name stops counting the one it replaced. `keep.maxBytes` is a
+  soft limit: keeps that run at the same time can go past it by what is in flight, and a storage failure or a race
+  can count too much until the window passes. Two keeps of the same new name at the same time both count, for
+  example, so a later `keep` can be refused early; counting too much heals within twice `keep.ttlSeconds`. One owner's
+  keeps never count against another's.
+- **Large strings.** With the [sidecar](#options) on, a string of at least `sidecar.extractionThreshold` bytes is kept
+  as a sidecar reference. A later script that recalls it by a literal name (`recall('doc')`) starts with that
+  reference, and `recall` returns its token: the script can pass it to a tool, which receives the whole string, but the
+  string never enters the sandbox and never counts against its memory limit. Recalled under a name that isn't a
+  literal, the string is returned, and the sidecar keeps it out of the sandbox as any large tool result.
+- **Calls.** `keep` and `recall` are `callTool()` calls of the reserved names `codecall:keep` and `codecall:recall`,
+  which CodeCall answers itself: they count toward the script's own call limits (`vm.maxToolCalls`, calls to one tool
+  within 2 seconds), reach no tool and no budget, and an MCP client can't call them. A script that declares its own
+  `keep` or `recall` keeps it.
+
+| Option            | Default            | Description                                                                            |
+| ----------------- | ------------------ | -------------------------------------------------------------------------------------- |
+| `keep.enabled`    | `true`             | `false` gives scripts neither function.                                                |
+| `keep.ttlSeconds` | `600`              | How long a kept value can be recalled.                                                 |
+| `keep.maxBytes`   | `1048576` (1 MiB)  | The most one owner's kept values take at once, as UTF-8 JSON.                          |
+| `keep.storage`    | `{ type: 'auto' }` | Where kept values are kept, through `createStorage()`; at most 1000 entries in memory. |
+| `keep.namespace`  | `'codecall-kept'`  | The key prefix of kept values in the storage.                                          |
+
+Kept values are stored like run records: each one encrypted under keys derived from its name and its owner. The
+bytes an owner keeps are counted with `incrBy`, which every built-in storage has but Cloudflare KV. A store that fails
+is logged as a warning, and the `keep` or `recall` fails with `EXECUTION`. A `keep` refused before it writes the
+value releases what it reserved. One whose write fails keeps the reservation, since the write may have been applied,
+and the value it would have replaced stays kept and counted.
 
 ## Trace
 

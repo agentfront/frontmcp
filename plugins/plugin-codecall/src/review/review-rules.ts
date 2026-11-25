@@ -1,6 +1,7 @@
 import type { ReviewFinding, ScriptAnalysis, ScriptLocation, ScriptToolCall } from '@enclave-vm/core/worker';
 
 import type { CodeCallFilterToolAnnotations, CodeCallReviewRules } from '../codecall.types';
+import { isKeptValueCall } from '../kept-values/kept-value-script';
 import { argumentIssuesOf } from './input-schema-check';
 
 /** A tool as the built-in rules read it. */
@@ -71,10 +72,11 @@ export class ReviewRules {
 
   constructor(private readonly context: ReviewRulesContext) {}
 
-  /** The rules over a script before it runs, from its static analysis. */
+  /** The rules over a script before it runs, from its static analysis; `keep` and `recall` are not tool calls. */
   reviewScript(analysis: ScriptAnalysis): RulesVerdict {
-    const namedCalls = analysis.toolCalls.filter((call): call is ScriptToolCall & { toolName: string } =>
-      Boolean(call.toolName),
+    const namedCalls = analysis.toolCalls.filter(
+      (call): call is ScriptToolCall & { toolName: string } =>
+        Boolean(call.toolName) && !isKeptValueCall(call.toolName ?? ''),
     );
     const unavailable = this.unavailableFindings(namedCalls);
     if (unavailable.length > 0) return this.denial(unavailable);
@@ -94,8 +96,9 @@ export class ReviewRules {
     return { approvalCalls };
   }
 
-  /** The rules over one call, with the arguments it really has. */
+  /** The rules over one call, with the arguments it really has; a `keep` or `recall` reaches no tool. */
   reviewCall(toolName: string, args: unknown): RulesVerdict {
+    if (isKeptValueCall(toolName)) return { approvalCalls: [] };
     const unavailable = this.unavailableFindings([{ toolName }]);
     if (unavailable.length > 0) return this.denial(unavailable);
     const noChannel = this.noApprovalChannelFindings([{ toolName }]);

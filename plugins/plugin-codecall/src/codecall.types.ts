@@ -435,8 +435,19 @@ export const codeCallSidecarOptionsSchema = z
     maxScriptLengthWhenDisabled: 64 * 1024,
   }));
 
-/** How many run records a memory store holds at once, dropping the oldest, unless `runs.storage.memory.maxEntries` is set. */
+/** How many entries a memory store of run records or kept values holds at once, dropping the oldest, unless `storage.memory.maxEntries` is set. */
 export const DEFAULT_RUNS_MEMORY_MAX_ENTRIES = 1000;
+
+/** Where a store is kept, through `createStorage()` from `@frontmcp/utils` ({ type: 'auto' }, 1000 at most in memory). */
+const storageOptionSchema = z
+  .custom<StorageConfig>((value) => typeof value === 'object' && value !== null && !Array.isArray(value), {
+    message: 'must be a storage config, such as { type: "redis", redis: { url } }',
+  })
+  .default({ type: 'auto' })
+  .transform((storage) => ({
+    ...storage,
+    memory: { maxEntries: DEFAULT_RUNS_MEMORY_MAX_ENTRIES, ...storage.memory },
+  }));
 
 export const codeCallRunsOptionsSchema = z
   .object({
@@ -453,17 +464,28 @@ export const codeCallRunsOptionsSchema = z
     /** Keep each call's result in its journal entry, for resuming a run (false by default). */
     resume: z.boolean().default(false),
     /** Where records are kept, through `createStorage()` from `@frontmcp/utils` ({ type: 'auto' }, 1000 at most in memory). */
-    storage: z
-      .custom<StorageConfig>((value) => typeof value === 'object' && value !== null && !Array.isArray(value), {
-        message: 'must be a storage config, such as { type: "redis", redis: { url } }',
-      })
-      .default({ type: 'auto' })
-      .transform((storage) => ({
-        ...storage,
-        memory: { maxEntries: DEFAULT_RUNS_MEMORY_MAX_ENTRIES, ...storage.memory },
-      })),
+    storage: storageOptionSchema,
     /** The key prefix of run records in the storage ('codecall-runs'). */
     namespace: z.string().min(1).default('codecall-runs'),
+  })
+  .prefault({});
+
+export const codeCallKeepOptionsSchema = z
+  .object({
+    /** Give scripts `keep(name, value)` and `recall(name)`, for a caller with a session or a signed-in subject (true by default). */
+    enabled: z.boolean().default(true),
+    /** How long a kept value can be recalled, in seconds (600 by default). */
+    ttlSeconds: z.number().int().min(1).default(600),
+    /** The most the values one owner keeps take together, in UTF-8 bytes of their JSON (1 MiB by default). */
+    maxBytes: z
+      .number()
+      .int()
+      .min(1024)
+      .default(1024 * 1024),
+    /** Where kept values are kept, through `createStorage()` from `@frontmcp/utils` ({ type: 'auto' }, 1000 at most in memory). */
+    storage: storageOptionSchema,
+    /** The key prefix of kept values in the storage ('codecall-kept'). */
+    namespace: z.string().min(1).default('codecall-kept'),
   })
   .prefault({});
 
@@ -610,6 +632,9 @@ const codeCallPluginOptionsObjectSchema = z.object({
   /** The trace of tool calls `codecall:execute` returns to the agent. */
   trace: codeCallTraceOptionsSchema,
 
+  /** Values a script keeps with `keep(name, value)` for a later script of the same owner to `recall(name)`. */
+  keep: codeCallKeepOptionsSchema,
+
   /** Review of each script and each call before it runs; off unless set. */
   review: codeCallReviewOptionsSchema.optional(),
 });
@@ -642,6 +667,7 @@ export type EmbeddingStrategy = z.infer<typeof embeddingStrategySchema>;
 export type SynonymExpansionConfig = z.infer<typeof synonymExpansionConfigSchema>;
 export type CodeCallSidecarOptions = z.infer<typeof codeCallSidecarOptionsSchema>;
 export type CodeCallRunsOptions = z.infer<typeof codeCallRunsOptionsSchema>;
+export type CodeCallKeepOptions = z.infer<typeof codeCallKeepOptionsSchema>;
 export type CodeCallTraceLevel = z.infer<typeof codeCallTraceLevelSchema>;
 export type CodeCallTraceOptions = z.infer<typeof codeCallTraceOptionsSchema>;
 export type CodeCallReviewOptions = z.infer<typeof codeCallReviewOptionsSchema>;

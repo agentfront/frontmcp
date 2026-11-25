@@ -436,6 +436,27 @@ describe('CodeCall runs options', () => {
   });
 });
 
+describe('CodeCall keep options', () => {
+  it('gives scripts keep and recall by default, for 600 seconds, up to 1 MiB an owner', () => {
+    expect(codeCallPluginOptionsSchema.parse({}).keep).toEqual({
+      enabled: true,
+      ttlSeconds: 600,
+      maxBytes: 1024 * 1024,
+      storage: { type: 'auto', memory: { maxEntries: DEFAULT_RUNS_MEMORY_MAX_ENTRIES } },
+      namespace: 'codecall-kept',
+    });
+  });
+
+  it.each([
+    ['a ttlSeconds below 1', { ttlSeconds: 0 }],
+    ['a maxBytes below 1024', { maxBytes: 512 }],
+    ['a storage that is not an object', { storage: 'redis' }],
+    ['an empty namespace', { namespace: '' }],
+  ])('refuses %s', (_, keep) => {
+    expect(() => codeCallPluginOptionsSchema.parse({ keep })).toThrow();
+  });
+});
+
 describe('CodeCall trace options', () => {
   it('lists the calls of a failed run by default, up to 20 lines, without values', () => {
     expect(codeCallPluginOptionsSchema.parse({}).trace).toEqual({ level: 'failure', maxLines: 20, values: false });

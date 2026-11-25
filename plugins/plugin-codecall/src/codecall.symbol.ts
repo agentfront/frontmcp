@@ -2,6 +2,7 @@
 
 import { type CodeCallVmPreset, type CodeCallVmRuntime } from './codecall.types';
 import type { CallToolOptions, ToolCallResult } from './errors';
+import type { KeptValueCalls } from './kept-values/kept-value-calls';
 
 export interface CodeCallAstValidationIssue {
   kind: 'IllegalBuiltinAccess' | 'DisallowedGlobal' | 'DisallowedLoop' | 'ParseError';
@@ -122,6 +123,9 @@ export interface CodeCallVmEnvironment {
    * sandbox can't bind remain reachable only via `callTool`.
    */
   toolNamespaces?: Record<string, Record<string, string>>;
+
+  /** `keep(name, value)` and `recall(name)`, answered by CodeCall under reserved names; unset with `keep.enabled` false. */
+  keptValues?: KeptValueCalls;
 }
 
 /**

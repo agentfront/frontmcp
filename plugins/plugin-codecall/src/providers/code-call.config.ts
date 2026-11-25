@@ -9,6 +9,7 @@ import {
   DEFAULT_VM_RUNTIME,
   INTERPRETER_BUDGET_LIMITS,
   type CodeCallPluginOptions,
+  type CodeCallSidecarOptions,
   type CodeCallVmOptions,
   type CodeCallVmPreset,
   type CodeCallVmRuntime,
@@ -122,6 +123,14 @@ const SANDBOX_RAPID_ENUMERATION_THRESHOLD = 30;
 /** Calls to one tool a script may make within about 2 seconds: `vm.rapidEnumerationThreshold`, else 30. */
 export function rapidEnumerationThresholdOf(vmOptions: ResolvedCodeCallVmOptions): number {
   return vmOptions.rapidEnumerationThreshold ?? SANDBOX_RAPID_ENUMERATION_THRESHOLD;
+}
+
+/** The sidecar's extraction threshold at Enclave's STANDARD level, the level of every CodeCall script. */
+const SANDBOX_EXTRACTION_THRESHOLD = 1024 * 1024;
+
+/** The UTF-8 bytes from which the sidecar keeps a string out of the sandbox: `sidecar.extractionThreshold`, else 1 MiB. */
+export function extractionThresholdOf(sidecar: CodeCallSidecarOptions): number {
+  return sidecar.extractionThreshold ?? SANDBOX_EXTRACTION_THRESHOLD;
 }
 
 // ---- VM Options Resolution ----

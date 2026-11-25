@@ -6,7 +6,13 @@
 // must never make a Worker bundle load the Node-only `@enclave-vm/core` barrel.
 
 import type { ConsoleHandler, ReferenceSidecarOptions } from '@enclave-vm/core';
-import type { ExecutionResult, ReviewContext, ReviewOptions, ToolHandler } from '@enclave-vm/core/worker';
+import type {
+  ExecutionResult,
+  ReferenceEntry,
+  ReviewContext,
+  ReviewOptions,
+  ToolHandler,
+} from '@enclave-vm/core/worker';
 
 /**
  * The Enclave runtime a script runs in (`vm.runtime`).
@@ -91,6 +97,8 @@ export interface CodeCallScriptRunSpec {
   toolNamespaces?: Record<string, Record<string, string>>;
   /** Pass-by-reference sidecar, when enabled. */
   sidecar?: ReferenceSidecarOptions;
+  /** Sidecar entries the run starts with: the large values it recalls (with the sidecar only). */
+  preloadReferences?: readonly ReferenceEntry[];
   rapidEnumeration: CodeCallRapidEnumerationPolicy;
   /** Review hooks before the run and each tool call, when the server's `review` is on. */
   review?: ReviewOptions;
@@ -116,4 +124,15 @@ export interface CodeCallScriptRuntime {
    * unavailable here or cannot enforce every part of the spec.
    */
   createRunner(spec: CodeCallScriptRunSpec): Promise<CodeCallScriptRunner>;
+}
+
+/** The options of one run: the review hooks' context, and the sidecar entries the run starts with. */
+export function runOptionsOf(spec: CodeCallScriptRunSpec): {
+  reviewContext?: ReviewContext;
+  preloadReferences?: readonly ReferenceEntry[];
+} {
+  return {
+    reviewContext: spec.reviewContext,
+    ...(spec.preloadReferences && { preloadReferences: spec.preloadReferences }),
+  };
 }

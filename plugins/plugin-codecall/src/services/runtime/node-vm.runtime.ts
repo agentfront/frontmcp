@@ -20,6 +20,7 @@ import type { CreateEnclaveOptions, Enclave } from '@enclave-vm/core';
 import { CodeCallRuntimeError } from './runtime.errors';
 import {
   CODECALL_ENCLAVE_SECURITY_LEVEL,
+  runOptionsOf,
   type CodeCallScriptRunner,
   type CodeCallScriptRunSpec,
   type CodeCallScriptRuntime,
@@ -31,7 +32,7 @@ const NODE_VM_PACKAGE = '@enclave-vm/core';
 /** The part of the barrel this runtime uses. */
 export interface NodeVmModule {
   Enclave: new (options: CreateEnclaveOptions) => Pick<Enclave, 'run' | 'dispose'>;
-  /** Exported by an Enclave whose `review` option runs its hooks; an older one would ignore the option. */
+  /** Exported since 2.21, whose `review` option runs its hooks and whose `run()` takes `preloadReferences`. */
   REVIEW_ERROR_CODES?: unknown;
 }
 
@@ -156,9 +157,16 @@ export function createNodeVmRuntime(loader: NodeVmModuleLoader = loadNodeVmModul
           `CodeCall review needs ${NODE_VM_PACKAGE} 2.21 or later, which runs review hooks; the script was not run.`,
         );
       }
+      if (spec.preloadReferences && module.REVIEW_ERROR_CODES === undefined) {
+        throw new CodeCallRuntimeError(
+          'RUNTIME_FEATURE_UNSUPPORTED',
+          'node-vm',
+          `CodeCall needs ${NODE_VM_PACKAGE} 2.21 or later to start a run with kept sidecar references; the script was not run.`,
+        );
+      }
       const enclave = createEnclave(module, toEnclaveOptions(spec));
       return {
-        run: (code) => enclave.run<unknown>(code, undefined, { reviewContext: spec.reviewContext }),
+        run: (code) => enclave.run<unknown>(code, undefined, runOptionsOf(spec)),
         dispose: () => enclave.dispose(),
       };
     },
