@@ -196,9 +196,13 @@ export class ResourceStore implements ResourceStoreHandle {
     if (isProducerOptions(options)) {
       parseProducer(`family "${name}"`, options);
       const { produce, ...throttle } = options as ProducedFamilyOptions<T>;
-      return new KeyFamily(this, name, (memberKey, params) => {
-        return new ProducedKey<T>(this, this.backend, memberKey, () => produce(params), throttle);
-      });
+      const family: KeyFamily<T, ProducedResourceKey<T>> = new KeyFamily<T, ProducedResourceKey<T>>(
+        this,
+        name,
+        (memberKey, params) => new ProducedKey<T>(this, this.backend, memberKey, () => produce(params), throttle),
+        (memberKey, params) => new FamilyKeyHandle<T>(family, memberKey, params),
+      );
+      return family;
     }
     const initialRecord = initialRecordOf(name, options.initial);
     return new KeyFamily(this, name, (memberKey) => {
@@ -537,33 +541,88 @@ class ProducedKey<T> extends StoredResourceKey<T> implements ProducedResourceKey
   }
 }
 
+/**
+ * What `key(params)` of a computed family returns: each call goes to the key the family holds for those parameters
+ * now, made again if the family forgot it. So a handle a caller kept after the family forgot its idle key still
+ * marks, reads and follows the key that resources serve, instead of a stale copy of its own.
+ */
+class FamilyKeyHandle<T> implements ProducedResourceKey<T> {
+  constructor(
+    private readonly family: KeyFamily<T, ProducedResourceKey<T>>,
+    readonly name: string,
+    private readonly params: Record<string, string>,
+  ) {}
+
+  get store(): ResourceStore {
+    return this.family.store;
+  }
+
+  get(): Promise<ResourceSnapshot<T>> {
+    return this.family.liveKey(this.params).get();
+  }
+
+  set(value: T): Promise<ResourceSnapshot<T>> {
+    return this.family.liveKey(this.params).set(value);
+  }
+
+  update(change: (current: T) => T | Promise<T>): Promise<ResourceSnapshot<T>> {
+    return this.family.liveKey(this.params).update(change);
+  }
+
+  subscribe(listener: (snapshot: ResourceSnapshot<T>) => void): () => void {
+    return this.family.liveKey(this.params).subscribe(listener);
+  }
+
+  markDirty(): void {
+    this.family.liveKey(this.params).markDirty();
+  }
+}
+
+interface FamilyMember<Key> {
+  /** The key that holds the state. */
+  key: Key;
+  /** What `key(params)` returns: the key itself, or, for a computed family, a handle that follows the live key. */
+  handle: Key;
+}
+
 /** The keys of a family by parameter set, made on first use; past {@link FAMILY_KEYS_KEPT}, idle ones are forgotten. */
 class KeyFamily<T, Key extends ResourceKey<T>> implements ResourceKeyFamily<T, Key> {
-  private readonly keys = new Map<string, Key>();
+  private readonly members = new Map<string, FamilyMember<Key>>();
 
   constructor(
     readonly store: ResourceStore,
     readonly name: string,
     private readonly create: (memberKey: string, params: Record<string, string>) => Key,
+    private readonly handleOf?: (memberKey: string, params: Record<string, string>) => Key,
   ) {}
 
   key(params: Record<string, string>): Key {
+    return this.member(params).handle;
+  }
+
+  /** The key the family holds for `params` now, made again if it was forgotten. */
+  liveKey(params: Record<string, string>): Key {
+    return this.member(params).key;
+  }
+
+  private member(params: Record<string, string>): FamilyMember<Key> {
     const memberKey = memberName(this.name, params);
-    let key = this.keys.get(memberKey);
-    if (key) {
-      this.keys.delete(memberKey);
+    let member = this.members.get(memberKey);
+    if (member) {
+      this.members.delete(memberKey);
     } else {
-      key = this.create(memberKey, { ...params });
+      const key = this.create(memberKey, { ...params });
+      member = { key, handle: this.handleOf ? this.handleOf(memberKey, { ...params }) : key };
     }
-    this.keys.set(memberKey, key);
+    this.members.set(memberKey, member);
     this.forgetIdleKeys();
-    return key;
+    return member;
   }
 
   private forgetIdleKeys(): void {
-    for (const [memberKey, key] of this.keys) {
-      if (this.keys.size <= FAMILY_KEYS_KEPT) return;
-      if (!(key instanceof ProducedKey) || key.idle) this.keys.delete(memberKey);
+    for (const [memberKey, { key }] of this.members) {
+      if (this.members.size <= FAMILY_KEYS_KEPT) return;
+      if (!(key instanceof ProducedKey) || key.idle) this.members.delete(memberKey);
     }
   }
 }

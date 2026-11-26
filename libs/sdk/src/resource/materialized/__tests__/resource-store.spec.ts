@@ -573,6 +573,25 @@ describe('resourceStore()', () => {
       unsubscribe();
     });
 
+    it('keeps a computed key a caller still holds tied to the key the family serves, after forgetting it', async () => {
+      let version = 0;
+      const family = open().family('stats', { produce: ({ id }) => `${id} v${version}`, minIntervalMs: 0 });
+      const held = family.key({ id: 'held' });
+      await held.get();
+      for (let id = 0; id < 1_000; id++) family.key({ id: String(id) });
+      const served = family.key({ id: 'held' });
+      await served.get();
+      const seen: string[] = [];
+      const unsubscribe = served.subscribe((snapshot) => seen.push(snapshot.value));
+
+      version = 1;
+      held.markDirty();
+      await until(() => seen.length > 0, 1_000).finally(unsubscribe);
+
+      expect(seen).toEqual(['held v1']);
+      await expect(held.get()).resolves.toMatchObject({ value: 'held v1' });
+    });
+
     it('refuses a family without a name, and a producer that is not a function', () => {
       expect(() => open().family('')).toThrow(InvalidResourceStoreError);
       expect(() => open().family('stats', { produce: 1 } as never)).toThrow('produce');
