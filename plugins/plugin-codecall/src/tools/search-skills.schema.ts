@@ -46,38 +46,36 @@ export const searchSkillsToolInputSchema = {
 export type SearchSkillsToolInput = z.infer<z.ZodObject<typeof searchSkillsToolInputSchema>>;
 
 const referencedOperationSchema = z.object({
-  spec: z.string().describe('OpenAPI spec id (e.g. "acme")'),
-  operationId: z.string().describe('OpenAPI operation id (e.g. "getOrder")'),
+  spec: z.string(),
+  operationId: z.string(),
 });
 
 const skillSearchHitSchema = z.object({
-  name: z.string().describe('Skill name'),
-  description: z.string().describe('Short description of what the skill does'),
-  tags: z.array(z.string()).describe('Tags carried by the skill'),
+  name: z.string(),
+  description: z.string(),
+  tags: z.array(z.string()),
   /**
    * OpenAPI operations the skill is allowed to call. Inlined so the agent
    * can author AgentScript from a single search response.
    */
-  operations: z.array(referencedOperationSchema).describe('OpenAPI operations the skill can call'),
+  operations: z.array(referencedOperationSchema),
   /** Decorator-declared tools (for skills built the legacy way). */
-  tools: z.array(z.string()).describe('Tool names the skill declares (if any)'),
-  relevanceScore: z.number().min(0).max(1).describe('Match score (0-1)'),
-  matchedQueries: z.array(z.string()).describe('Which queries matched this skill'),
-  source: z.enum(['local', 'external']).describe('Where the skill was loaded from'),
+  tools: z.array(z.string()),
+  relevanceScore: z.number().min(0).max(1),
+  matchedQueries: z.array(z.string()),
+  source: z.enum(['local', 'external']),
 });
 
 export const searchSkillsToolOutputSchema = z.object({
-  skills: z.array(skillSearchHitSchema).describe('Deduplicated executable skills, sorted by relevance'),
-  warnings: z
-    .array(
-      z.object({
-        type: z.enum(['no_results', 'low_relevance', 'excluded_skill_not_found']).describe('Warning type'),
-        message: z.string().describe('Warning message'),
-        affectedSkills: z.array(z.string()).optional().describe('Affected skill names'),
-      }),
-    )
-    .describe('Search warnings'),
-  totalExecutableSkills: z.number().int().nonnegative().describe('Total executable skills available'),
+  skills: z.array(skillSearchHitSchema),
+  warnings: z.array(
+    z.object({
+      type: z.enum(['no_results', 'low_relevance', 'excluded_skill_not_found']),
+      message: z.string(),
+      affectedSkills: z.array(z.string()).optional(),
+    }),
+  ),
+  totalExecutableSkills: z.number().int().nonnegative(),
 });
 
 export type SearchSkillsToolOutput = z.infer<typeof searchSkillsToolOutputSchema>;

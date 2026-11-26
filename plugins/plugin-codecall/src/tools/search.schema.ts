@@ -57,27 +57,23 @@ export const searchToolInputSchema = {
 export type SearchToolInput = z.infer<z.ZodObject<typeof searchToolInputSchema>>;
 
 export const searchToolOutputSchema = z.object({
-  tools: z
-    .array(
-      z.object({
-        name: z.string().describe('Tool name (e.g., "users:list")'),
-        appId: z.string().optional().describe('App ID'),
-        description: z.string().describe('What this tool does'),
-        relevanceScore: z.number().min(0).max(1).describe('Match score (0-1)'),
-        matchedQueries: z.array(z.string()).describe('Which queries matched this tool'),
-      }),
-    )
-    .describe('Deduplicated tools sorted by relevance'),
-  warnings: z
-    .array(
-      z.object({
-        type: z.enum(['excluded_tool_not_found', 'no_results', 'low_relevance']).describe('Warning type'),
-        message: z.string().describe('Warning message'),
-        affectedTools: z.array(z.string()).optional().describe('Affected tool names'),
-      }),
-    )
-    .describe('Search warnings'),
-  totalAvailableTools: z.number().int().nonnegative().describe('Total tools in index'),
+  tools: z.array(
+    z.object({
+      name: z.string(),
+      appId: z.string().optional(),
+      description: z.string(),
+      relevanceScore: z.number().min(0).max(1),
+      matchedQueries: z.array(z.string()),
+    }),
+  ),
+  warnings: z.array(
+    z.object({
+      type: z.enum(['excluded_tool_not_found', 'no_results', 'low_relevance']),
+      message: z.string(),
+      affectedTools: z.array(z.string()).optional(),
+    }),
+  ),
+  totalAvailableTools: z.number().int().nonnegative(),
 });
 
 export type SearchToolOutput = z.infer<typeof searchToolOutputSchema>;
