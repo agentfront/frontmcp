@@ -9,6 +9,9 @@ import { memoryTokenStore, type NativeTokenSet, type NativeTokenStore } from './
 /** A token is refreshed this long before it expires, so a request never carries one that expires on the way. */
 const REFRESH_MARGIN_MS = 60_000;
 
+/** A browser launcher still running this long has handed the URL on, or runs the browser itself, which never exits. */
+const LAUNCHER_SETTLE_MS = 2_000;
+
 export interface NativeSignInOptions {
   /** The authorization server's issuer URL; its endpoints come from its RFC 8414 or OpenID metadata. */
   issuer: string;
@@ -171,7 +174,12 @@ export function signOutNative(options: NativeTokenOptions): Promise<void> {
   return replaceTokens(storeOf(options), storeKeyOf(options), undefined);
 }
 
-/** Opens a URL in the system's default browser. */
+/**
+ * Opens a URL in the system's default browser with `open`, `xdg-open` or `rundll32`. Resolves once the launcher exits
+ * with status 0, or is still running 2 seconds after it started, as a launcher that runs the browser itself is: so it
+ * can take up to 2 seconds to resolve, while the browser opens. Rejects when the launcher cannot start, or exits with
+ * another status first (`browser_launch_failed`), such as `xdg-open` with no browser to hand the URL to.
+ */
 export function openSystemBrowser(url: string): Promise<void> {
   const [command, args] =
     process.platform === 'darwin'
@@ -181,10 +189,24 @@ export function openSystemBrowser(url: string): Promise<void> {
         : ['xdg-open', [url]];
   return new Promise((resolve, reject) => {
     const child = getSpawnFn()(command, args, { detached: true, stdio: 'ignore' });
-    child.once('error', reject);
+    let settled: ReturnType<typeof setTimeout> | undefined;
+    const finish = (error?: unknown) => {
+      clearTimeout(settled);
+      if (error === undefined) resolve();
+      else reject(error);
+    };
+    child.once('error', finish);
     child.once('spawn', () => {
       child.unref();
-      resolve();
+      settled = setTimeout(finish, LAUNCHER_SETTLE_MS);
+      settled.unref?.();
+    });
+    child.once('exit', (code: number | null, signal: NodeJS.Signals | null) => {
+      if (code === 0) return finish();
+      const status = code === null ? `signal ${signal}` : `status ${code}`;
+      finish(
+        new NativeSignInError('browser_launch_failed', `Could not open the browser: ${command} exited with ${status}`),
+      );
     });
   });
 }
