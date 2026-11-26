@@ -53,10 +53,10 @@ export class ResultHandleStore implements OnShutdown {
     return randomUUID();
   }
 
-  /** Keep `value` under `handle` for `owner` until the TTL runs out. */
-  async save(handle: string, value: unknown, owner: ResultOwner): Promise<void> {
+  /** Keep `value` under `handle` for `owner` until the TTL, the store's or `ttlSeconds`, runs out. */
+  async save(handle: string, value: unknown, owner: ResultOwner, ttlSeconds = this.ttlSeconds): Promise<void> {
     const encrypted = encryptAndSerialize(value, deriveFromHandle('key', handle, owner));
-    await this.storage.set(storageKeyOf(handle, owner), encrypted, { ttlSeconds: this.ttlSeconds });
+    await this.storage.set(storageKeyOf(handle, owner), encrypted, { ttlSeconds });
   }
 
   /** The value under `handle`, or undefined when it expired, never existed, or `owner` is not its owner. */

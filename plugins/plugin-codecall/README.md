@@ -76,8 +76,12 @@ the options when your module is imported, and throws a `ZodError` naming a wrong
 | `codecall:execute`         | Runs an AgentScript program that calls tools.                 |
 | `codecall:searchSkills`    | Finds skills that call tools.                                 |
 | `codecall:searchKnowledge` | Finds skills that are only instructions.                      |
+| `codecall:resume`          | Resumes a paused run from the call it stopped before.         |
+| `codecall:status`          | Reads a run's status: how it ended, or that it is paused.     |
+| `codecall:cancel`          | Cancels a paused run.                                         |
 
-They're listed in every mode, and neither `codecall:invoke` nor a script can call them.
+They're listed in every mode, and neither `codecall:invoke` nor a script can call them. The last three come with
+`runs.resume` (see [Pause and resume](#pause-and-resume)).
 
 ## Modes
 
@@ -150,30 +154,32 @@ CodeCallPlugin.init({
 
 ## Run records
 
-Each `codecall:execute` that has an owner (a session, or a signed-in caller) leaves a run record, and its result
-carries `runId`. The record holds the owner, the script's SHA-256, the status, the start and end times,
-`reviewDecision` (the [review](#review)'s or a [budget](#budgets)'s status, `'allow'` when they let the script run,
-`null` with `review` and `budgets` off), the return value's size, and a journal with one entry per tool
-call: its position (in the order the host's tool handler was entered, on either runtime), the tool, a SHA-256 of the
-arguments, the outcome (`success`, `failure` or `unfinished`), the phase of a failure (`access`, `input`, `limit` or
-`execute`), the duration and the result's size. With `runs.resume` (on by default) a run also holds each call's
-result, or the error the script got, and the values the script read from `Date` and `Math.random()`, in order: what
-it takes to run the script again and answer its calls from the record (see [Replay](#replay)). It holds them in
-memory while it runs, and keeps none of them in its record, which has the journal's metadata only. A `keep` or
-`recall` is journaled too, under its reserved tool name (`codecall:keep`, `codecall:recall`) with `kind` (`'keep'` or
+Each `codecall:execute` that has an owner (a session, or a signed-in caller) leaves a run record, and its result carries
+`runId`. The record holds the owner, the script's SHA-256, the status, the start and end times, `reviewDecision` (the
+[review](#review)'s or a [budget](#budgets)'s status, `'allow'` when they let the script run, `null` with `review` and
+`budgets` off), the return value's size, and a journal with one entry per tool call: its position (in the order calls
+reached the host, Enclave's `callIndex` + 1, on either runtime), the tool, a SHA-256 of the arguments, the outcome
+(`success`, `failure` or `unfinished`), the phase of a failure (`access`, `input`, `limit`, `execute`, `result` for a
+result refused after its tool ran, or `review` for a call a call-phase decision refused before it reached its tool), the
+duration and the result's size. With `runs.resume` (on by default) a run also holds each call's result, or the error the
+script got, and the values the script read from `Date` and `Math.random()`, in order: what it takes to run the script
+again and answer its calls from the record (see [Replay](#replay)). It holds them in memory while it runs, and keeps
+none of them in its record, which has the journal's metadata only, unless the run [pauses](#pause-and-resume). A `keep`
+or `recall` is journaled too, under its reserved tool name (`codecall:keep`, `codecall:recall`) with `kind` (`'keep'` or
 `'recall'`) and the `name` it kept or read; it is not a tool call, and its arguments and result never appear in a trace.
 
 Records are kept like result handles: encrypted under keys derived from the run id and the owner, readable only by
 that owner (`this.get(CodeCallRunStoreToken).read(runId, this)`), until they expire.
 
-| Option                | Default            | Description                                                                                                                       |
-| --------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| `runs.enabled`        | `true`             | `false` keeps no records, and results carry no `runId`.                                                                           |
-| `runs.ttlSeconds`     | `600`              | How long a record can be read.                                                                                                    |
-| `runs.maxRecordBytes` | `262144` (256 KiB) | The most one record takes; journal entries past it are left out and counted. A record whose metadata alone is over it isn't kept. |
-| `runs.resume`         | `true`             | Make runs replayable: each call's result or error, and the script's clock and random values, in memory while the run runs.        |
-| `runs.storage`        | `{ type: 'auto' }` | Where records are kept, through `createStorage()`; at most 1000 records in memory.                                                |
-| `runs.namespace`      | `'codecall-runs'`  | The key prefix of records in the storage.                                                                                         |
+| Option                | Default            | Description                                                                                                                                            |
+| --------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `runs.enabled`        | `true`             | `false` keeps no records, and results carry no `runId`.                                                                                                |
+| `runs.ttlSeconds`     | `600`              | How long a record can be read.                                                                                                                         |
+| `runs.maxRecordBytes` | `262144` (256 KiB) | The most one record takes; journal entries past it are left out and counted. A record whose metadata alone is over it isn't kept.                      |
+| `runs.resume`         | `true`             | Make runs replayable: each call's result or error, and the script's clock and random values, in memory while the run runs; pause runs and resume them. |
+| `runs.pause`          | 1800 and 1800      | `{ waitSeconds, lifetimeSeconds }`: how long a paused run waits, and how long a run lives from its first start, across resumes.                        |
+| `runs.storage`        | `{ type: 'auto' }` | Where records are kept, through `createStorage()`; at most 1000 records in memory.                                                                     |
+| `runs.namespace`      | `'codecall-runs'`  | The key prefix of records in the storage.                                                                                                              |
 
 A store that fails is logged as a warning, and the result goes out without `runId`.
 
@@ -191,6 +197,60 @@ as each tool finishes (Enclave's `toolResultOrder: 'call'`): a slow call holds b
 never the calls themselves. A runtime that cannot give the script the host's clock keeps no clock or random values,
 runs scripts as before, and refuses to replay a run. A run without an owner keeps no record, so it is not made
 replayable either.
+
+## Pause and resume
+
+With `runs.resume` (on by default), a run that stops **before** a call ran is kept `paused`, with its journal and the
+call it stopped before, instead of failing: a call-phase decision refused that call (the review's `needs_approval`, or
+an uncaught `needs_changes` or `denied`, and a budget's decision of the same shape), or the call flow refused its
+input, uncaught. The answer keeps its status (`needs_approval`, `tool_error`, ...) and adds `paused`:
+
+```json
+{
+  "status": "tool_error",
+  "runId": "8f0c…",
+  "paused": { "call": { "position": 3, "tool": "orders.refund" }, "expiresAt": "2026-11-25T15:30:00.000Z" }
+}
+```
+
+`codecall:resume` with that `runId` runs the same script again: the calls before the paused one get their recorded
+results without running again, `Date` and `Math.random()` read their recorded values, and the paused call runs live,
+then the rest of the script. Its optional `arguments` replace the paused call's arguments, and only that call's; the
+recorded results and the script's variables never change. A run that pauses at that same call again keeps them, so a
+later resume without `arguments` runs the call with them. The answer is a `codecall:execute` result, which may pause
+again at a later call. `codecall:status` reads a run's status (`paused` and until when, `resuming` while a resume
+runs it, `cancelled`, or how it ended), and `codecall:cancel` ends a paused run.
+
+- **Only before the call ran.** Whether a call reached its tool comes from FrontMCP's call flow (its input
+  validation stage, and the review hooks), never from a tool's error text: a tool that throws a validation error of
+  its own has run, and its run does not pause. A call that may have had an effect never pauses and is never retried.
+  So a run pauses only when its paused call is its last, every call before it settled and none of them also asked for
+  approval (a `parallel()` that asked twice does not pause), and its record fits whole in `runs.maxRecordBytes`. A run
+  that cannot pause answers as it did before.
+- **Clear of Enclave's detectors.** Enclave's rate limit (100 operations a second) and its sequence detectors (calls
+  to one tool, a read then a send, within 5 to 30 seconds) read the real clock, and a replay answers its recorded calls
+  at once. So a run pauses only when it made its tool and host function calls up to the paused call within 5 seconds,
+  fewer than 100 of them, and no more calls to one tool than `vm.rapidEnumerationThreshold` (and its overrides) allow:
+  replaying them faster cannot trip a detector they passed. A paused record keeps when each
+  call reached the host, for an Enclave that can replay calls at their own times.
+- **Once.** A resume claims the pause in the run storage, setting a key only where none is: of two resumes, on this
+  instance or another one sharing the storage, one runs the run and the other is told the run is not paused. The run is
+  then kept `resuming` until the resumed run ends, and its claim lasts until the pause would have expired plus the
+  script's timeout. A storage failure before the resumed run starts releases the claim and leaves the run paused, so
+  it can be resumed again; a resume that crashed after it started leaves the run `resuming`: it is not run again. A storage without conditional
+  writes (Cloudflare KV) cannot claim, and its resumes fail.
+- **Its owner.** Only the session and caller that started the run can resume, read or cancel it; anyone else is told
+  it is not found. A resume checks again that the caller may call each tool whose result it replays, and every live
+  call goes through the policy, the review and the call flow as usual. Corrected `arguments` go to the server's
+  reviewers first (`reviewer`, `provider`), as the one-call script `codecall:invoke` would send them; anything but
+  `allow` is the answer, and the run stays paused.
+- **Limits.** A paused run waits `runs.pause.waitSeconds` (30 minutes) and lives `runs.pause.lifetimeSeconds` (30
+  minutes) from its first start, whichever ends first; after that a resume is told it is not found. The paused record
+  holds the script, and the results and clock and random values of the calls before the paused one, encrypted with the
+  record, to run it again; the script's SHA-256 must be the record's `scriptHash`. No other record keeps them.
+- **Its call-phase hooks.** A replayed call is not reviewed again and does not go through the budgets again: a call
+  that reached its tool is allowed, and a refusal the script caught (`needs_changes`, `denied`) is given again. A
+  `needs_approval` is never answered from a record. The paused call is asked live, with its corrected arguments.
 
 ## Keep and recall
 

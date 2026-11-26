@@ -119,4 +119,74 @@ describe('RunReplay', () => {
 
     expect(write).toHaveBeenCalledWith('line');
   });
+
+  describe('resuming a paused run', () => {
+    const paused: RunReplaySource = {
+      journal: [
+        entry(1, 'users.get', { id: 1 }, { result: { name: 'Ada' } }),
+        entry(
+          2,
+          'users.delete',
+          { id: 9 },
+          {
+            outcome: 'failure',
+            phase: 'review',
+            decision: { decision: 'needs_changes', findings: [{ rule: 'input-schema', message: 'id' }] },
+          },
+        ),
+      ],
+      clock: [1000],
+      pending: {
+        call: { position: 3, tool: 'users.delete', argumentsHash: argumentsHashOf({ id: 1 }) },
+        arguments: { id: 2 },
+      },
+    };
+
+    it("gives the call-phase hooks a recorded call's decision without asking them, and asks for the pending call", () => {
+      const replay = new RunReplay(paused);
+
+      expect(replay.decisionOf(0, 'users.get', { id: 1 })).toEqual({ decision: 'allow' });
+      expect(replay.decisionOf(1, 'users.delete', { id: 9 })).toEqual(paused.journal[1].decision);
+      expect(replay.decisionOf(2, 'users.delete', { id: 1 })).toBeUndefined();
+      expect(replay.decisionOf(3, 'users.list', {})).toBeUndefined();
+    });
+
+    it('runs the pending call live with its corrected arguments, and every other call with its own', async () => {
+      const replay = new RunReplay(paused);
+
+      expect(replay.answerOf({ callIndex: 2 }, 'users.delete', { id: 1 })).toBeUndefined();
+      expect(replay.argumentsFor(2, { id: 1 })).toEqual({ id: 2 });
+      expect(replay.argumentsFor(3, { id: 1 })).toEqual({ id: 1 });
+    });
+
+    it('ends the run when the script makes another call where the run paused', async () => {
+      const replay = new RunReplay(paused);
+
+      expect(replay.decisionOf(2, 'users.delete', { id: 5 })).toEqual({ decision: 'allow' });
+      await expect(replay.answerOf({ callIndex: 2 }, 'users.delete', { id: 5 })).rejects.toThrow(
+        'The run diverged from its journal: call 3 to "users.delete" had other arguments',
+      );
+    });
+
+    it('is a divergence when the script ends before the call it paused at', async () => {
+      const replay = new RunReplay(paused);
+      await replay.answerOf({ callIndex: 0 }, 'users.get', { id: 1 });
+      replay.decisionOf(1, 'users.delete', { id: 9 });
+
+      expect(replay.divergenceOf(false)?.message).toContain('script ended before call 3');
+    });
+
+    it('keeps the clock and random values read before a call reached the host', () => {
+      jest.spyOn(Date, 'now').mockReturnValue(5000);
+      const replay = new RunReplay();
+      replay.appliedByRuntime(true);
+      replay.clock();
+      replay.decisionOf(0, 'users.get', {});
+      replay.clock();
+
+      expect(replay.readsBefore(0)).toEqual({ clock: [5000] });
+      expect(replay.recordedReads()).toEqual({ clock: [5000, 5000] });
+      jest.restoreAllMocks();
+    });
+  });
 });

@@ -13,6 +13,7 @@ import {
 } from '../budgets/budget-meter';
 import { CodeCallBudgetStore } from '../budgets/budget-store';
 import { codeCallBudgetsOptionsSchema, type CodeCallBudget } from '../codecall.types';
+import { createToolCallError, TOOL_CALL_ERROR_CODES, type ToolCallErrorCode } from '../errors';
 import { effectsSoFarOf, type RunReviewCaller } from '../review/create-run-review';
 import { ReviewApprovals, type ApprovalRecordView } from '../review/review-approvals';
 import { RunJournal } from '../runs/run-journal';
@@ -708,6 +709,15 @@ describe('a call stopped as it starts, with the run journal', () => {
     expect(effectsSoFar()(ARCHIVE)).toEqual([ARCHIVE.toolName]);
     journal.close();
     expect(effectsSoFar()()).toEqual([ARCHIVE.toolName]);
+  });
+
+  it('counts a tool whose result was refused once it ran, and not one a rate limit stopped', () => {
+    const failed = (tool: string, code: ToolCallErrorCode) =>
+      journal.begin(tool, {}).fail(createToolCallError(code, tool));
+    failed('tickets.export', TOOL_CALL_ERROR_CODES.RESULT_TOO_LARGE);
+    failed('tickets.close', TOOL_CALL_ERROR_CODES.RATE_LIMITED);
+
+    expect(effectsSoFar()()).toEqual(['tickets.export']);
   });
 });
 

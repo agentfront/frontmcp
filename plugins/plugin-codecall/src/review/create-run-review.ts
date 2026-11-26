@@ -4,7 +4,7 @@ import type { ToolEntry } from '@frontmcp/sdk';
 
 import { DEFAULT_APPROVAL_MAX_AGE_SECONDS } from '../codecall.types';
 import type CodeCallConfig from '../providers/code-call.config';
-import { argumentsHashOf, type RunJournal } from '../runs/run-journal';
+import { argumentsHashOf, reachedTool, type RunJournal } from '../runs/run-journal';
 import type { CodeCallJournalEntry } from '../runs/run-record.types';
 import {
   checkCodeCallToolAccess,
@@ -36,11 +36,8 @@ export interface RunReviewCaller {
   granted: ReadonlySet<string>;
   /** The journal of the run, whose calls that reached their tool are the run's effects so far. */
   journal?: RunJournal;
-}
-
-/** Whether a journal entry's tool call reached its tool: it succeeded, is still running, or the tool itself failed. */
-function reachedTool(entry: CodeCallJournalEntry): boolean {
-  return entry.kind === undefined && (entry.outcome !== 'failure' || entry.phase === 'execute');
+  /** Only the server's reviewers, not the built-in rules: for a call the run's own review checks with the rules. */
+  reviewersOnly?: boolean;
 }
 
 /** The tool context a review runs for: the call it serves, and who made it. */
@@ -129,7 +126,7 @@ export function effectsSoFarOf(
 ): (starting?: JournaledCall) => string[] {
   return (starting) => {
     const ranTools = entriesBefore(caller.journal, starting)
-      .filter(reachedTool)
+      .filter((entry) => entry.kind === undefined && reachedTool(entry))
       .map((entry) => entry.tool);
     return [...new Set(ranTools)].filter((name) => !isReadOnly(name));
   };
@@ -155,7 +152,9 @@ export async function createRunReview(
   };
   const hasApprovalChannel = caller.approvalService !== undefined || caller.canElicit;
   const rules =
-    options.rules === false ? undefined : new ReviewRules({ rules: options.rules, toolOf, hasApprovalChannel });
+    options.rules === false || caller.reviewersOnly
+      ? undefined
+      : new ReviewRules({ rules: options.rules, toolOf, hasApprovalChannel });
   const approvals = approvalsOf(caller, scriptHash, service);
   const effectsSoFar = effectsSoFarOf(caller, (name) => toolOf(name)?.annotations?.readOnlyHint === true);
   return new RunReview({

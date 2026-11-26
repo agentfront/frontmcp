@@ -463,6 +463,15 @@ export const codeCallRunsOptionsSchema = z
       .default(256 * 1024),
     /** Make runs replayable, so a run can be resumed: results and clock values stay in memory during the run (true by default). */
     resume: z.boolean().default(true),
+    /** How long a run paused before a call waits for `codecall:resume`, and how long it lives in total from its start. */
+    pause: z
+      .object({
+        /** Seconds a paused run waits to be resumed (1800). */
+        waitSeconds: z.number().int().min(1).default(1800),
+        /** Seconds a run may live from its first start, across every pause and resume (1800). */
+        lifetimeSeconds: z.number().int().min(1).default(1800),
+      })
+      .prefault({}),
     /** Where records are kept, through `createStorage()` from `@frontmcp/utils` ({ type: 'auto' }, 1000 at most in memory). */
     storage: storageOptionSchema,
     /** The key prefix of run records in the storage ('codecall-runs'). */

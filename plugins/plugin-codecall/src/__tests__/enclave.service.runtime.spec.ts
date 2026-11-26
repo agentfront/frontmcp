@@ -23,8 +23,13 @@ import { ExecutionEndedError } from '../services/runtime/execution-gate';
 import { createInterpreterRuntime } from '../services/runtime/interpreter.runtime';
 
 /** Calls a tool handler as the sandbox does: Enclave 2.21 adds the call's position, which 2.20 ignores. */
-function callToolHandler(handler: ToolHandler, toolName: string, args: Record<string, unknown>): Promise<unknown> {
-  const params = [toolName, args, { callIndex: 0 }] as unknown as Parameters<ToolHandler>;
+function callToolHandler(
+  handler: ToolHandler,
+  toolName: string,
+  args: Record<string, unknown>,
+  callIndex = 0,
+): Promise<unknown> {
+  const params = [toolName, args, { callIndex }] as unknown as Parameters<ToolHandler>;
   return handler(...params);
 }
 
@@ -423,7 +428,7 @@ describe('EnclaveService host functions and tool calls', () => {
     const runtime = fakeRuntime('interpreter', async (spec) => {
       captured = spec;
       await callToolHandler(spec.toolHandler, 'a', { n: 1 });
-      await callToolHandler(spec.toolHandler, 'b', {}).catch(() => undefined);
+      await callToolHandler(spec.toolHandler, 'b', {}, 1).catch(() => undefined);
       return okResult('ok', 2);
     });
     const service = new EnclaveService(configWith({ runtime: 'interpreter' }), undefined, {
@@ -433,7 +438,7 @@ describe('EnclaveService host functions and tool calls', () => {
     const journal = new RunJournal();
 
     await service.execute('return 1;', env, journal);
-    if (captured) await callToolHandler(captured.toolHandler, 'late', {}).catch(() => undefined);
+    if (captured) await callToolHandler(captured.toolHandler, 'late', {}, 2).catch(() => undefined);
 
     expect(journal.close().map(({ position, tool, outcome, phase }) => ({ position, tool, outcome, phase }))).toEqual([
       { position: 1, tool: 'a', outcome: 'success', phase: undefined },

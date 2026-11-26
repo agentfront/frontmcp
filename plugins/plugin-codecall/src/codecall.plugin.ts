@@ -1,7 +1,7 @@
 // file: plugins/plugin-codecall/src/codecall.plugin.ts
 
 import CachePlugin from '@frontmcp/plugin-cache';
-import { createResultHandleStore } from '@frontmcp/plugin-result-handles';
+import { ResultHandleStore } from '@frontmcp/plugin-result-handles';
 import {
   DynamicPlugin,
   FrontMcpLogger,
@@ -40,13 +40,24 @@ import { KeptValueStore } from './kept-values/kept-value.store';
 import { KeptValueStoreToken } from './kept-values/kept-value.types';
 import CodeCallConfig from './providers/code-call.config';
 import CodeCallReviewService from './review/review.service';
+import { markCallStage } from './runs/call-stage';
 import { CodeCallRunStore } from './runs/run-record.store';
 import { CodeCallRunStoreToken } from './runs/run-record.types';
 import { codeCallAppIdOf, isInProcessDispatch } from './security';
 import { ToolSearchService } from './services';
 import { AuditLoggerService, type AuditEvent } from './services/audit-logger.service';
 import EnclaveService from './services/enclave.service';
-import { DescribeTool, ExecuteTool, InvokeTool, SearchKnowledgeTool, SearchSkillsTool, SearchTool } from './tools';
+import {
+  CancelTool,
+  DescribeTool,
+  ExecuteTool,
+  InvokeTool,
+  ResumeTool,
+  SearchKnowledgeTool,
+  SearchSkillsTool,
+  SearchTool,
+  StatusTool,
+} from './tools';
 import { buildExecuteToolDescription } from './tools/execute.schema';
 import { buildSearchToolDescription } from './tools/search.schema';
 
@@ -71,11 +82,14 @@ function runStoreProvider(runs: CodeCallRunsOptions): ProviderType {
     provide: CodeCallRunStoreToken,
     scope: ProviderScope.GLOBAL,
     inject: () => [] as const,
-    useFactory: async () =>
-      new CodeCallRunStore(await createResultHandleStore({ storage, namespace, ttlSeconds }), {
+    useFactory: async () => {
+      const records = (await createStorage(storage)).namespace(namespace);
+      return new CodeCallRunStore(new ResultHandleStore(records, ttlSeconds), {
         maxRecordBytes,
         resume,
-      }),
+        claims: records.namespace('claims'),
+      });
+    },
   });
 }
 
@@ -248,6 +262,7 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
       ),
       ConfiguredExecuteTool,
     );
+    const pausing = config.runs.enabled && config.runs.resume;
     return [
       ConfiguredSearchTool,
       SearchSkillsTool,
@@ -255,6 +270,7 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
       DescribeTool,
       ConfiguredExecuteTool,
       InvokeTool,
+      ...(pausing ? [ResumeTool, StatusTool, CancelTool] : []),
     ];
   }
 
@@ -320,6 +336,18 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
 
     this.getLogger().verbose('refused a direct tools/call of a tool CodeCall hides', { tool: tool.fullName });
     throw new ToolNotFoundError(flowCtx.state.input?.name ?? tool.name);
+  }
+
+  /** A call a script made entered input validation: until it passes, its tool has not run (see `trackCallStage`). */
+  @ToolHook.Will('validateInput', { appliesTo: 'uncovered-apps' })
+  async markValidatingInput(flowCtx: FlowCtxOf<'tools:call-tool'>) {
+    markCallStage(callContextOf(flowCtx), 'validating-input');
+  }
+
+  /** A call a script made passed input validation: from here on its tool may run. */
+  @ToolHook.Did('validateInput', { appliesTo: 'uncovered-apps' })
+  async markInputValid(flowCtx: FlowCtxOf<'tools:call-tool'>) {
+    markCallStage(callContextOf(flowCtx), 'input-valid');
   }
 
   /**
