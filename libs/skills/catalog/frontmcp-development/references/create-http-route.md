@@ -193,7 +193,9 @@ app) serve one path, the first scope's serves it on every adapter.
    the server's console). Any code is a credential: send it to the person, never back to the MCP client, and never to
    a log. Tool code can make one for any subject, so the binding is as strong as the tools that call `createCode`.
 3. **The sign-in page.** The person opens `/_frontmcp/people/login?code=<code>&next=/board`. The page signs nothing in:
-   its form posts the code back from the server's own origin.
+   its form posts the code back from the server's own origin. It is served with `Referrer-Policy: same-origin`, so the
+   POST carries the page's `Origin` (up to 1.13.1 it was `no-referrer`, whose form posts send `Origin: null` and were
+   refused).
 4. **The cookie.** `POST /_frontmcp/people/login` (a form, or JSON `{ "code", "next" }`) spends the code and sets
    `frontmcp_people=<session>; Path=/; Max-Age=<s>; HttpOnly; SameSite=Strict`, plus `Secure` over https, then goes to
    `next` (a path on this server; anything else goes to `/`).
@@ -238,6 +240,11 @@ included, which makes signing in CSRF-safe. The rules are the loopback Origin ru
   refused;
 - without an `Origin`, a `Sec-Fetch-Site` other than `same-origin` or `none` is refused;
 - a request with neither header (a CLI, an agent) is allowed.
+
+A page of yours that posts a `<form>` must not be served with `Referrer-Policy: no-referrer`, as a header or a
+`<meta name="referrer">`: the browser then sends `Origin: null`, which this check and the DNS-rebinding `Origin` check
+refuse. Use `same-origin`, which still sends no referrer to other sites. A `fetch()` POST keeps the real `Origin` under
+either policy.
 
 The check compares the `Origin` with the request's own `Host`, which a page on a DNS-rebound name sets to that name.
 Host validation (`http.security.dnsRebindingProtection`) is what refuses such a host: it is on by default on a loopback
