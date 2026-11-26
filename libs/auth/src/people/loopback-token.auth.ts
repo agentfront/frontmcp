@@ -34,6 +34,12 @@ interface StoredSecret {
   subject?: string;
 }
 
+/** A signed-out session the store may still hold: refused here until the store removes it, or it would have expired. */
+interface Revocation {
+  expiresAt: number;
+  removing: boolean;
+}
+
 interface ClientFailures {
   count: number;
   lastAt: number;
@@ -91,6 +97,8 @@ export class LoopbackTokenAuth {
   private sessions: StoredSecret[] = [];
   private readonly failures = new Map<string, ClientFailures>();
   private readonly writes = new Set<Promise<void>>();
+  /** By store key, the signed-out sessions whose removal from the store has not succeeded yet. */
+  private readonly revoked = new Map<string, Revocation>();
 
   constructor(
     readonly options: PeopleAuthOptions,
@@ -152,31 +160,59 @@ export class LoopbackTokenAuth {
     return session ? toSession(session) : undefined;
   }
 
-  /** A session this process made, else one kept in the store; a store that cannot be read finds none. */
+  /**
+   * A session this process made, else one kept in the store; a store that cannot be read finds none. A session signed
+   * out here is refused while the store still holds it.
+   */
   async findSession(presented: string | undefined): Promise<PeopleSession | undefined> {
     const known = this.verifySession(presented);
     const store = this.persistence?.store;
     if (known || !presented || !store) return known;
+    const key = sessionKey(sha256(presented));
+    if (this.isRevoked(key)) {
+      this.removeKept(key);
+      return undefined;
+    }
     let raw: string | null;
     try {
-      raw = await store.get(sessionKey(sha256(presented)));
+      raw = await store.get(key);
     } catch (error) {
       this.report('a kept people session could not be read', error);
       return undefined;
     }
+    if (this.isRevoked(key)) return undefined;
     const session = keptSession(raw);
     return session && session.expiresAt > Date.now() ? session : undefined;
   }
 
+  /**
+   * Signs the person out. With a store, the session is removed from it too, and refused here until that succeeds: a
+   * removal that fails is tried again when the cookie comes back and at the next {@link flush}, until the session
+   * would have expired.
+   */
   endSession(presented: string | undefined): void {
     if (!presented) return;
+    const known = this.verifySession(presented);
     this.sessions = this.sessions.filter((stored) => !matches(presented, stored.digest));
     const store = this.persistence?.store;
-    if (store) this.track(store.delete(sessionKey(sha256(presented))), 'a kept people session could not be removed');
+    if (!store) return;
+    this.forgetExpiredRevocations();
+    const key = sessionKey(sha256(presented));
+    if (!this.revoked.has(key)) {
+      // A session from the store has an unknown expiry, which is at most a full session TTL away.
+      const expiresAt = known?.expiresAt ?? Date.now() + this.options.sessionTtlMs;
+      this.revoked.set(key, { expiresAt, removing: false });
+    }
+    this.removeKept(key);
   }
 
-  /** Waits for the session writes in flight, so a session handed out is kept before the answer goes. */
+  /**
+   * Waits for the session writes in flight, so a session handed out is kept before the answer goes. A sign-out the
+   * store could not remove is tried again first.
+   */
   async flush(): Promise<void> {
+    this.forgetExpiredRevocations();
+    for (const key of this.revoked.keys()) this.removeKept(key);
     await Promise.all(this.writes);
   }
 
@@ -186,6 +222,38 @@ export class LoopbackTokenAuth {
     const ttlSeconds = Math.max(1, Math.ceil((session.expiresAt - Date.now()) / 1000));
     const write = store.set(sessionKey(digest), JSON.stringify(session), { ttlSeconds });
     this.track(write, 'a people session could not be kept, so a restart ends it');
+  }
+
+  /** Removes a signed-out session from the store, unless a removal is already on its way; refused here until then. */
+  private removeKept(key: string): void {
+    const store = this.persistence?.store;
+    const revocation = this.revoked.get(key);
+    if (!store || !revocation || revocation.removing) return;
+    revocation.removing = true;
+    const removal = store.delete(key).then(
+      () => {
+        if (this.revoked.get(key) === revocation) this.revoked.delete(key);
+      },
+      (error: unknown) => {
+        revocation.removing = false;
+        throw error;
+      },
+    );
+    this.track(removal, 'a kept people session could not be removed, so this process refuses it and tries again');
+  }
+
+  private isRevoked(key: string): boolean {
+    const revocation = this.revoked.get(key);
+    if (revocation === undefined) return false;
+    if (revocation.expiresAt > Date.now()) return true;
+    this.revoked.delete(key);
+    return false;
+  }
+
+  /** A session past its expiry is gone from the store by its TTL, so its removal is not tried again. */
+  private forgetExpiredRevocations(): void {
+    const now = Date.now();
+    for (const [key, revocation] of this.revoked) if (revocation.expiresAt <= now) this.revoked.delete(key);
   }
 
   private track(write: Promise<unknown>, failure: string): void {
