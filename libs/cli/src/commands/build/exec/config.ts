@@ -15,6 +15,9 @@ export interface OAuthConfig {
   portRange?: [number, number];
   defaultPort?: number;
   timeout?: number;
+  nativeSignIn?: boolean;
+  issuer?: string;
+  resource?: string;
 }
 
 export interface CliConfig {

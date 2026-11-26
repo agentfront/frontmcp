@@ -471,6 +471,9 @@ export default defineConfig({
           clientId: 'my-app',
           defaultScope: 'read write',
           portRange: [17830, 17850], // local callback port range
+          // nativeSignIn: true, // sign in with @frontmcp/auth/native: metadata discovery, resource, token refresh
+          // issuer: 'https://idp.example.com', // with nativeSignIn; defaults to serverUrl
+          // resource: 'https://mcp.example.com/mcp', // with nativeSignIn (RFC 8707)
         },
       },
     },

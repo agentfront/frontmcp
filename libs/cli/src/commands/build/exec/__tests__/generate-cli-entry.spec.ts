@@ -529,6 +529,63 @@ describe('generateCliEntry', () => {
     });
   });
 
+  describe('native sign-in (cli.oauth.nativeSignIn)', () => {
+    const nativeOptions = (oauth: Partial<NonNullable<CliEntryOptions['oauthConfig']>> = {}) =>
+      makeOptions({
+        authRequired: true,
+        oauthConfig: { serverUrl: 'https://mcp.example.com', clientId: 'my-cli', defaultScope: 'read', nativeSignIn: true, ...oauth },
+      });
+    const connectOptionsOf = (source: string) =>
+      source.slice(source.indexOf('async function connectOptions()'), source.indexOf('async function connectInProcess('));
+
+    it('is off by default: login posts to the server, and nothing loads @frontmcp/auth/native', () => {
+      const source = generateCliEntry(makeOptions({ authRequired: true, oauthConfig: { serverUrl: 'https://mcp.example.com' } }));
+      expect(source).toContain('oauthHelper.startOAuthLogin');
+      expect(source).not.toContain('@frontmcp/auth/native');
+      expect(connectOptionsOf(source)).not.toContain('getNativeTokens');
+    });
+
+    it('signs in with signInNative at the configured issuer, for the resource, on the configured ports', () => {
+      const source = generateCliEntry(
+        nativeOptions({ issuer: 'https://idp.example.com', resource: 'https://mcp.example.com/mcp', portRange: [18000, 18010] }),
+      );
+      expect(source).toContain("var nativeAuth = require('@frontmcp/auth/native');");
+      expect(source).toContain('await nativeAuth.signInNative({');
+      expect(source).toContain('issuer: "https://idp.example.com" || serverUrl,');
+      expect(source).toContain('clientId: "my-cli",');
+      expect(source).toContain('resource: "https://mcp.example.com/mcp",');
+      expect(source).toContain('redirectPort: [18000, 18010],');
+      expect(source).toContain('store: nativeTokenStore(sessionName),');
+      expect(source).not.toContain('oauthHelper.startOAuthLogin');
+      expect(() => new Function(source.replace(/^#!.*\n/, ''))).not.toThrow();
+    });
+
+    it('signs in at the server URL when no issuer is set, on the default ports', () => {
+      const source = generateCliEntry(nativeOptions());
+      expect(source).toContain('issuer: "" || serverUrl,');
+      expect(source).toContain('redirectPort: [17830, 17850],');
+    });
+
+    it('refreshes the stored tokens before a command, and says to log in again when it cannot', () => {
+      const connectOptions = connectOptionsOf(generateCliEntry(nativeOptions()));
+      expect(connectOptions).toContain('var nativeTokens = credBlob && credBlob.metadata && credBlob.metadata.nativeTokens;');
+      expect(connectOptions).toContain('await nativeAuth.getNativeTokens({');
+      expect(connectOptions).toContain(`throw new Error('The session expired. Run "' + APP_NAME + ' login" again.');`);
+      expect(connectOptions.indexOf('getNativeTokens')).toBeLessThan(connectOptions.indexOf('if (!credBlob || !credBlob.token)'));
+    });
+
+    it('keeps the tokens in the credential store, with the access token where connect --token puts it', () => {
+      const source = generateCliEntry(nativeOptions());
+      expect(source).toContain('token: tokens.accessToken,');
+      expect(source).toContain('metadata: { scope: tokens.scope, serverUrl: tokens.issuer, nativeTokens: tokens }');
+    });
+
+    it('generates nothing for it without authRequired', () => {
+      const source = generateCliEntry(makeOptions({ oauthConfig: { serverUrl: 'https://mcp.example.com', nativeSignIn: true } }));
+      expect(source).not.toContain('@frontmcp/auth/native');
+    });
+  });
+
   describe('logout command', () => {
     it('should include logout command when authRequired', () => {
       const source = generateCliEntry(makeOptions({ authRequired: true }));

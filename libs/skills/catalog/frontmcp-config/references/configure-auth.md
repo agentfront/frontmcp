@@ -462,6 +462,32 @@ class MyApp {}
 
 When `NODE_ENV=development`, FrontMCP relaxes token validation to support local identity provider instances (e.g., a local Keycloak or mock OAuth server). Tokens are still validated, but HTTPS requirements and strict issuer checks are loosened.
 
+## Signing a CLI or Desktop Client In (`@frontmcp/auth/native`)
+
+The modes above are the server's half. A command-line or desktop client that signs its user in at an authorization server (FrontMCP in `local` or `remote` mode, or your identity provider in front of a `transparent` server) uses `signInNative` from `@frontmcp/auth/native` (RFC 8252):
+
+```typescript
+import { fileTokenStore, getNativeTokens, signInNative } from '@frontmcp/auth/native';
+
+const options = {
+  issuer: 'https://auth.example.com', // endpoints come from its RFC 8414 / OpenID metadata
+  clientId: 'tasks-cli',
+  scopes: ['openid', 'tasks:read'],
+  resource: 'https://mcp.example.com/mcp', // RFC 8707, on the authorization and token requests
+  store: fileTokenStore(`${process.env['HOME']}/.tasks-cli/tokens.json`), // mode 0600; default: in memory
+};
+
+// Kept tokens, refreshed when they expire within a minute; else a browser sign-in
+const tokens = (await getNativeTokens(options)) ?? (await signInNative(options));
+```
+
+- `signInNative` always runs the browser flow: S256 PKCE, a random `state`, and a one-shot listener on `http://127.0.0.1:<port>/callback`, on any free port unless `redirectPort` names one or a range (`[17830, 17850]`). Register that loopback redirect at the provider. It checks the response's `state`, and its RFC 9207 `iss` when present (or promised by the metadata), and stores the tokens under the issuer, client ID and resources (`storeKey` overrides).
+- `getNativeTokens` returns the stored tokens, refreshing them first (one request for concurrent callers); `undefined` when there are none, or the provider refused the refresh token, which is then dropped. `signOutNative` forgets them.
+- The issuer, its metadata `issuer` and both endpoints must be HTTPS, or HTTP on a loopback host; a server that lists `code_challenge_methods_supported` without `S256` is refused. Errors are `NativeSignInError` with an OAuth `code` (`access_denied`, `invalid_grant`, ...) or `discovery_failed`, `insecure_url`, `state_mismatch`, `issuer_mismatch`, `missing_code`, `port_unavailable`, `timeout`, `invalid_token_response`.
+- `openBrowser` replaces the system browser (`openSystemBrowser`), for example to print the URL; `timeoutMs` (default 120000) bounds the wait; `audience` is sent for providers that want it instead of `resource`; `clientSecret` for a provider that gives native apps one. A custom `store` implements `get`, `set` and `delete` of a `NativeTokenSet` per key.
+
+A `--target cli` build can use it for its `login` command with `cli.oauth.nativeSignIn: true` (see `build-for-cli` in `frontmcp-deployment`).
+
 ## Multi-App Auth
 
 Each `@App` in a FrontMCP server can have a different auth configuration. This is useful when a single server hosts multiple logical applications with different security requirements:

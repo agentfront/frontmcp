@@ -63,6 +63,17 @@
         "types": "./dist/index.d.ts",
         "default": "./dist/esm/index.mjs"
       }
+    },
+    "./native": {
+      "development": "./src/native/index.ts",
+      "require": {
+        "types": "./dist/native/index.d.ts",
+        "default": "./dist/native/index.js"
+      },
+      "import": {
+        "types": "./dist/native/index.d.ts",
+        "default": "./dist/esm/native/index.mjs"
+      }
     }
   },
   "engines": {
