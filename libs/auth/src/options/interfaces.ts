@@ -946,7 +946,8 @@ export interface TransparentResourceMetadataOptions {
   clientId?: string | true;
   /**
    * Published as `audience`: the audience to request tokens for; `true` publishes the one this server checks
-   * (`expectedAudience`'s first entry, else the server's address from `FRONTMCP_PUBLIC_URL` or an allowed host).
+   * (`expectedAudience`'s first entry that is not empty, else the server's address from `FRONTMCP_PUBLIC_URL` or an
+   * allowed host).
    */
   audience?: string | true;
 }
