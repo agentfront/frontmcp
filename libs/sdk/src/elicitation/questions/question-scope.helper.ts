@@ -96,6 +96,8 @@ export interface PersistentQuestions {
   ttlMs: number;
   type: QuestionStoreResult['type'];
   inboxLinks: InboxLinks;
+  /** For a session held here, a check of whether it has since been ended through another instance. */
+  sessionEndCheck?: (sessionId: string) => (() => Promise<boolean>) | undefined;
 }
 
 /** Open the store `elicitation.persistent` asks for, keyed apart from other servers on it; undefined while it is off. */

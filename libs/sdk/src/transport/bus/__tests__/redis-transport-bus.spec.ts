@@ -244,6 +244,85 @@ describe('RedisTransportBus', () => {
       expect(redis.publish).not.toHaveBeenCalled();
     });
 
+    it("resolves only once the owner has closed the session's transport (#1446)", async () => {
+      let ownerClosed = false;
+      redis.hgetall.mockImplementation(async () => (ownerClosed ? {} : entry({ nodeId: 'node-2' })));
+      redis.publish.mockImplementation(async () => {
+        setTimeout(() => (ownerClosed = true), 100);
+        return 1;
+      });
+
+      await bus.destroyRemote(createKey());
+
+      expect(ownerClosed).toBe(true);
+    });
+
+    it('stops waiting when another node took the session over', async () => {
+      redis.hgetall.mockResolvedValueOnce(entry({ nodeId: 'node-2' })).mockResolvedValue(entry({ nodeId: 'node-3' }));
+
+      await bus.destroyRemote(createKey());
+
+      expect(redis.hgetall).toHaveBeenCalledTimes(2);
+    });
+
+    it('answers after a bounded wait when the owner never releases the session', async () => {
+      jest.useFakeTimers();
+      try {
+        const logger = { info: jest.fn(), warn: jest.fn(), debug: jest.fn() };
+        bus = new RedisTransportBus(redis, 'node-1', { logger });
+        redis.hgetall.mockResolvedValue(entry({ nodeId: 'node-2' }));
+        let resolved = false;
+        const destroyed = bus.destroyRemote(createKey()).then(() => (resolved = true));
+
+        await jest.advanceTimersByTimeAsync(4_900);
+        expect(resolved).toBe(false);
+        await jest.advanceTimersByTimeAsync(200);
+        await destroyed;
+
+        expect(logger.warn).toHaveBeenCalledWith(
+          '[TransportBus] The session owner did not release the session in time',
+          expect.objectContaining({ ownerNodeId: 'node-2' }),
+        );
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('answers by the deadline when Redis never answers a read of the entry', async () => {
+      jest.useFakeTimers();
+      try {
+        const logger = { info: jest.fn(), warn: jest.fn(), debug: jest.fn() };
+        bus = new RedisTransportBus(redis, 'node-1', { logger });
+        redis.hgetall
+          .mockResolvedValueOnce(entry({ nodeId: 'node-2' }))
+          .mockImplementation(() => new Promise<never>(() => undefined));
+        let resolved = false;
+        const destroyed = bus.destroyRemote(createKey()).then(() => (resolved = true));
+
+        await jest.advanceTimersByTimeAsync(4_900);
+        expect(resolved).toBe(false);
+        await jest.advanceTimersByTimeAsync(100);
+        await destroyed;
+
+        expect(redis.hgetall).toHaveBeenCalledTimes(2);
+        expect(logger.warn).toHaveBeenCalledWith(
+          '[TransportBus] The session owner did not release the session in time',
+          expect.objectContaining({ ownerNodeId: 'node-2' }),
+        );
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('does not wait when no node listens on the owner channel', async () => {
+      redis.hgetall.mockResolvedValue(entry({ nodeId: 'node-2' }));
+      redis.publish.mockResolvedValueOnce(0);
+
+      await bus.destroyRemote(createKey());
+
+      expect(redis.hgetall).toHaveBeenCalledTimes(1);
+    });
+
     it('logs the destroy request when a logger is given', async () => {
       const logger = { info: jest.fn(), warn: jest.fn(), debug: jest.fn() };
       bus = new RedisTransportBus(redis, 'node-1', { logger });
