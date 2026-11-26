@@ -39,26 +39,24 @@ export const searchKnowledgeToolInputSchema = {
 export type SearchKnowledgeToolInput = z.infer<z.ZodObject<typeof searchKnowledgeToolInputSchema>>;
 
 const knowledgeHitSchema = z.object({
-  name: z.string().describe('Skill name'),
-  description: z.string().describe('Short description of what the knowledge covers'),
-  tags: z.array(z.string()).describe('Tags carried by the skill'),
-  relevanceScore: z.number().min(0).max(1).describe('Match score (0-1)'),
-  matchedQueries: z.array(z.string()).describe('Which queries matched this knowledge'),
-  source: z.enum(['local', 'external']).describe('Where the skill was loaded from'),
+  name: z.string(),
+  description: z.string(),
+  tags: z.array(z.string()),
+  relevanceScore: z.number().min(0).max(1),
+  matchedQueries: z.array(z.string()),
+  source: z.enum(['local', 'external']),
 });
 
 export const searchKnowledgeToolOutputSchema = z.object({
-  knowledge: z.array(knowledgeHitSchema).describe('Deduplicated knowledge skills, sorted by relevance'),
-  warnings: z
-    .array(
-      z.object({
-        type: z.enum(['no_results', 'low_relevance', 'excluded_skill_not_found']).describe('Warning type'),
-        message: z.string().describe('Warning message'),
-        affectedSkills: z.array(z.string()).optional().describe('Affected skill names'),
-      }),
-    )
-    .describe('Search warnings'),
-  totalKnowledgeSkills: z.number().int().nonnegative().describe('Total knowledge-only skills available'),
+  knowledge: z.array(knowledgeHitSchema),
+  warnings: z.array(
+    z.object({
+      type: z.enum(['no_results', 'low_relevance', 'excluded_skill_not_found']),
+      message: z.string(),
+      affectedSkills: z.array(z.string()).optional(),
+    }),
+  ),
+  totalKnowledgeSkills: z.number().int().nonnegative(),
 });
 
 export type SearchKnowledgeToolOutput = z.infer<typeof searchKnowledgeToolOutputSchema>;
