@@ -928,10 +928,27 @@ export interface TransparentAuthOptionsInterface {
    * @default false
    */
   audienceFromRequestHost?: boolean;
+  /**
+   * What the protected resource metadata (`/.well-known/oauth-protected-resource`) tells clients about signing in
+   * at the provider, beside `authorization_servers`. Each field is published only when set.
+   * @default nothing beyond the RFC 9728 fields
+   */
+  resourceMetadata?: TransparentResourceMetadataOptions;
   requiredScopes?: string[];
   allowAnonymous?: boolean;
   anonymousScopes?: string[];
   publicAccess?: PublicAccessConfig;
+}
+
+/** The sign-in details a transparent-mode server publishes in its protected resource metadata. */
+export interface TransparentResourceMetadataOptions {
+  /** Published as `client_id`: the client id to sign in with at the provider; `true` publishes `clientId`. */
+  clientId?: string | true;
+  /**
+   * Published as `audience`: the audience to request tokens for; `true` publishes the one this server checks
+   * (`expectedAudience`'s first entry, else the server's address from `FRONTMCP_PUBLIC_URL` or an allowed host).
+   */
+  audience?: string | true;
 }
 
 export interface LocalAuthOptionsInterface {
