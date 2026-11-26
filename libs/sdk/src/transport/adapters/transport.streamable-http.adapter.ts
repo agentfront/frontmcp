@@ -157,6 +157,12 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Recrea
     }
   }
 
+  /** A destroy without a reason is the client's DELETE: closing the transport aborts the session's in-flight calls. */
+  override async destroy(reason?: string): Promise<void> {
+    if (reason === undefined) await this.transport.close().catch(() => undefined);
+    return super.destroy(reason);
+  }
+
   /**
    * Send an elicitation request to the client.
    *
