@@ -1,12 +1,13 @@
 ---
 name: result-handles-plugin
-description: Fold large tool answers into a preview, a shape and a handle, and let the model read slices with result_query
+description: Fold large tool answers (and, opted in, resource reads) into a preview, a shape and a handle, and let the model read, filter, search, sort and count them with result_query
 ---
 
 # Result Handles Plugin
 
-`@frontmcp/plugin-result-handles` keeps a tool answer that is too large to send whole on the server. The client gets
-`{ preview, shape, handle }` in its place, and the model reads the parts it needs with the `result_query` tool. A
+`@frontmcp/plugin-result-handles` keeps a tool answer that is too large to send whole on the server (and, with
+`resources` on, a resource read). The client gets `{ preview, shape, handle }` in its place, and the model reads the
+parts it needs with the `result_query` tool, filtered, searched, sorted or counted. A
 handle works only for the session and the caller it was issued to, until its TTL runs out. The store keeps the answer
 encrypted, under keys derived from the handle and its owner, so it holds nothing readable without the handle.
 
@@ -111,6 +112,31 @@ ResultHandlesPlugin.init({
 The policy is asked only for answers over the threshold. `answer` is the answer's `structuredContent`, or its text: a
 text that is a JSON object or array is parsed, so the policy (and `result_query`) gets the value, not the string.
 
+### Step 4: Fold resource reads too (optional)
+
+```typescript
+ResultHandlesPlugin.init({ resources: true }); // off by default
+ResultHandlesPlugin.init({ resources: (uri, answer, { bytes, fullName, request }) => uri.startsWith('reports://') });
+```
+
+A client's `resources/read` of one text content that is not HTML folds when its text (parsed when JSON) is over the
+threshold and the read has a session or a signed-in caller. The folded read has two contents: the JSON of
+`{ preview, shape, handle }` (`application/json`) and a `text/plain` note naming `result_query`. An agent's
+`read_resource` and `ui://` widgets are never folded. A resource handle is bound to the session and caller of the read.
+
+### Step 5: Keep handles in use, within a byte budget (optional)
+
+```typescript
+ResultHandlesPlugin.init({
+  ttlSeconds: 300,
+  slidingTtl: true, // each read starts the TTL again (default false)
+  maxStoredBytes: 64 * 1024 * 1024, // past it the least recently saved or read answers go first (no limit by default)
+});
+```
+
+`maxStoredBytes` counts the stored (encrypted) bytes of the answers one copy of the plugin folded in this process, and
+must be at least `thresholdBytes`. An answer larger than the whole budget is sent whole, with a warning.
+
 ## What the Model Sees
 
 ```json
@@ -146,8 +172,30 @@ list lengths and string lengths, and a list's first item.
 | `limit`  | List items (default 20) or characters (default 2000)                                                  |
 | `page`   | A page of `limit` items, from 1, in place of `offset`                                                 |
 | `fields` | Keep only these keys of the object, or of each object of the list                                     |
+| `where`  | `[{ field?, op, value? }]`: keep the list items that meet every condition                             |
+| `grep`   | `{ pattern, regex?, ignoreCase?, field? }`: keep the items with a match, or a string's matching lines |
+| `sort`   | `[{ field?, order? }]`: sort the items, `'asc'` by default                                            |
+| `count`  | `true`: answer how many items `where` and `grep` keep, in place of the items                          |
 
-It answers `{ path, value, total?, offset?, nextOffset? }`.
+It answers `{ path, value, total?, offset?, nextOffset? }`; with `where` or `grep`, `total` and `nextOffset` count the
+items kept, and `count: true` answers `{ path, value: <count> }`. The views run `where`, `grep`, `sort`, then the range,
+then `fields`. `op` is one of `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `in` (a list of up to 100 values), `contains` (a
+substring, or a list member), `startsWith`, `endsWith` and `exists`; `field` is a path in each item, or the item itself
+when left out. No code runs. A `grep` on a string answers its matching lines as `{ line, text }` items. A
+`regex: true` pattern runs on a matcher with no backtracking (ReDoS-safe: time grows with the text, and one query
+stops after 20,000,000 steps); it takes literals, `.`, classes, `\d \w \s \b`, `^ $`, groups, `|` and quantifiers up to
+`{100}`, and refuses backreferences and lookarounds with `INVALID_INPUT`.
+
+```json
+{
+  "handle": "3f1c2a4e-9b7d-4c1e-8f2a-1b2c3d4e5f60",
+  "path": "orders",
+  "where": [{ "field": "status", "op": "eq", "value": "open" }],
+  "sort": [{ "field": "total", "order": "desc" }],
+  "limit": 10,
+  "fields": ["id", "total"]
+}
+```
 
 ## Common Patterns
 
@@ -157,6 +205,7 @@ It answers `{ path, value, total?, offset?, nextOffset? }`.
 | Several instances           | `storage: { type: 'redis', redis: { url } }`           | `storage: { type: 'memory' }`             | A handle saved on one instance is "not found" on another                |
 | With an answer budget       | `output.budget` above `thresholdBytes`                 | A budget below the threshold              | The plugin folds first; a budget below the folded size cuts the preview |
 | Reading back in a tool      | `this.callTool('export_orders')` gets the whole answer | Expecting a handle from `this.callTool()` | Only a client's call folds                                              |
+| Finding rows in a big list  | `result_query` with `where`, `grep` or `count`         | Paging through every item                 | The view runs on the server; only the kept items reach the model        |
 
 ## Verification Checklist
 
@@ -165,6 +214,7 @@ It answers `{ path, value, total?, offset?, nextOffset? }`.
 - [ ] `thresholdBytes` is at least 1024 and `ttlSeconds` at least 1 (otherwise `init()` throws `ResultHandlesConfigurationError`)
 - [ ] Tools with an output schema have `foldedAnswerSchema` in a union
 - [ ] A shared `storage` when the server runs on several instances
+- [ ] `maxStoredBytes`, when set, is at least `thresholdBytes`; `resources` is `true`, `false` or a function
 
 ### Runtime
 
@@ -182,6 +232,8 @@ It answers `{ path, value, total?, offset?, nextOffset? }`.
 | `RESULT_HANDLE_NOT_FOUND`                 | Expired, another session or caller, another instance or a full memory store                                                                                                     | Call the tool again; use a shared store across instances                         |
 | `RESULT_SLICE_TOO_LARGE`                  | The slice is over `thresholdBytes`                                                                                                                                              | Read fewer items, fewer `fields`, or a deeper `path`                             |
 | `RESULT_PATH_NOT_FOUND`                   | The path is malformed or names nothing                                                                                                                                          | Follow the keys the `shape` lists                                                |
+| A large resource read is not folded       | `resources` is off (the default), the read has several contents or HTML, the policy declined it, or an agent read it                                                            | Set `resources: true` or a policy                                                |
+| `INVALID_INPUT` from a view               | `where`, `sort` or `count` on a value that is not a list, a condition with the wrong `value`, or a regex with a backreference or lookaround                                     | Point `path` at a list; use a literal `grep`                                     |
 
 ## Reference
 

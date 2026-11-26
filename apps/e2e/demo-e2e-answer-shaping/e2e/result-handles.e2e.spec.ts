@@ -96,6 +96,90 @@ test.describe('Result handles E2E', () => {
     expect(result.raw._meta?.['code']).toBe('RESULT_HANDLE_NOT_FOUND');
   });
 
+  test('result_query filters, sorts, searches and counts a folded answer', async ({ mcp }) => {
+    const folded = await mcp.tools.call('export-orders', { count: 500 });
+    const { handle } = folded.raw.structuredContent as unknown as FoldedAnswer;
+
+    const shipped = await mcp.tools.call('result_query', {
+      handle,
+      path: 'orders',
+      where: [
+        { field: 'status', op: 'eq', value: 'shipped' },
+        { field: 'id', op: 'lt', value: 20 },
+      ],
+      sort: [{ field: 'id', order: 'desc' }],
+      limit: 3,
+      fields: ['id'],
+    });
+    expect(shipped.raw.structuredContent).toEqual({
+      path: 'orders',
+      value: [{ id: 19 }, { id: 17 }, { id: 15 }],
+      total: 10,
+      offset: 0,
+      nextOffset: 3,
+    });
+
+    const counted = await mcp.tools.call('result_query', {
+      handle,
+      path: 'orders',
+      grep: { pattern: '^Order 4\\d note', regex: true, field: 'note' },
+      count: true,
+    });
+    expect(counted.raw.structuredContent).toEqual({ path: 'orders', value: 10 });
+  });
+
+  test('folds a large resource read on an app with resources on, and result_query reads it', async ({ mcp }) => {
+    const read = await mcp.resources.read('results://orders');
+    const [content, note] = read.raw.contents as Array<{ uri: string; mimeType?: string; text: string }>;
+    const folded = JSON.parse(content.text) as FoldedAnswer;
+
+    expect(content.mimeType).toBe('application/json');
+    expect(folded.shape.keys['orders']).toMatchObject({ type: 'array', length: 500 });
+    expect(note).toMatchObject({ uri: 'results://orders', mimeType: 'text/plain' });
+    expect(note.text).toContain(`handle "${folded.handle}"`);
+    expect(read.raw._meta?.['frontmcp/result-handle']).toMatchObject({
+      handle: folded.handle,
+      ttlSeconds: TTL_SECONDS,
+    });
+
+    const open = await mcp.tools.call('result_query', {
+      handle: folded.handle,
+      path: 'orders',
+      where: [{ field: 'status', op: 'eq', value: 'open' }],
+      count: true,
+    });
+    expect(open.raw.structuredContent).toEqual({ path: 'orders', value: 250 });
+  });
+
+  test('a resource handle answers another session "not found"', async ({ mcp, server }) => {
+    const read = await mcp.resources.read('results://orders');
+    const { handle } = JSON.parse((read.raw.contents as Array<{ text: string }>)[0].text) as FoldedAnswer;
+
+    const other = await server.createClient();
+    try {
+      const result = await other.tools.call('result_query', { handle, path: 'orders', limit: 1 });
+      expect(result.raw._meta?.['code']).toBe('RESULT_HANDLE_NOT_FOUND');
+      expect(JSON.stringify(result.raw)).not.toContain('Order 0 note');
+    } finally {
+      await other.disconnect();
+    }
+  });
+
+  test('with slidingTtl, each read keeps the handle for another TTL', async ({ mcp }) => {
+    const folded = await mcp.tools.call('export-archive', { count: 500 });
+    const { handle } = folded.raw.structuredContent as unknown as FoldedAnswer;
+    const wait = (seconds: number) => new Promise((resolve) => setTimeout(resolve, seconds * 1000));
+
+    for (let read = 0; read < 2; read++) {
+      await wait(TTL_SECONDS - 1.5);
+      const slice = await mcp.tools.call('result_query', { handle, path: 'total' });
+      expect(slice.raw.structuredContent).toEqual({ path: 'total', value: 500 });
+    }
+    await wait(TTL_SECONDS + 1);
+    const expired = await mcp.tools.call('result_query', { handle, path: 'total' });
+    expect(expired.raw._meta?.['code']).toBe('RESULT_HANDLE_NOT_FOUND');
+  });
+
   test('a tool whose output schema cannot admit the folded form is left to the budget', async ({ mcp }) => {
     const result = await mcp.tools.call('strict-orders', { count: 500 });
     expect(result).toBeSuccessful();

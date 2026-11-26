@@ -41,11 +41,24 @@ export function resultOwnerOf(context: {
   return { ...(session && { session }), ...(caller && { caller }) };
 }
 
+/** How long a store keeps its answers past their first TTL, and how many bytes of them. */
+export interface ResultHandleRetention {
+  /** Each read starts the answer's TTL again. */
+  slidingTtl?: boolean;
+  /** The most bytes of stored answers; past it the least recently saved or read go first. */
+  maxStoredBytes?: number;
+}
+
 /** Folded answers, encrypted under keys derived from their handle and owner, each readable by that owner until its TTL. */
 export class ResultHandleStore implements OnShutdown {
+  /** The size and expiry of each answer this store saved, least recently used first, while `maxStoredBytes` is set. */
+  private readonly kept = new Map<string, { bytes: number; expiresAt: number }>();
+  private keptBytes = 0;
+
   constructor(
     private readonly storage: NamespacedStorage,
     private readonly ttlSeconds: number,
+    private readonly retention: ResultHandleRetention = {},
   ) {}
 
   /** A new handle: a random UUID, which says nothing about the answer it will hold. */
@@ -56,19 +69,77 @@ export class ResultHandleStore implements OnShutdown {
   /** Keep `value` under `handle` for `owner` until the TTL, the store's or `ttlSeconds`, runs out. */
   async save(handle: string, value: unknown, owner: ResultOwner, ttlSeconds = this.ttlSeconds): Promise<void> {
     const encrypted = encryptAndSerialize(value, deriveFromHandle('key', handle, owner));
-    await this.storage.set(storageKeyOf(handle, owner), encrypted, { ttlSeconds });
+    const key = storageKeyOf(handle, owner);
+    await this.makeRoom(key, encrypted.length, ttlSeconds);
+    try {
+      await this.storage.set(key, encrypted, { ttlSeconds });
+    } catch (error) {
+      this.forget(key);
+      throw error;
+    }
   }
 
   /** The value under `handle`, or undefined when it expired, never existed, or `owner` is not its owner. */
   async read(handle: string, owner: ResultOwner): Promise<{ value: unknown } | undefined> {
     if (!HANDLE.test(handle)) return undefined;
-    const stored = await this.storage.get(storageKeyOf(handle, owner));
-    if (stored === null) return undefined;
+    const key = storageKeyOf(handle, owner);
+    const stored = await this.storage.get(key);
+    if (stored === null) {
+      this.forget(key);
+      return undefined;
+    }
+    let value: unknown;
     try {
-      return { value: deserializeAndDecrypt(stored, deriveFromHandle('key', handle, owner)) };
+      value = deserializeAndDecrypt(stored, deriveFromHandle('key', handle, owner));
     } catch {
       return undefined;
     }
+    await this.touch(key);
+    return { value };
+  }
+
+  /** Counts `bytes` under `key` and drops the least recently used answers past `maxStoredBytes`. */
+  private async makeRoom(key: string, bytes: number, ttlSeconds: number): Promise<void> {
+    const { maxStoredBytes } = this.retention;
+    if (maxStoredBytes === undefined) return;
+    if (bytes > maxStoredBytes) {
+      throw new Error(`it takes ${bytes} bytes stored, over maxStoredBytes (${maxStoredBytes})`);
+    }
+    this.forget(key);
+    this.kept.set(key, { bytes, expiresAt: Date.now() + ttlSeconds * 1000 });
+    this.keptBytes += bytes;
+    if (this.keptBytes <= maxStoredBytes) return;
+    const now = Date.now();
+    for (const [expired, { expiresAt }] of this.kept) if (expiresAt <= now) this.forget(expired);
+    const dropped: string[] = [];
+    for (const oldest of this.kept.keys()) {
+      if (this.keptBytes <= maxStoredBytes) break;
+      this.forget(oldest);
+      dropped.push(oldest);
+    }
+    if (dropped.length > 0) await this.storage.mdelete(dropped);
+  }
+
+  /** Marks the answer under `key` as just read: last to be dropped, and with `slidingTtl` its TTL started again. */
+  private async touch(key: string): Promise<void> {
+    const entry = this.kept.get(key);
+    if (entry) {
+      this.kept.delete(key);
+      this.kept.set(
+        key,
+        this.retention.slidingTtl ? { ...entry, expiresAt: Date.now() + this.ttlSeconds * 1000 } : entry,
+      );
+    }
+    if (!this.retention.slidingTtl) return;
+    // The answer was read; a TTL not renewed keeps its first expiry
+    await this.storage.expire(key, this.ttlSeconds).catch(() => false);
+  }
+
+  private forget(key: string): void {
+    const entry = this.kept.get(key);
+    if (!entry) return;
+    this.kept.delete(key);
+    this.keptBytes -= entry.bytes;
   }
 
   async onShutdown(): Promise<void> {

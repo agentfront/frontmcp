@@ -7,10 +7,11 @@ export {
   RESULT_HANDLE_META_KEY,
   type FoldContext,
   type FoldPolicy,
+  type ResourceFoldPolicy,
   type ResultHandlesPluginOptions,
   type ResultHandlesPluginOptionsInput,
 } from './result-handles.options';
-export { ResultHandleStore, resultOwnerOf, type ResultOwner } from './result-handle.store';
+export { ResultHandleStore, resultOwnerOf, type ResultHandleRetention, type ResultOwner } from './result-handle.store';
 export { createResultHandleStore, type ResultHandleStoreOptions } from './result-handle-store.factory';
 export { ResultHandlesConfigToken, ResultHandleStoreToken } from './result-handles.symbols';
 export {

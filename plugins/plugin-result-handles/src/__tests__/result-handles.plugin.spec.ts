@@ -7,6 +7,8 @@ import {
   LogLevel,
   LogTransport,
   LogTransportInterface,
+  Resource,
+  ResourceContext,
   tool,
   Tool,
   ToolContext,
@@ -14,6 +16,7 @@ import {
   type DirectClient,
   type FlowCtxOf,
   type LogRecord,
+  type ReadResourceResult,
 } from '@frontmcp/sdk';
 
 import { foldedAnswerSchema, type FoldedAnswer } from '../folded-answer';
@@ -467,6 +470,56 @@ describe('ResultHandlesPlugin', () => {
       expect(result._meta?.['code']).toBe('RESULT_HANDLE_NOT_FOUND');
     });
 
+    it('filters, searches, sorts and counts the stored answer', async () => {
+      const client = await open();
+      const handle = await foldedHandle(client);
+
+      const filtered = await call(client, 'result_query', {
+        handle,
+        path: 'rows',
+        where: [{ field: 'id', op: 'gte', value: 190 }],
+        sort: [{ field: 'id', order: 'desc' }],
+        limit: 3,
+        fields: ['id'],
+      });
+      expect(filtered.structuredContent).toEqual({
+        path: 'rows',
+        value: [{ id: 199 }, { id: 198 }, { id: 197 }],
+        total: 10,
+        offset: 0,
+        nextOffset: 3,
+      });
+
+      const counted = await call(client, 'result_query', {
+        handle,
+        path: 'rows',
+        grep: { pattern: '^Row 1\\d$', regex: true, field: 'title' },
+        count: true,
+      });
+      expect(counted.structuredContent).toEqual({ path: 'rows', value: 10 });
+    });
+
+    it('refuses a view it cannot run as invalid input, naming the problem', async () => {
+      const client = await open();
+      const handle = await foldedHandle(client);
+
+      const wrongValue = await call(client, 'result_query', {
+        handle,
+        path: 'rows',
+        where: [{ field: 'id', op: 'in', value: 3 }],
+      });
+      expect(wrongValue._meta?.['code']).toBe('INVALID_INPUT');
+      expect(textAt(wrongValue, 0)).toContain('where[0]: "in" takes a list of values');
+
+      const lookaround = await call(client, 'result_query', {
+        handle,
+        path: 'rows',
+        grep: { pattern: '(?=Row)', regex: true },
+      });
+      expect(lookaround._meta?.['code']).toBe('INVALID_INPUT');
+      expect(textAt(lookaround, 0)).toContain('a lookaround or a named group, which grep does not run');
+    });
+
     it('answers "not found" once the handle outlives its TTL', async () => {
       const client = await open();
       const handle = await foldedHandle(client);
@@ -506,6 +559,244 @@ describe('ResultHandlesPlugin', () => {
         const slice = await call(client, 'result_query', { handle, path: 'rows[150].id' });
         expect(slice.structuredContent).toEqual({ path: 'rows[150].id', value: 150 });
       }
+    });
+  });
+
+  describe('with slidingTtl', () => {
+    @Tool({ name: 'sliding_rows', inputSchema: { count: z.number() } })
+    class SlidingRowsTool extends ExportRowsTool {}
+
+    @App({
+      id: 'sliding',
+      name: 'Sliding',
+      tools: [SlidingRowsTool],
+      plugins: [
+        ResultHandlesPlugin.init({
+          thresholdBytes: 4096,
+          ttlSeconds: 60,
+          slidingTtl: true,
+          storage: { type: 'memory' },
+        }),
+      ],
+    })
+    class SlidingApp {}
+
+    it('says the TTL runs from the last read, and keeps a handle read within each TTL', async () => {
+      const client = await connect({ ...serverConfig, apps: [SlidingApp] });
+      clients.push(client);
+      const folded = await call(client, 'sliding_rows', { count: 200 });
+      const { handle } = folded.structuredContent as unknown as FoldedAnswer;
+      expect(textAt(folded, 1)).toMatch(/within 60 seconds of its last read\.$/);
+
+      const now = Date.now();
+      const clock = jest.spyOn(Date, 'now');
+      for (const seconds of [50, 100, 150]) {
+        clock.mockReturnValue(now + seconds * 1000);
+        expect((await call(client, 'result_query', { handle, path: 'total' })).structuredContent).toMatchObject({
+          value: 200,
+        });
+      }
+      clock.mockReturnValue(now + 211_000);
+      expect((await call(client, 'result_query', { handle, path: 'total' }))._meta?.['code']).toBe(
+        'RESULT_HANDLE_NOT_FOUND',
+      );
+    });
+  });
+
+  describe('resource reads', () => {
+    const rowsText = JSON.stringify({ rows: rows(100), total: 100 });
+
+    @Resource({ name: 'rows-log', uri: 'exports://rows', mimeType: 'application/json' })
+    class RowsResource extends ResourceContext {
+      async execute(uri: string) {
+        return { contents: [{ uri, mimeType: 'application/json', text: rowsText }] };
+      }
+    }
+
+    @Resource({ name: 'plain-log', uri: 'exports://plain', mimeType: 'text/plain' })
+    class PlainResource extends ResourceContext {
+      async execute(uri: string) {
+        const text = Array.from({ length: 300 }, (_, line) => `${line % 7 === 0 ? 'ERROR' : 'info'} line ${line}`);
+        return { contents: [{ uri, mimeType: 'text/plain', text: text.join('\n') }] };
+      }
+    }
+
+    @Resource({ name: 'skipped-log', uri: 'exports://skipped', mimeType: 'application/json' })
+    class SkippedResource extends RowsResource {}
+
+    @Resource({ name: 'page', uri: 'exports://page', mimeType: 'text/html' })
+    class PageResource extends ResourceContext {
+      async execute(uri: string) {
+        return { contents: [{ uri, mimeType: 'text/html', text: `<p>${'x'.repeat(10_000)}</p>` }] };
+      }
+    }
+
+    @Resource({ name: 'pair', uri: 'exports://pair', mimeType: 'application/json' })
+    class PairResource extends ResourceContext {
+      async execute(uri: string) {
+        return {
+          contents: [
+            { uri, mimeType: 'application/json', text: rowsText },
+            { uri, mimeType: 'application/json', text: rowsText },
+          ],
+        };
+      }
+    }
+
+    @Resource({ name: 'small', uri: 'exports://small', mimeType: 'application/json' })
+    class SmallResource extends ResourceContext {
+      async execute(uri: string) {
+        return { contents: [{ uri, mimeType: 'application/json', text: JSON.stringify({ rows: rows(2) }) }] };
+      }
+    }
+
+    const resources = [RowsResource, PlainResource, SkippedResource, PageResource, PairResource, SmallResource];
+    const resourcePolicy = jest.fn(
+      (uri: string, _answer: unknown, _context: FoldContext) => uri !== 'exports://skipped',
+    );
+    const storage = { type: 'memory' as const };
+
+    @App({
+      id: 'library',
+      name: 'Library',
+      resources,
+      plugins: [ResultHandlesPlugin.init({ thresholdBytes: 4096, storage, resources: resourcePolicy })],
+    })
+    class FoldingLibraryApp {}
+
+    @App({
+      id: 'library',
+      name: 'Library',
+      resources,
+      plugins: [ResultHandlesPlugin.init({ thresholdBytes: 4096, storage })],
+    })
+    class DefaultLibraryApp {}
+
+    async function openLibrary(app: object, session?: { id: string; user?: { sub: string } }) {
+      const client = await connect(
+        { ...serverConfig, apps: [app as typeof FoldingLibraryApp] },
+        session && { session },
+      );
+      clients.push(client);
+      return client;
+    }
+
+    async function read(client: DirectClient, uri: string) {
+      return (await client.readResource(uri)) as ReadResourceResult & {
+        contents: Array<{ uri: string; mimeType?: string; text: string }>;
+      };
+    }
+
+    afterEach(() => resourcePolicy.mockClear());
+
+    it('leaves resource reads whole unless resources is on', async () => {
+      const client = await openLibrary(DefaultLibraryApp);
+      const result = await read(client, 'exports://rows');
+
+      expect(result.contents).toEqual([{ uri: 'exports://rows', mimeType: 'application/json', text: rowsText }]);
+      expect(result._meta?.[RESULT_HANDLE_META_KEY]).toBeUndefined();
+    });
+
+    it('folds a large read into a preview, a shape and a handle, with a note naming result_query', async () => {
+      const client = await openLibrary(FoldingLibraryApp, { id: 'reader-session' });
+      const result = await read(client, 'exports://rows');
+      const [content, note] = result.contents;
+      const folded = JSON.parse(content.text) as FoldedAnswer;
+      const bytes = bytesOf({ rows: rows(100), total: 100 });
+
+      expect(content).toMatchObject({ uri: 'exports://rows', mimeType: 'application/json' });
+      expect(Object.keys(folded)).toEqual(['preview', 'shape', 'handle']);
+      expect((folded.preview as { rows: unknown[] }).rows).toHaveLength(5);
+      expect(folded.shape).toMatchObject({ type: 'object', keys: { rows: { type: 'array', length: 100 } } });
+      expect(note).toEqual({
+        uri: 'exports://rows',
+        mimeType: 'text/plain',
+        text:
+          `This answer is ${bytes} bytes, so it was folded: preview is its start and shape its structure. ` +
+          `Read the rest with result_query and handle "${folded.handle}" ` +
+          '(a path, then offset and limit or a page, and fields) within 600 seconds.',
+      });
+      expect(result._meta?.[RESULT_HANDLE_META_KEY]).toEqual({ handle: folded.handle, bytes, ttlSeconds: 600 });
+
+      const [uri, answer, context] = resourcePolicy.mock.calls[0];
+      expect(uri).toBe('exports://rows');
+      expect(answer).toEqual({ rows: rows(100), total: 100 });
+      expect(context).toMatchObject({ bytes, fullName: 'library:rows-log' });
+      expect(context.request.sessionId).toBe('reader-session');
+
+      const slice = await call(client, 'result_query', { handle: folded.handle, path: 'rows[42].id' });
+      expect(slice.structuredContent).toEqual({ path: 'rows[42].id', value: 42 });
+    });
+
+    it('folds a read of plain text, whose lines result_query greps', async () => {
+      const client = await openLibrary(FoldingLibraryApp);
+      const result = await read(client, 'exports://plain');
+      const { handle, shape } = JSON.parse(result.contents[0].text) as FoldedAnswer;
+      expect(shape.type).toBe('string');
+
+      const errors = await call(client, 'result_query', { handle, grep: { pattern: 'ERROR' }, limit: 2 });
+      expect(errors.structuredContent).toEqual({
+        path: '$',
+        value: [
+          { line: 1, text: 'ERROR line 0' },
+          { line: 8, text: 'ERROR line 7' },
+        ],
+        total: 43,
+        offset: 0,
+        nextOffset: 2,
+      });
+    });
+
+    it('binds a resource handle to the session and the caller it was read by', async () => {
+      const alice = await openLibrary(FoldingLibraryApp, { id: 'library-session', user: { sub: 'alice' } });
+      const mallory = await openLibrary(FoldingLibraryApp, { id: 'library-session', user: { sub: 'mallory' } });
+      const other = await openLibrary(FoldingLibraryApp, { id: 'other-session', user: { sub: 'alice' } });
+      const { handle } = JSON.parse((await read(alice, 'exports://rows')).contents[0].text) as FoldedAnswer;
+
+      expect((await call(alice, 'result_query', { handle, path: 'total' })).structuredContent).toMatchObject({
+        value: 100,
+      });
+      for (const reader of [mallory, other]) {
+        const result = await call(reader, 'result_query', { handle, path: 'total' });
+        expect(result._meta?.['code']).toBe('RESULT_HANDLE_NOT_FOUND');
+        expect(JSON.stringify(result)).not.toContain('Body of row');
+      }
+    });
+
+    it('leaves a read the policy declines, several contents, HTML and a small read whole', async () => {
+      const client = await openLibrary(FoldingLibraryApp);
+      expect((await read(client, 'exports://skipped')).contents[0].text).toBe(rowsText);
+      expect((await read(client, 'exports://pair')).contents).toHaveLength(2);
+      expect((await read(client, 'exports://page')).contents[0].mimeType).toBe('text/html');
+      const small = await read(client, 'exports://small');
+      expect(small._meta?.[RESULT_HANDLE_META_KEY]).toBeUndefined();
+      expect(resourcePolicy.mock.calls.map(([uri]) => uri)).toEqual(['exports://skipped']);
+    });
+
+    it("leaves an agent's read, and a read nobody could read back, whole", async () => {
+      const plugin = new ResultHandlesPlugin({ thresholdBytes: 1024, resources: true });
+      const respond = jest.fn();
+      const flowOf = (resourceContext: object, ctx: object) =>
+        ({
+          rawInput: { ctx },
+          state: {
+            resource: { fullName: 'library:rows-log' },
+            resourceContext,
+            output: { contents: [{ uri: 'exports://rows', text: rowsText }] },
+            isUIResource: false,
+          },
+          respond,
+        }) as unknown as FlowCtxOf<'resources:read-resource'>;
+      const signedIn = {
+        tryGetContext: () => ({ verifiedSessionId: 's-1' }),
+        auth: { isAnonymous: false, user: { sub: 'a' } },
+      };
+      const nobody = { tryGetContext: () => undefined, auth: { isAnonymous: true, user: { sub: 'anon:1' } } };
+
+      await plugin.foldResource(flowOf(signedIn, { agentPrivateCall: true }));
+      await plugin.foldResource(flowOf(signedIn, { internalCall: true }));
+      await plugin.foldResource(flowOf(nobody, {}));
+      expect(respond).not.toHaveBeenCalled();
     });
   });
 

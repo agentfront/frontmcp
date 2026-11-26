@@ -2550,7 +2550,7 @@
         },
         {
           "name": "result-handles-plugin",
-          "description": "Fold large tool answers into a preview, a shape and a handle, and let the model read slices with result_query",
+          "description": "Fold large tool answers (and, opted in, resource reads) into a preview, a shape and a handle, and let the model read, filter, search, sort and count them with result_query",
           "examples": []
         }
       ]

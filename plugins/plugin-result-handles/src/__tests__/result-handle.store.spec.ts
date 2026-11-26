@@ -9,6 +9,7 @@ const answer = { rows: [1, 2, 3] };
 describe('ResultHandleStore', () => {
   afterEach(() => {
     jest.useRealTimers();
+    jest.restoreAllMocks();
   });
 
   async function memoryStore(ttlSeconds = 60) {
@@ -117,6 +118,114 @@ describe('ResultHandleStore', () => {
     addFoldingStore(scope, store);
     expect([...foldingStoresOf(scope)]).toEqual([store]);
     expect([...foldingStoresOf({})]).toEqual([]);
+  });
+
+  describe('with slidingTtl', () => {
+    it('starts the TTL again on each read, and forgets an answer nobody read for a TTL', async () => {
+      jest.useFakeTimers({ now: new Date('2026-11-02T10:00:00Z') });
+      const root = createMemoryStorage({ enableSweeper: false });
+      await root.connect();
+      const store = new ResultHandleStore(root.namespace('result-handles'), 2, { slidingTtl: true });
+      const handle = await saved(store, alice);
+
+      jest.advanceTimersByTime(1500);
+      expect(await store.read(handle, alice)).toEqual({ value: answer });
+      jest.advanceTimersByTime(1500);
+      expect(await store.read(handle, alice)).toEqual({ value: answer });
+      jest.advanceTimersByTime(2500);
+      expect(await store.read(handle, alice)).toBeUndefined();
+    });
+
+    it("does not renew the TTL of another owner's lookup", async () => {
+      jest.useFakeTimers({ now: new Date('2026-11-02T10:00:00Z') });
+      const root = createMemoryStorage({ enableSweeper: false });
+      await root.connect();
+      const store = new ResultHandleStore(root.namespace('result-handles'), 2, { slidingTtl: true });
+      const handle = await saved(store, alice);
+
+      jest.advanceTimersByTime(1500);
+      expect(await store.read(handle, { session: 'session-2', caller: 'alice' })).toBeUndefined();
+      jest.advanceTimersByTime(1000);
+      expect(await store.read(handle, alice)).toBeUndefined();
+    });
+  });
+
+  describe('with maxStoredBytes', () => {
+    const big = (tag: string) => ({ tag, rows: 'x'.repeat(4000) });
+
+    async function storedBytesOf(value: unknown): Promise<number> {
+      const { root, store } = await rootStore();
+      await store.save(store.newHandle(), value, alice);
+      const [key] = await root.keys('*');
+      return ((await root.get(key)) ?? '').length;
+    }
+
+    async function budgetStore(answers: number, ttlSeconds = 60) {
+      const bytes = await storedBytesOf(big('a'));
+      const root = createMemoryStorage({ enableSweeper: false });
+      await root.connect();
+      const store = new ResultHandleStore(root.namespace('result-handles'), ttlSeconds, {
+        maxStoredBytes: Math.floor(bytes * (answers + 0.5)),
+      });
+      return { root, store };
+    }
+
+    async function keep(store: ResultHandleStore, tag: string): Promise<string> {
+      const handle = store.newHandle();
+      await store.save(handle, big(tag), alice);
+      return handle;
+    }
+
+    it('drops the least recently saved or read answers past the budget', async () => {
+      const { root, store } = await budgetStore(2);
+      const first = await keep(store, 'first');
+      const second = await keep(store, 'second');
+      expect(await store.read(first, alice)).toBeDefined();
+
+      const third = await keep(store, 'third');
+      expect(await root.keys('*')).toHaveLength(2);
+      expect(await store.read(second, alice)).toBeUndefined();
+      expect(await store.read(first, alice)).toEqual({ value: big('first') });
+      expect(await store.read(third, alice)).toEqual({ value: big('third') });
+    });
+
+    it('refuses an answer larger than the whole budget, keeping the others', async () => {
+      const { root, store } = await budgetStore(1);
+      const kept = await keep(store, 'kept');
+
+      await expect(store.save(store.newHandle(), { rows: 'x'.repeat(20_000) }, alice)).rejects.toThrow(
+        /^it takes \d+ bytes stored, over maxStoredBytes \(\d+\)$/,
+      );
+      expect(await root.keys('*')).toHaveLength(1);
+      expect(await store.read(kept, alice)).toEqual({ value: big('kept') });
+    });
+
+    it('does not count answers whose TTL ran out, though read since', async () => {
+      jest.useFakeTimers({ now: new Date('2026-11-02T10:00:00Z') });
+      const { store } = await budgetStore(2, 2);
+      const expiring = await keep(store, 'expiring');
+      jest.advanceTimersByTime(1000);
+      const live = await keep(store, 'live');
+      expect(await store.read(expiring, alice)).toBeDefined();
+      jest.advanceTimersByTime(1500);
+
+      const fresh = await keep(store, 'fresh');
+      expect(await store.read(live, alice)).toEqual({ value: big('live') });
+      expect(await store.read(fresh, alice)).toEqual({ value: big('fresh') });
+    });
+
+    it('does not count an answer the storage failed to keep, or one that left it', async () => {
+      const { root, store } = await budgetStore(2);
+      jest.spyOn(root.root, 'set').mockRejectedValueOnce(new Error('connection refused'));
+      await expect(keep(store, 'failed')).rejects.toThrow('connection refused');
+      const gone = await keep(store, 'gone');
+      const [key] = await root.keys('*');
+      await root.delete(key);
+      expect(await store.read(gone, alice)).toBeUndefined();
+
+      const kept = [await keep(store, 'kept-1'), await keep(store, 'kept-2')];
+      for (const handle of kept) expect(await store.read(handle, alice)).toBeDefined();
+    });
   });
 
   it('disconnects its storage at shutdown', async () => {
