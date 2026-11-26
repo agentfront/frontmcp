@@ -3,9 +3,13 @@
  *
  * Tests for the TransportService which manages transport sessions and their lifecycle.
  */
+import { z } from '@frontmcp/lazy-zod';
 import { sha256Hex } from '@frontmcp/utils';
 
 import type { TransportPersistenceConfigInput } from '../../common';
+import { askPersistentQuestion } from '../../elicitation/questions/ask-question';
+import { createQuestionStore } from '../../elicitation/questions/question-store.factory';
+import { QuestionPendingError } from '../../elicitation/questions/question.errors';
 import { loadSseTransport } from '../adapters/transport.sse.adapter';
 import { loadStreamableHttpTransport } from '../adapters/transport.streamable-http.adapter';
 import { TransportService } from '../transport.registry';
@@ -979,6 +983,49 @@ describe('TransportService', () => {
       expect(await sessionEnded?.()).toBe(false);
     });
 
+    it('hands an answer over only after its own read of the session, not one started before the DELETE', async () => {
+      await service.createTransporter('streamable-http', 'test-token', 'mine', mockResponse as never);
+      const { store: questions } = await createQuestionStore({
+        storage: { type: 'memory' },
+        encryption: { enabled: false },
+        coalesceMs: 0,
+      });
+      const subject = 'session:mine';
+      const ask = (sessionEnded?: () => Promise<boolean>) =>
+        askPersistentQuestion(
+          { store: questions, subject, sessionEnded },
+          'Deploy?',
+          z.object({ approve: z.boolean() }),
+          {
+            key: 'deploy',
+            ttlMs: 60_000,
+            waitMs: 20,
+          },
+        );
+      await expect(ask()).rejects.toThrow(QuestionPendingError);
+      const [question] = await questions.list(subject);
+      await questions.answer(subject, question.id, { status: 'accept', content: { approve: true } });
+
+      let answerReadBeforeDelete: (stored: boolean) => void = () => undefined;
+      mockRedisSessionStore.exists.mockImplementationOnce(
+        () => new Promise<boolean>((resolve) => (answerReadBeforeDelete = resolve)),
+      );
+      const requestBeforeDelete = service.getTransporter('streamable-http', 'test-token', 'mine');
+      mockRedisSessionStore.exists.mockResolvedValueOnce(false);
+      const sessionEndCheck = service.sessionEndCheck('mine') as () => Promise<boolean>;
+      const sessionEndedAfterDelete = () => {
+        const ended = sessionEndCheck();
+        answerReadBeforeDelete(true);
+        return ended;
+      };
+
+      await expect(ask(sessionEndedAfterDelete)).rejects.toThrow(QuestionPendingError);
+      await requestBeforeDelete;
+      expect(mockRedisSessionStore.exists).toHaveBeenCalledTimes(2);
+      await expect(ask()).resolves.toEqual({ status: 'accept', content: { approve: true } });
+      await questions.close();
+    });
+
     it('has no session-end check for a session it did not store, or in distributed mode', async () => {
       mockRedisSessionStore.set.mockRejectedValueOnce(new Error('Redis down'));
       await service.createTransporter('streamable-http', 'test-token', 'unstored', mockResponse as never);
@@ -1053,6 +1100,25 @@ describe('TransportService', () => {
       expect(await service.getTransporter('streamable-http', 'test-token', 'held')).toBeUndefined();
       expect(mockRedisSessionStore.exists).toHaveBeenCalledTimes(2);
       expect(transport.destroy).toHaveBeenCalledWith('the session was deleted');
+    });
+
+    it("sends no new handover read while the last one is unanswered, and reads again once it's answered", async () => {
+      service = new TransportService(mockScope as never, { redis: { host: 'localhost' }, sessionCheckTimeoutMs: 20 });
+      await service.ready;
+      await service.createTransporter('streamable-http', 'test-token', 'held', mockResponse as never);
+      const sessionEnded = service.sessionEndCheck('held') as () => Promise<boolean>;
+
+      let answer: (exists: boolean) => void = () => undefined;
+      mockRedisSessionStore.exists.mockImplementationOnce(() => new Promise<boolean>((resolve) => (answer = resolve)));
+      expect(await sessionEnded()).toBe(false);
+      expect(await sessionEnded()).toBe(false);
+      expect(mockRedisSessionStore.exists).toHaveBeenCalledTimes(1);
+
+      answer(true);
+      await new Promise((resolve) => setImmediate(resolve));
+      mockRedisSessionStore.exists.mockResolvedValueOnce(false);
+      expect(await sessionEnded()).toBe(true);
+      expect(mockRedisSessionStore.exists).toHaveBeenCalledTimes(2);
     });
 
     it('clears the timer when the store answers in time', async () => {
