@@ -1,6 +1,15 @@
 import 'reflect-metadata';
 
-import { App, LogLevel, Resource, ResourceContext, Tool, ToolContext, type FrontMcpConfigInput } from '../../../common';
+import {
+  App,
+  LogLevel,
+  Resource,
+  ResourceContext,
+  ResourceTemplate,
+  Tool,
+  ToolContext,
+  type FrontMcpConfigInput,
+} from '../../../common';
 import { connect } from '../../../direct/connect';
 import { InvalidResourceStoreError } from '../../../errors';
 import { MATERIALIZED_META_KEY, MaterializedResourceContext } from '../materialized-resource.context';
@@ -116,16 +125,153 @@ describe('a materialized resource', () => {
   });
 });
 
+describe('a materialized resource template', () => {
+  const tables = resourceStore({ coalesceMs: 0 }).family<{ rows: number }>('tables', { initial: { rows: 0 } });
+
+  @ResourceTemplate({ name: 'table', uriTemplate: 'tables://{table}/stats', from: tables })
+  class TableResource extends MaterializedResourceContext {}
+
+  @App({ id: 'tables', name: 'Tables', resources: [TableResource] })
+  class TablesApp {}
+
+  const tablesConfig = (): FrontMcpConfigInput => ({
+    info: { name: 'materialized-template', version: '1.0.0' },
+    apps: [TablesApp],
+    logging: { level: LogLevel.Off },
+  });
+
+  it("reads the key of the URI's parameters", async () => {
+    const client = await connect(tablesConfig());
+    try {
+      await tables.key({ table: 'users' }).set({ rows: 3 });
+
+      const users = await client.readResource('tables://users/stats');
+      const orders = await client.readResource('tables://orders/stats');
+
+      expect(users.contents).toEqual([
+        { uri: 'tables://users/stats', mimeType: 'application/json', text: '{"rows":3}' },
+      ]);
+      expect(users._meta?.[MATERIALIZED_META_KEY]).toEqual({ revision: 1, updatedAt: expect.any(String) });
+      expect(orders.contents[0]).toEqual(expect.objectContaining({ text: '{"rows":0}' }));
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('sends resources/updated for a subscribed URI only, and none once it unsubscribed', async () => {
+    const client = await connect(tablesConfig());
+    try {
+      const updated: string[] = [];
+      client.onResourceUpdated((uri) => updated.push(uri));
+      await client.subscribeResource('tables://users/stats');
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await tables.key({ table: 'orders' }).set({ rows: 1 });
+      await tables.key({ table: 'users' }).set({ rows: 4 });
+      await until(() => updated.length === 1);
+      await client.unsubscribeResource('tables://users/stats');
+      await tables.key({ table: 'users' }).set({ rows: 5 });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(updated).toEqual(['tables://users/stats']);
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('refuses a `from` that is not a key family', () => {
+    const key = resourceStore().key('one');
+    expect(() =>
+      ResourceTemplate({ name: 'wrong', uriTemplate: 'wrong://{id}', from: key as never })(
+        class extends MaterializedResourceContext {},
+      ),
+    ).toThrow('key family');
+  });
+});
+
+describe('a producer-backed resource', () => {
+  let runs = 0;
+  let open = 0;
+  const summary = resourceStore({ coalesceMs: 0 }).key('summary', {
+    produce: () => {
+      runs++;
+      return { open };
+    },
+    minIntervalMs: 0,
+  });
+
+  @Resource({ name: 'summary', uri: 'board://summary', from: summary })
+  class SummaryResource extends MaterializedResourceContext {}
+
+  @App({ id: 'summary', name: 'Summary', resources: [SummaryResource] })
+  class SummaryApp {}
+
+  it('runs its producer on a read, and on a dirty mark only while a session subscribes', async () => {
+    const client = await connect({
+      info: { name: 'materialized-producer', version: '1.0.0' },
+      apps: [SummaryApp],
+      logging: { level: LogLevel.Off },
+    });
+    try {
+      const updated: string[] = [];
+      client.onResourceUpdated((uri) => updated.push(uri));
+      summary.markDirty();
+      summary.markDirty();
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(runs).toBe(0);
+
+      const first = await client.readResource('board://summary');
+      expect(first.contents[0]).toEqual(expect.objectContaining({ text: '{"open":0}' }));
+      expect(runs).toBe(1);
+
+      await client.subscribeResource('board://summary');
+      open = 1;
+      summary.markDirty();
+      await until(() => updated.length === 1);
+      summary.markDirty();
+      await until(() => runs === 3);
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(updated).toEqual(['board://summary']);
+      expect((await summary.get()).revision).toBe(2);
+
+      await client.unsubscribeResource('board://summary');
+      open = 2;
+      summary.markDirty();
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(runs).toBe(3);
+    } finally {
+      await client.close();
+    }
+  });
+});
+
 describe('MaterializedResources', () => {
-  function scopeOf(entries: Array<{ uri?: string; isTemplate?: boolean; metadata: object; record: object }>) {
+  interface FakeEntry {
+    uri?: string;
+    isTemplate?: boolean;
+    metadata: object;
+    record: object;
+    matchUri?: (uri: string) => { matches: boolean; params: Record<string, string> };
+  }
+
+  function scopeOf(entries: FakeEntry[]) {
     const listeners: Array<(event: { kind: string }) => void> = [];
+    const watchListeners = new Set<() => void>();
+    const watched = new Set<string>();
     const notifyContentChanged = jest.fn();
+    const setWatched = (uri: string, on: boolean) => {
+      if (on) watched.add(uri);
+      else watched.delete(uri);
+      for (const listener of watchListeners) listener();
+    };
     return {
       notifyContentChanged,
-      register(entry: (typeof entries)[number]) {
+      register(entry: FakeEntry) {
         entries.push(entry);
         for (const listener of listeners) listener({ kind: 'added' });
       },
+      watch: (uri: string) => setWatched(uri, true),
+      unwatch: (uri: string) => setWatched(uri, false),
       scope: {
         logger: { warn: jest.fn() },
         resources: {
@@ -135,10 +281,65 @@ describe('MaterializedResources', () => {
             return () => listeners.splice(listeners.indexOf(listener), 1);
           },
           notifyContentChanged,
+          watchedUris: () => [...watched],
+          onWatchChange: (listener: () => void) => {
+            watchListeners.add(listener);
+            return () => watchListeners.delete(listener);
+          },
         },
       },
     };
   }
+
+  it('follows a producer-backed key only while its URI, or a prefix of it, has a subscriber', async () => {
+    const own = resourceStore({ coalesceMs: 0 });
+    let runs = 0;
+    const summary = own.key('summary', { produce: () => ++runs, minIntervalMs: 0 });
+    const fake = scopeOf([{ uri: 'n://summary', metadata: { name: 'summary', from: summary }, record: {} }]);
+    const watcher = new MaterializedResources(fake.scope as never);
+    await watcher.start();
+
+    summary.markDirty();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(runs).toBe(0);
+
+    fake.watch('n://');
+    await until(() => fake.notifyContentChanged.mock.calls.length === 1);
+    summary.markDirty();
+    await until(() => fake.notifyContentChanged.mock.calls.length === 2);
+    fake.unwatch('n://');
+    summary.markDirty();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    await watcher.stop();
+
+    expect(runs).toBe(2);
+    expect(fake.notifyContentChanged.mock.calls).toEqual([['n://summary'], ['n://summary']]);
+  });
+
+  it("follows each subscribed URI of a template, on the key of the URI's parameters", async () => {
+    const own = resourceStore({ coalesceMs: 0 });
+    const tables = own.family<number>('tables', { initial: 0 });
+    const matchUri = (uri: string) => {
+      const match = /^t:\/\/([^/]+)$/.exec(uri);
+      const params: Record<string, string> = match ? { table: match[1] } : {};
+      return { matches: match !== null, params };
+    };
+    const fake = scopeOf([{ isTemplate: true, metadata: { name: 'tables', from: tables }, record: {}, matchUri }]);
+    const watcher = new MaterializedResources(fake.scope as never);
+    await watcher.start();
+
+    fake.watch('t://users');
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await tables.key({ table: 'orders' }).set(1);
+    await tables.key({ table: 'users' }).set(1);
+    await until(() => fake.notifyContentChanged.mock.calls.length === 1);
+    fake.unwatch('t://users');
+    await tables.key({ table: 'users' }).set(2);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    await watcher.stop();
+
+    expect(fake.notifyContentChanged.mock.calls).toEqual([['t://users']]);
+  });
 
   it('announces a revision change of each followed key, follows a resource registered later, and stops', async () => {
     const own = resourceStore({ coalesceMs: 0 });

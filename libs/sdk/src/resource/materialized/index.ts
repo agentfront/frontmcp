@@ -3,6 +3,9 @@ export { MaterializedResources, type MaterializedResourcesScope } from './materi
 export {
   resourceStore,
   ResourceStore,
+  type ProducedFamilyOptions,
+  type ProducedKeyOptions,
+  type ProducedKeyThrottle,
   type ResourceKeyOptions,
   type ResourceStoreOptions,
   type ResourceStoreStorage,

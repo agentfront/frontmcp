@@ -4,7 +4,12 @@ import { entryAvailabilitySchema, isValidMcpUri, isValidMcpUriTemplate, type Ent
 
 import { type RawZodShape } from '../types';
 import { enabledOptionSchema, type EnabledOption } from './enabled.metadata';
-import { resourceKeySchema, type ResourceKey } from './materialized.metadata';
+import {
+  resourceKeyFamilySchema,
+  resourceKeySchema,
+  type ResourceKey,
+  type ResourceKeyFamily,
+} from './materialized.metadata';
 
 declare global {
   /**
@@ -229,6 +234,13 @@ interface ResourceTemplateMetadata extends ExtendFrontMcpResourceTemplateMetadat
    */
   enabled?: EnabledOption;
 
+  /**
+   * The resource store key family whose keys this template serves (`resourceStore().family(name)`): a URI reads the
+   * key of its parameters. A session subscribed to a URI gets `notifications/resources/updated` when that key's
+   * revision changes. Extend `MaterializedResourceContext` to serve the value as it is.
+   */
+  from?: ResourceKeyFamily;
+
   /** Read in a worker thread of the offload pool; see `ResourceMetadata.worker`. */
   worker?: ResourceWorkerOption;
 }
@@ -247,13 +259,10 @@ export const frontMcpResourceTemplateMetadataSchema = z
     _meta: z.record(z.string(), z.unknown()).optional(),
     availableWhen: entryAvailabilitySchema.optional(),
     enabled: enabledOptionSchema.optional(),
+    from: resourceKeyFamilySchema.optional(),
     worker: resourceWorkerOptionSchema.optional(),
   } satisfies RawZodShape<ResourceTemplateMetadata, ExtendFrontMcpResourceTemplateMetadata>)
-  .passthrough()
-  .refine((metadata) => !('from' in metadata), {
-    message: '`from` serves one stored value at a fixed `uri`: declare it on @Resource, not on @ResourceTemplate',
-    path: ['from'],
-  });
+  .passthrough();
 
 export {
   ResourceMetadata,

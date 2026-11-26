@@ -311,4 +311,202 @@ describe('resourceStore()', () => {
       expect(seen).toEqual([1]);
     });
   });
+
+  describe('a producer-backed key', () => {
+    const later = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    it('runs the producer on the first read, and again only after a dirty mark', async () => {
+      const produce = jest.fn(() => ({ open: 1 }));
+      const board = open().key('board', { produce });
+
+      await expect(board.get()).resolves.toMatchObject({ value: { open: 1 }, revision: 1 });
+      await expect(board.get()).resolves.toMatchObject({ revision: 1 });
+      expect(produce).toHaveBeenCalledTimes(1);
+      board.markDirty();
+      await board.get();
+
+      expect(produce).toHaveBeenCalledTimes(2);
+    });
+
+    it('keeps the revision when the output has the same JSON, and moves it when it changes', async () => {
+      let open_ = 1;
+      const board = open().key('board', { produce: () => ({ open: open_ }) });
+      await board.get();
+
+      board.markDirty();
+      await expect(board.get()).resolves.toMatchObject({ value: { open: 1 }, revision: 1 });
+      open_ = 2;
+      board.markDirty();
+      await expect(board.get()).resolves.toMatchObject({ value: { open: 2 }, revision: 2 });
+    });
+
+    it('does not run while no one subscribes, however often it is marked dirty', async () => {
+      const produce = jest.fn(() => 1);
+      const board = open().key('board', { produce, minIntervalMs: 0 });
+
+      for (let mark = 0; mark < 5; mark++) board.markDirty();
+      await later(30);
+
+      expect(produce).not.toHaveBeenCalled();
+    });
+
+    it('runs once for a burst of dirty marks while someone subscribes, and tells the listener of the new revision', async () => {
+      let open_ = 0;
+      const produce = jest.fn(() => ({ open: open_ }));
+      const board = open().key('board', { produce, minIntervalMs: 0 });
+      const revisions: number[] = [];
+      const unsubscribe = board.subscribe((snapshot) => revisions.push(snapshot.revision));
+      await until(() => revisions.length === 1);
+
+      open_ = 1;
+      for (let mark = 0; mark < 5; mark++) board.markDirty();
+      await until(() => revisions.length === 2);
+      await later(30);
+      unsubscribe();
+
+      expect(produce).toHaveBeenCalledTimes(2);
+      expect(revisions).toEqual([1, 2]);
+    });
+
+    it('waits minIntervalMs after a run before the next one', async () => {
+      const startedAt: number[] = [];
+      const board = open().key('board', { produce: () => startedAt.push(Date.now()), minIntervalMs: 120 });
+      const unsubscribe = board.subscribe(() => undefined);
+      await until(() => startedAt.length === 1);
+
+      board.markDirty();
+      await until(() => startedAt.length === 2);
+      unsubscribe();
+
+      expect(startedAt[1] - startedAt[0]).toBeGreaterThanOrEqual(100);
+    });
+
+    it('waits costFactor times as long as the last run took before the next one', async () => {
+      const ended: number[] = [];
+      const started: number[] = [];
+      const board = open().key('board', {
+        produce: async () => {
+          started.push(Date.now());
+          await later(60);
+          ended.push(Date.now());
+          return started.length;
+        },
+        minIntervalMs: 0,
+        costFactor: 2,
+      });
+      const unsubscribe = board.subscribe(() => undefined);
+      await until(() => ended.length === 1);
+
+      board.markDirty();
+      await until(() => started.length === 2);
+      unsubscribe();
+
+      expect(started[1] - ended[0]).toBeGreaterThanOrEqual(100);
+    });
+
+    it('stops running once the last subscriber leaves, and a read then runs it', async () => {
+      const produce = jest.fn(() => 1);
+      const board = open().key('board', { produce, minIntervalMs: 0 });
+      const unsubscribe = board.subscribe(() => undefined);
+      await until(() => produce.mock.calls.length === 1);
+      unsubscribe();
+
+      board.markDirty();
+      await later(30);
+      expect(produce).toHaveBeenCalledTimes(1);
+      await board.get();
+
+      expect(produce).toHaveBeenCalledTimes(2);
+    });
+
+    it('gives a read during an older run the output of a run after the latest dirty mark', async () => {
+      let release: () => void = () => undefined;
+      let runs = 0;
+      const board = open().key('board', {
+        produce: async () => {
+          runs++;
+          if (runs === 1) await new Promise<void>((resolve) => (release = resolve));
+          return runs;
+        },
+      });
+
+      const first = board.get();
+      await until(() => runs === 1);
+      board.markDirty();
+      const second = board.get();
+      release();
+
+      await expect(first).resolves.toMatchObject({ value: 1 });
+      await expect(second).resolves.toMatchObject({ value: 2 });
+    });
+
+    it('reports a failed run, fails the read, and does not rerun it until the next dirty mark', async () => {
+      const onError = jest.fn();
+      let fail = true;
+      const produce = jest.fn(() => {
+        if (fail) throw new Error('source offline');
+        return 1;
+      });
+      const board = open({ onError }).key('board', { produce, minIntervalMs: 0 });
+      const unsubscribe = board.subscribe(() => undefined);
+      await until(() => onError.mock.calls.length === 1);
+      await later(30);
+      expect(produce).toHaveBeenCalledTimes(1);
+      await expect(board.get()).rejects.toThrow('source offline');
+
+      fail = false;
+      board.markDirty();
+      await until(() => produce.mock.calls.length === 3);
+      unsubscribe();
+
+      expect(onError.mock.calls[0][0]).toEqual(new Error('source offline'));
+      await expect(board.get()).resolves.toMatchObject({ value: 1, revision: 1 });
+    });
+
+    it.each([
+      [{ produce: 'board' }, 'produce'],
+      [{ produce: () => 1, minIntervalMs: -1 }, 'minIntervalMs'],
+      [{ produce: () => 1, costFactor: Number.POSITIVE_INFINITY }, 'costFactor'],
+      [{ produce: () => 1, initial: 1 }, 'initial'],
+    ])('refuses %j where it is declared', (options, path) => {
+      expect(() => open().key('board', options as never)).toThrow(InvalidResourceStoreError);
+      expect(() => open().key('board', options as never)).toThrow(path);
+    });
+  });
+
+  describe('a key family', () => {
+    it('gives the same key for the same parameters in any order, and keeps the values of each apart', async () => {
+      const family = open().family<number>('cells', { initial: 0 });
+
+      expect(family.key({ row: '1', column: 'a' })).toBe(family.key({ column: 'a', row: '1' }));
+      await family.key({ row: '1', column: 'a' }).set(5);
+
+      await expect(family.key({ row: '1', column: 'a' }).get()).resolves.toMatchObject({ value: 5, revision: 1 });
+      await expect(family.key({ row: '2', column: 'a' }).get()).resolves.toEqual({ value: 0, revision: 0 });
+    });
+
+    it('runs a producer with the parameters of the key it computes', async () => {
+      const family = open().family('stats', { produce: ({ table }) => `${table} rows` });
+
+      await expect(family.key({ table: 'users' }).get()).resolves.toMatchObject({ value: 'users rows' });
+    });
+
+    it('forgets idle keys past 1000 parameter sets, but keeps one that someone subscribes to', async () => {
+      const family = open().family('stats', { produce: ({ id }) => id });
+      const subscribed = family.key({ id: 'kept' });
+      const unsubscribe = subscribed.subscribe(() => undefined);
+      const idle = family.key({ id: 'idle' });
+
+      for (let id = 0; id < 1_000; id++) family.key({ id: String(id) });
+
+      expect(family.key({ id: 'kept' })).toBe(subscribed);
+      expect(family.key({ id: 'idle' })).not.toBe(idle);
+      unsubscribe();
+    });
+
+    it('refuses a family without a name, and a producer that is not a function', () => {
+      expect(() => open().family('')).toThrow(InvalidResourceStoreError);
+      expect(() => open().family('stats', { produce: 1 } as never)).toThrow('produce');
+    });
+  });
 });

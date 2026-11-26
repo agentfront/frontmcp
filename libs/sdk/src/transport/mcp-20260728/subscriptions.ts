@@ -133,6 +133,10 @@ export function createSubscriptionStream(options: SubscriptionStreamOptions): {
   }
 
   const watchedUris = new Set(acknowledged.resourceSubscriptions ?? []);
+  for (const uri of watchedUris) scope.resources.watchUri(uri);
+  unsubscribes.push(() => {
+    for (const uri of watchedUris) scope.resources.unwatchUri(uri);
+  });
   if (acknowledged.resourcesListChanged || watchedUris.size > 0) {
     unsubscribes.push(
       scope.resources.subscribe({}, (event) => {
