@@ -29,7 +29,8 @@ export class UserContentListener {
   private hostValidation?: HostValidation;
 
   constructor(private readonly options: UserContentOptions) {
-    if (options.allowedHosts?.length) {
+    // A Unix socket checks no Host, as documented: `allowedHosts` applies to a port only.
+    if (options.allowedHosts?.length && !options.socketPath) {
       this.hostValidation = createHostValidationMiddleware({ enabled: true, allowedHosts: options.allowedHosts });
     }
   }

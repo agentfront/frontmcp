@@ -338,6 +338,17 @@ describe('UserContentListener', () => {
       expect(res.status).toBe(200);
       expect(res.body).toBe('<p>frame</p>');
     });
+
+    posixIt('checks no Host even when allowedHosts is set, which applies to a port only', async () => {
+      const socketPath = path.join(directory, 'content.sock');
+      listener = new UserContentListener({ socketPath, root, allowedHosts: ['content.example.com'] });
+      await listener.start(65_000);
+
+      const res = await request({ socketPath }, { path: '/frame.html', headers: { host: 'localhost' } });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toBe('<p>frame</p>');
+    });
   });
 
   describe('stop', () => {
