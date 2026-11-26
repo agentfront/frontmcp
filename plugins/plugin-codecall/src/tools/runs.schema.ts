@@ -1,15 +1,16 @@
 import { z } from '@frontmcp/lazy-zod';
 
-import { pausedRunSchema } from './execute.schema';
+import { looseObjectSchema, pausedRunSchema } from './execute.schema';
 
-const runIdSchema = z.string().uuid().describe('The runId of a codecall:execute or codecall:resume result');
+const runIdSchema = z.string().length(36).describe('The runId of a codecall:execute result');
 
-export const resumeToolDescription = `Resume a run that paused before a call that did not run.
+export const resumeToolDescription = `Resume a run whose codecall:execute result has "paused": it stopped before a call that did not run.
+The calls before it get their recorded results without running again; the paused call runs now, then the rest of the script.
+Fix the cause first: a person approves it, or send corrected "arguments" for that call only.
+The answer is a codecall:execute result, which may pause again. A run resumes once; after "expiresAt" it is not found.`;
 
-A codecall:execute result with "paused" stopped before that call (it needed approval, or its input was refused) and kept everything before it.
-Resume runs the same script again: the calls before the paused one get their recorded results without running again, and the paused call runs now, then the rest of the script.
-Fix the cause first (a person approves it, or send corrected "arguments" for that call only). Recorded results and the script's variables never change.
-The answer is a codecall:execute result: it may pause again at a later call. Resume a run once; after "expiresAt" it is not found.`;
+/** A codecall:execute result, listed loosely: the description says so, and execute's outputSchema lists it. */
+export const resumeToolOutputSchema = z.looseObject({ status: z.string() });
 
 export const resumeToolInputSchema = {
   runId: runIdSchema,
@@ -39,7 +40,9 @@ export const runStatusOutputSchema = z.object({
   endedAt: z.string(),
   /** The calls its journal holds. */
   calls: z.number(),
-  paused: pausedRunSchema.optional(),
+  paused: looseObjectSchema.optional(),
 });
 
-export type RunStatusOutput = z.infer<typeof runStatusOutputSchema>;
+export type RunStatusOutput = Omit<z.infer<typeof runStatusOutputSchema>, 'paused'> & {
+  paused?: z.infer<typeof pausedRunSchema>;
+};
