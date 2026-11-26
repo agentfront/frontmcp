@@ -258,6 +258,31 @@ describe('FrontMcpServerInstance', () => {
     });
   });
 
+  describe('http.userContent with a hostFactory host whose stop() throws at once (#1364)', () => {
+    it('still stops the content listener, then reports the host failure', async () => {
+      const failure = new Error('host stop failed');
+      const host = {
+        prepare: jest.fn(),
+        registerRoute: jest.fn(),
+        start: jest.fn(),
+        stop: jest.fn(() => {
+          throw failure;
+        }),
+        getHandler: jest.fn(),
+      };
+      const instance = new FrontMcpServerInstance({
+        port: 3001,
+        entryPath: '',
+        hostFactory: host,
+        userContent: { port: 3002, root: '/srv/content' },
+      });
+      await instance.start();
+
+      await expect(instance.stop()).rejects.toBe(failure);
+      expect(events).toContain('userContent:stop');
+    });
+  });
+
   describe('hostFactory takes precedence over cors', () => {
     it('should use hostFactory function when provided', () => {
       const mockHost = {
