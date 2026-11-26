@@ -375,3 +375,35 @@ describe('getNativeTokens without a refresh token', () => {
     expect(idp.tokenRequests).toHaveLength(0);
   });
 });
+
+describe('the default store key', () => {
+  it('keeps the tokens of two audiences apart, for sign-in, lookup and sign-out', async () => {
+    fakeIdp();
+    const kept = testStore();
+    const base = { issuer: ISSUER, clientId: 'notes-cli', store: kept.store, openBrowser: () => undefined };
+    const forNotes = { ...base, audience: 'notes-api' };
+    const forTasks = { ...base, audience: 'tasks-api' };
+
+    const notes = await signInNative(forNotes);
+    const tasks = await signInNative(forTasks);
+
+    expect(await getNativeTokens(forNotes)).toEqual(notes);
+    expect(await getNativeTokens(forTasks)).toEqual(tasks);
+    await signOutNative(forNotes);
+    expect(await getNativeTokens(forNotes)).toBeUndefined();
+    expect(await getNativeTokens(forTasks)).toEqual(tasks);
+  });
+
+  it('is unchanged without an audience, and an explicit storeKey still wins', async () => {
+    fakeIdp();
+    const kept = testStore();
+    const base = { issuer: ISSUER, clientId: 'notes-cli', store: kept.store, openBrowser: () => undefined };
+
+    const plain = await signInNative(base);
+    const named = await signInNative({ ...base, audience: 'notes-api', storeKey: 'mine' });
+
+    expect(kept.entries.get(KEY)).toEqual(plain);
+    expect(kept.entries.get('mine')).toEqual(named);
+    expect(kept.entries.get(`${KEY} audience=notes-api`)).toBeUndefined();
+  });
+});

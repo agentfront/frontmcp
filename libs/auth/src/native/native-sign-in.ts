@@ -22,7 +22,7 @@ export interface NativeSignInOptions {
   audience?: string;
   /** Where the tokens are kept. @default an in-memory store shared by the process */
   store?: NativeTokenStore;
-  /** The key the tokens are kept under. @default the issuer, client ID and resources */
+  /** The key the tokens are kept under. @default the issuer, client ID, resources and audience */
   storeKey?: string;
   /**
    * The loopback port (0 to 65535, where 0 is any free port), or an inclusive range of ports from 1 to 65535 to take
@@ -37,9 +37,10 @@ export interface NativeSignInOptions {
   timeoutMs?: number;
 }
 
+/** What finds the kept tokens and refreshes them: the sign-in's options, `audience` included, since it is in the key. */
 export type NativeTokenOptions = Pick<
   NativeSignInOptions,
-  'issuer' | 'clientId' | 'clientSecret' | 'resource' | 'store' | 'storeKey'
+  'issuer' | 'clientId' | 'clientSecret' | 'resource' | 'audience' | 'store' | 'storeKey'
 >;
 
 const defaultStore = memoryTokenStore();
@@ -290,6 +291,9 @@ function storeOf(options: Pick<NativeSignInOptions, 'store'>): NativeTokenStore 
   return options.store ?? defaultStore;
 }
 
+/** A sign-in for another audience gets other tokens, so the audience is part of the key; without one, it is left out. */
 function storeKeyOf(options: NativeTokenOptions): string {
-  return options.storeKey ?? [normalizeIssuer(options.issuer), options.clientId, ...resourcesOf(options)].join(' ');
+  if (options.storeKey) return options.storeKey;
+  const audience = options.audience ? [`audience=${options.audience}`] : [];
+  return [normalizeIssuer(options.issuer), options.clientId, ...resourcesOf(options), ...audience].join(' ');
 }
