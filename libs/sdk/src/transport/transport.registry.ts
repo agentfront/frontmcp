@@ -640,8 +640,9 @@ export class TransportService {
   sessionEndCheck(sessionId: string): (() => Promise<boolean>) | undefined {
     const store = this.sessionStore;
     if (this.distributed || !store || !this.storedLocalSessions.has(sessionId)) return undefined;
+    // Its own read: a pending one may have started before the DELETE.
     return () =>
-      this.withSessionCheckTimeout(`exists:${sessionId}`, () => store.exists(sessionId)).then(
+      this.raceSessionCheckTimeout(store.exists(sessionId)).then(
         (stored) => !stored,
         () => false,
       );
@@ -662,6 +663,10 @@ export class TransportService {
       read = issueRead().finally(() => this.pendingSessionChecks.delete(key));
       this.pendingSessionChecks.set(key, read);
     }
+    return this.raceSessionCheckTimeout(read);
+  }
+
+  private raceSessionCheckTimeout<T>(read: Promise<T>): Promise<T> {
     const timeoutMs = this.sessionCheckTimeoutMs;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timedOut = new Promise<never>((_resolve, reject) => {
