@@ -12,10 +12,15 @@ import { CodeCallRunStoreToken } from '../runs/run-record.types';
 import { checkCodeCallToolAccess, isBlockedSelfReference } from '../security';
 import { toolsWithheldByAuthorities } from '../security/codecall-discovery-authorities';
 import EnclaveService from '../services/enclave.service';
-import { executeToolOutputSchema, type CodeCallExecuteResult } from './execute.schema';
+import type { CodeCallExecuteResult } from './execute.schema';
 import { CodeCallScriptTool } from './execute.tool';
 import { claimPausedRun, readPausedRun, runNeedsReplayedCallsError, runNotFoundError } from './paused-runs';
-import { resumeToolDescription, resumeToolInputSchema, type ResumeToolInput } from './runs.schema';
+import {
+  resumeToolDescription,
+  resumeToolInputSchema,
+  resumeToolOutputSchema,
+  type ResumeToolInput,
+} from './runs.schema';
 
 /**
  * Resumes a paused run, once: it runs the run's script again, answers the calls before the paused one from the run's
@@ -28,7 +33,7 @@ import { resumeToolDescription, resumeToolInputSchema, type ResumeToolInput } fr
   codecall: { enabledInCodeCall: false, visibleInListTools: true },
   description: resumeToolDescription,
   inputSchema: resumeToolInputSchema,
-  outputSchema: executeToolOutputSchema,
+  outputSchema: resumeToolOutputSchema,
 })
 export default class ResumeTool extends CodeCallScriptTool {
   async execute({ runId, arguments: sentArguments }: ResumeToolInput): Promise<CodeCallExecuteResult> {

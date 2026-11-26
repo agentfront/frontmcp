@@ -38,31 +38,26 @@ const REVIEW_LINE =
 /** How a script keeps values for the caller's later scripts, for `keep.ttlSeconds`. */
 function keepLineOf(ttlSeconds: number): string {
   return (
-    `\nKEEP: await keep(name, value) keeps a value for your later scripts for ${ttlSeconds}s; ` +
-    'await recall(name) returns it, or undefined when nothing is kept under that name (expired, or never kept). ' +
-    'The result lists the names kept, never their values.'
+    `\nKEEP: await keep(name, value) keeps a value for your later scripts (${ttlSeconds}s); ` +
+    'await recall(name) returns it, or undefined. The result lists the names kept, never their values.'
   );
 }
 
 const BUDGET_LINE =
-  '\nBUDGETS: each caller has limits per time window, checked before each call; the calls before a stopped one ' +
-  'already ran, and a new script must not repeat the ones with effects. budget-exceeded: a budget is used up until ' +
-  'its window resets (the finding says when); with needs_approval a person may approve that one call, then send the ' +
-  'same script again; with denied, after the reset send the stopped call and the ones after it in a new script, ' +
-  'also when the reason says a person refused it. approval-after-effects (needs_changes): a tool with effects ' +
-  'already ran in this script, so send the stopped call in a script of its own. budget-unavailable: the budget store ' +
-  'failed, and a reset does not fix it; its finding names what already ran, and once the store answers you send ' +
-  'only the calls that did not run, in a new script. A call stopped as it starts fails with RATE_LIMITED and the ' +
-  "same advice. Other findings are the review's.";
+  '\nBUDGETS: per-caller limits per time window, checked before each call; the calls before a stopped one already ' +
+  'ran. budget-exceeded: used up until the window resets (the finding says when); with needs_approval a person may ' +
+  'approve that one call, then send the same script again; with denied, after the reset send the stopped call and the ' +
+  'ones after it in a new script. approval-after-effects (needs_changes): a tool with effects already ran in this ' +
+  'script; send the stopped call and the ones after it in a script of their own. budget-unavailable: the budget store ' +
+  'failed; once it answers, send only the calls that did not run, in a new script. A call stopped as it starts fails ' +
+  'with RATE_LIMITED and the same advice.';
 
-const BUDGET_PAUSED_LINE =
-  ' A budget stop whose result has "paused" needs none of that: once a person approves, the window resets or the ' +
-  'store answers, codecall:resume the run.';
+const BUDGET_PAUSED_LINE = ' With "paused", codecall:resume the run instead, once approved, reset or answered.';
 
 const PAUSED_LINE =
-  '\nPAUSED: a result with "paused" (any status) stopped before that call, which did not run; the calls before it ran once. ' +
-  'Fix the cause (a person approves, or correct its arguments), then codecall:resume { runId, arguments? }: ' +
-  'the earlier calls are not run again. Do not send the script again. codecall:cancel drops the run.';
+  '\nPAUSED: a result with "paused" stopped before that call, which did not run; the calls before it ran once. ' +
+  'Fix the cause (approval, or corrected arguments), then codecall:resume { runId, arguments? } instead of sending ' +
+  'the script again; codecall:cancel drops the run.';
 
 /**
  * The `codecall:execute` description for the server's resolved `vm` options, whether its `review` is on, how long
@@ -287,20 +282,34 @@ export const codeCallReviewFailedResultSchema = z.object({
   ...runFields,
 });
 
+/** An object whose keys the description and the README give: listed loosely, so tools/list stays small. */
+export const looseObjectSchema = z.looseObject({});
+
+const listedRunFields = {
+  runId: z.string().optional(),
+  paused: looseObjectSchema.optional(),
+  trace: z.array(z.string()).optional(),
+  kept: z.array(z.string()).optional(),
+};
+
 /**
- * Discriminated union for the whole result
+ * The result as `tools/list` lists it: one variant for `ok`, one for the errors and one for the review's and the
+ * budgets' decisions, with their nested objects loose. The variant schemas above give each result exactly.
  */
-export const executeToolOutputSchema = z.discriminatedUnion('status', [
-  codeCallOkResultSchema,
-  codeCallSyntaxErrorResultSchema,
-  codeCallIllegalAccessResultSchema,
-  codeCallRuntimeErrorResultSchema,
-  codeCallToolErrorResultSchema,
-  codeCallTimeoutResultSchema,
-  codeCallNeedsChangesResultSchema,
-  codeCallNeedsApprovalResultSchema,
-  codeCallDeniedResultSchema,
-  codeCallReviewFailedResultSchema,
+export const executeToolOutputSchema = z.union([
+  z.object({ status: z.literal('ok'), result: z.unknown(), logs: z.array(z.string()).optional(), ...listedRunFields }),
+  z.object({
+    status: z.enum(['syntax_error', 'illegal_access', 'runtime_error', 'tool_error', 'timeout', 'review_failed']),
+    error: z.looseObject({ message: z.string() }),
+    ...listedRunFields,
+  }),
+  z.object({
+    status: z.enum(['needs_changes', 'needs_approval', 'denied']),
+    reason: z.string().optional(),
+    findings: z.array(looseObjectSchema).optional(),
+    approval: looseObjectSchema.optional(),
+    ...listedRunFields,
+  }),
 ]);
 
 /**
