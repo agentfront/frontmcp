@@ -964,6 +964,34 @@ describe('TransportService', () => {
       expect(await service.getTransporter('streamable-http', 'test-token', 'b')).toBe(created);
       expect(mockRedisSessionStore.exists).toHaveBeenCalledTimes(1);
     });
+
+    it('tells the calls of a session another instance deleted, even after it dropped it here (#1446)', async () => {
+      await service.createTransporter('streamable-http', 'test-token', 'mine', mockResponse as never);
+      const sessionEnded = service.sessionEndCheck('mine');
+
+      mockRedisSessionStore.exists.mockResolvedValueOnce(true);
+      expect(await sessionEnded?.()).toBe(false);
+      mockRedisSessionStore.exists.mockResolvedValueOnce(false);
+      expect(await service.getTransporter('streamable-http', 'test-token', 'mine')).toBeUndefined();
+      mockRedisSessionStore.exists.mockResolvedValueOnce(false);
+      expect(await sessionEnded?.()).toBe(true);
+      mockRedisSessionStore.exists.mockRejectedValueOnce(new Error('Redis down'));
+      expect(await sessionEnded?.()).toBe(false);
+    });
+
+    it('has no session-end check for a session it did not store, or in distributed mode', async () => {
+      mockRedisSessionStore.set.mockRejectedValueOnce(new Error('Redis down'));
+      await service.createTransporter('streamable-http', 'test-token', 'unstored', mockResponse as never);
+      expect(service.sessionEndCheck('unstored')).toBeUndefined();
+      expect(service.sessionEndCheck('unknown')).toBeUndefined();
+
+      const bus = { advertise: jest.fn().mockResolvedValue(undefined), revoke: jest.fn().mockResolvedValue(undefined) };
+      const distributed = new TransportService(mockScope as never, { redis: { host: 'localhost' } }, bus as never);
+      await distributed.ready;
+      await distributed.createTransporter('streamable-http', 'test-token', 'owned', mockResponse as never);
+      expect(distributed.sessionEndCheck('owned')).toBeUndefined();
+      await distributed.destroy();
+    });
   });
 
   // ============================================

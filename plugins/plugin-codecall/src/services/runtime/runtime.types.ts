@@ -150,6 +150,8 @@ export interface CodeCallScriptRuntime {
   createRunner(spec: CodeCallScriptRunSpec): Promise<CodeCallScriptRunner>;
   /** Whether its Enclave judges replayed calls by their recorded times (`replayedCalls`); false when it cannot load. */
   replaysCallTimes?(): Promise<boolean>;
+  /** Start loading its Enclave entry point in the background where it can run, without waiting for it. */
+  preload?(): void;
 }
 
 /** The options of one run: the review hooks' context, and the sidecar entries the run starts with. */
