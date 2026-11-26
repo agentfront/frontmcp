@@ -14,6 +14,7 @@ import {
   type NativeTokenSet,
   type NativeTokenStore,
 } from '..';
+import { listenForRedirect } from '../loopback-redirect';
 
 // The browser half is the loopback listener's own spec: here the callback comes back at once with a code.
 jest.mock('../loopback-redirect', () => ({
@@ -406,4 +407,53 @@ describe('the default store key', () => {
     expect(kept.entries.get('mine')).toEqual(named);
     expect(kept.entries.get(`${KEY} audience=notes-api`)).toBeUndefined();
   });
+});
+
+describe('signInNative with a launcher that never settles', () => {
+  const never = () => new Promise<void>(() => undefined);
+
+  it('ends with the callback timeout', async () => {
+    fakeIdp();
+    const timedOut = new Promise<string>((_resolve, reject) =>
+      setTimeout(() => reject(new NativeSignInError('timeout', 'No sign-in came back within 0s')), 20),
+    );
+    timedOut.catch(() => undefined);
+    jest.mocked(listenForRedirect).mockResolvedValueOnce({
+      redirectUri: 'http://127.0.0.1:5555/callback',
+      code: timedOut,
+      close: jest.fn(),
+    });
+
+    const error = await rejection(signInNative({ issuer: ISSUER, clientId: 'notes-cli', openBrowser: never }));
+
+    expect(error.code).toBe('timeout');
+  }, 2_000);
+
+  it('signs in once the callback comes back', async () => {
+    fakeIdp();
+    const store = memoryTokenStore();
+
+    const tokens = await signInNative({ issuer: ISSUER, clientId: 'notes-cli', store, openBrowser: never });
+
+    expect(tokens.accessToken).toBe('access-1');
+  }, 2_000);
+
+  it('reports a launcher that fails before the callback comes back', async () => {
+    fakeIdp();
+    jest.mocked(listenForRedirect).mockResolvedValueOnce({
+      redirectUri: 'http://127.0.0.1:5555/callback',
+      code: new Promise<string>(() => undefined),
+      close: jest.fn(),
+    });
+
+    await expect(
+      signInNative({
+        issuer: ISSUER,
+        clientId: 'notes-cli',
+        openBrowser: async () => {
+          throw new Error('no browser');
+        },
+      }),
+    ).rejects.toThrow('no browser');
+  }, 2_000);
 });

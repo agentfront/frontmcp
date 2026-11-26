@@ -32,24 +32,26 @@ async function rejection(attempt: Promise<unknown>): Promise<NativeSignInError> 
 describe('signInNative', () => {
   let as: TestAuthorizationServer;
   let store: NativeTokenStore;
-  let pages: Response[];
+  let browser: Promise<Response>[];
 
+  // Sign-in ends once the callback comes back, which can be before the browser has the page: wait for it to read it.
   const options = (overrides: Partial<NativeSignInOptions> = {}): NativeSignInOptions => ({
     issuer: as.issuer,
     clientId: 'notes-cli',
     scopes: ['openid', 'notes:read'],
     resource: 'https://notes.example.com/mcp',
     store,
-    openBrowser: async (url) => void pages.push(await followRedirect(url)),
+    openBrowser: async (url) => void (await browser[browser.push(followRedirect(url)) - 1]),
     ...overrides,
   });
+  const pages = () => Promise.all(browser);
 
   const requestsTo = (path: string) => as.requests.filter((request) => request.path === path);
 
   beforeEach(async () => {
     as = await startTestAuthorizationServer();
     store = memoryTokenStore();
-    pages = [];
+    browser = [];
   });
 
   afterEach(async () => {
@@ -70,8 +72,9 @@ describe('signInNative', () => {
       resource: ['https://notes.example.com/mcp'],
     });
     expect(tokens.expiresAt).toBeGreaterThan(Date.now() + 3_500_000);
-    expect(pages[0].status).toBe(200);
-    expect(await pages[0].text()).toContain('Signed in');
+    const [page] = await pages();
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain('Signed in');
 
     const [authorize] = requestsTo('/authorize');
     expect(authorize.params.get('code_challenge_method')).toBe('S256');
@@ -98,7 +101,7 @@ describe('signInNative', () => {
     as.redirectExtras = { state: 'forged' };
 
     expect((await rejection(signInNative(options()))).code).toBe('state_mismatch');
-    expect(pages[0].status).toBe(400);
+    expect((await pages())[0].status).toBe(400);
     expect(requestsTo('/token')).toHaveLength(0);
   });
 

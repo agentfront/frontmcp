@@ -31,7 +31,10 @@ export interface NativeSignInOptions {
   redirectPort?: number | readonly [number, number];
   /** @default '/callback' */
   redirectPath?: string;
-  /** Shows the user the authorization URL. @default {@link openSystemBrowser} */
+  /**
+   * Shows the user the authorization URL. The callback is awaited meanwhile, so one that never settles still ends at
+   * `timeoutMs`, and one that fails before the callback comes back fails the sign-in. @default {@link openSystemBrowser}
+   */
   openBrowser?: (url: string) => void | Promise<void>;
   /** How long to wait for the browser to come back, in milliseconds. @default 120000 */
   timeoutMs?: number;
@@ -118,8 +121,11 @@ export async function signInNative(options: NativeSignInOptions): Promise<Native
     for (const resource of resources) query.append('resource', resource);
     if (options.audience) query.set('audience', options.audience);
 
-    await (options.openBrowser ?? openSystemBrowser)(authorizationUrl.toString());
-    const code = await redirect.code;
+    // The callback is awaited while the launcher runs: a launcher that never settles cannot outlast the callback
+    // timeout, one that fails first ends the sign-in, and a callback that comes back first is taken.
+    const open = options.openBrowser ?? openSystemBrowser;
+    const launched = Promise.resolve().then(() => open(authorizationUrl.toString()));
+    const code = await Promise.race([redirect.code, launched.then(() => redirect.code)]);
 
     const tokens = await requestTokens(options, metadata.issuer, metadata.token_endpoint, {
       grant_type: 'authorization_code',
