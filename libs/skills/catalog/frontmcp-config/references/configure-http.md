@@ -155,8 +155,11 @@ origin also gets `403` for the server card, which otherwise answers any origin.
 While `Origin` is checked, a page that posts a `<form>` to the server must not use
 `Referrer-Policy: no-referrer` (as a header or a `<meta name="referrer">`): its form posts send
 `Origin: null`, which no allowed list holds, and get `403 {"error":"Forbidden","message":"Invalid Origin header: null (…)"}`.
-Serve such a page with `same-origin`, as the built-in sign-in pages do; it still sends no referrer to
-other sites.
+A page whose form posts to its own origin can use `same-origin`, as the built-in sign-in pages do; it
+still sends no referrer to other sites. A form that posts to another origin (a page on
+`app.example.com` posting to `api.example.com`, with `app.example.com` in `allowedOrigins`) gets
+`Origin: null` under `same-origin` too, so serve that page with `strict-origin-when-cross-origin` (the
+browsers' default), which sends the page's origin unless the post goes from `https` to `http`.
 
 ```typescript
 // A browser app on another local port talks to a loopback server: name it in CORS.

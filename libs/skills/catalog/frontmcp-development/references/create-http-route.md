@@ -287,8 +287,10 @@ included, which makes signing in CSRF-safe. The rules are the loopback Origin ru
 
 A page of yours that posts a `<form>` must not be served with `Referrer-Policy: no-referrer`, as a header or a
 `<meta name="referrer">`: the browser then sends `Origin: null`, which this check and the DNS-rebinding `Origin` check
-refuse. Use `same-origin`, which still sends no referrer to other sites. A `fetch()` POST keeps the real `Origin` under
-either policy.
+refuse. For a form that posts to the page's own origin, use `same-origin`, which still sends no referrer to other
+sites. A form that posts to another origin you list in `allowedOrigins` gets `Origin: null` under `same-origin` too:
+serve that page with `strict-origin-when-cross-origin` (the browsers' default), which sends the page's origin unless the
+post goes from `https` to `http`. A `fetch()` POST sends the page's origin under both.
 
 The check compares the `Origin` with the request's own `Host`, which a page on a DNS-rebound name sets to that name.
 Host validation (`http.security.dnsRebindingProtection`) is what refuses such a host: it is on by default on a loopback
