@@ -24,7 +24,10 @@ export interface NativeSignInOptions {
   store?: NativeTokenStore;
   /** The key the tokens are kept under. @default the issuer, client ID and resources */
   storeKey?: string;
-  /** The loopback port, or an inclusive range to take the first free one from. @default any free port */
+  /**
+   * The loopback port (0 to 65535, where 0 is any free port), or an inclusive range of ports from 1 to 65535 to take
+   * the first free one from; anything else fails with `invalid_port` before a port is bound. @default any free port
+   */
   redirectPort?: number | readonly [number, number];
   /** @default '/callback' */
   redirectPath?: string;
