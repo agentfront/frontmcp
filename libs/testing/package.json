@@ -123,6 +123,7 @@
     "node": ">=24.0.0"
   },
   "dependencies": {
+    "@frontmcp/auth": "1.13.1",
     "@frontmcp/protocol": "1.13.1",
     "@frontmcp/utils": "1.13.1",
     "@swc/core": "~1.15.41",

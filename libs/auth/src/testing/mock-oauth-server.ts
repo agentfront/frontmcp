@@ -11,7 +11,7 @@
  *
  * @example Basic usage
  * ```typescript
- * import { MockOAuthServer, TestTokenFactory } from '@frontmcp/testing';
+ * import { MockOAuthServer, TestTokenFactory } from '@frontmcp/auth/testing'; // or '@frontmcp/testing'
  *
  * const tokenFactory = new TestTokenFactory();
  * const oauthServer = new MockOAuthServer(tokenFactory);
@@ -47,7 +47,7 @@
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http';
 
-import { base64urlEncode, randomBytes, sha256Base64url } from '@frontmcp/utils';
+import { base64urlEncode, isValidCodeVerifier, randomBytes, sha256Base64url } from '@frontmcp/utils';
 
 import type { TestTokenFactory } from './token-factory';
 
@@ -119,6 +119,12 @@ export interface MockOAuthServerOptions {
   accessTokenTtlSeconds?: number;
   /** Refresh token TTL in seconds (default: 30 days) */
   refreshTokenTtlSeconds?: number;
+  /**
+   * `'strict'` requires S256 PKCE as OAuth 2.1 does: an authorization request without a `code_challenge`, or with
+   * the `plain` method, is redirected back with `invalid_request`, and a code needs a valid `code_verifier`.
+   * `'lenient'` accepts both. Unset, it is lenient and warns once the first time it accepts such a request.
+   */
+  pkce?: 'strict' | 'lenient';
 }
 
 export interface MockOAuthServerInfo {
@@ -163,6 +169,8 @@ export class MockOAuthServer {
 
   /** Refresh token TTL in seconds */
   private readonly refreshTokenTtlSeconds: number;
+
+  private warnedLenientPkce = false;
 
   constructor(tokenFactory: TestTokenFactory, options: MockOAuthServerOptions = {}) {
     this.tokenFactory = tokenFactory;
@@ -386,6 +394,7 @@ export class MockOAuthServer {
       grant_types_supported: ['authorization_code', 'refresh_token', 'anonymous'],
       token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post', 'none'],
       scopes_supported: ['openid', 'profile', 'email', 'anonymous'],
+      ...(this.options.pkce === 'strict' ? { code_challenge_methods_supported: ['S256'] } : {}),
     };
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -452,6 +461,12 @@ export class MockOAuthServer {
     // Validate client_id if configured (safe to redirect now that redirect_uri is validated)
     if (this.options.clientId && clientId !== this.options.clientId) {
       this.redirectWithError(res, redirectUri, 'unauthorized_client', 'Invalid client_id', state);
+      return;
+    }
+
+    const pkceProblem = this.checkPkce(codeChallenge, codeChallengeMethod);
+    if (pkceProblem) {
+      this.redirectWithError(res, redirectUri, 'invalid_request', pkceProblem, state);
       return;
     }
 
@@ -668,7 +683,8 @@ export class MockOAuthServer {
       }
 
       const expectedChallenge = await this.computeCodeChallengeAsync(codeVerifier, method);
-      if (expectedChallenge !== codeRecord.codeChallenge) {
+      const malformed = this.options.pkce === 'strict' && !isValidCodeVerifier(codeVerifier);
+      if (malformed || expectedChallenge !== codeRecord.codeChallenge) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(
           JSON.stringify({
@@ -913,6 +929,12 @@ export class MockOAuthServer {
       return;
     }
 
+    const pkceProblem = this.checkPkce(codeChallenge, codeChallengeMethod);
+    if (pkceProblem) {
+      this.redirectWithError(res, redirectUri, 'invalid_request', pkceProblem, state);
+      return;
+    }
+
     // Create test user from form data
     const testUser: MockTestUser = {
       sub,
@@ -1045,6 +1067,23 @@ export class MockOAuthServer {
     }
 
     return true;
+  }
+
+  /** Why an authorization request's PKCE is refused, or `undefined` when it is S256 or leniency accepts it. */
+  private checkPkce(codeChallenge?: string, codeChallengeMethod?: string): string | undefined {
+    if (codeChallenge && codeChallengeMethod === 'S256') return undefined;
+    const problem = codeChallenge
+      ? `code_challenge_method ${codeChallengeMethod ?? 'plain'} is not S256`
+      : 'code_challenge is missing';
+    if (this.options.pkce === 'strict') return `S256 PKCE is required: ${problem}`;
+    if (this.options.pkce === undefined && !this.warnedLenientPkce) {
+      this.warnedLenientPkce = true;
+      console.warn(
+        `[MockOAuthServer] Accepted an authorization request without S256 PKCE (${problem}). ` +
+          "Set pkce: 'strict' to refuse it, as OAuth 2.1 servers do, or pkce: 'lenient' to accept it without this warning.",
+      );
+    }
+    return undefined;
   }
 
   /**

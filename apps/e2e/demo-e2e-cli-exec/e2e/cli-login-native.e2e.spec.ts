@@ -81,6 +81,7 @@ describeWithFileCredentials('login with cli.oauth.nativeSignIn', () => {
       testUser: { sub: 'native-user' },
       clientId: CLIENT_ID,
       validRedirectUris: ['http://127.0.0.1:*/callback'],
+      pkce: 'strict',
       // Within the minute before expiry, so every command refreshes first
       accessTokenTtlSeconds: 30,
     });

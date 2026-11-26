@@ -7,8 +7,8 @@ description: Test authenticated MCP servers with TestTokenFactory, MockOAuthServ
 
 Real API references:
 
-- `TestTokenFactory.createTestToken(opts)` — `libs/testing/src/auth/token-factory.ts:97` (plus `createAdminToken`, `createUserToken`, `createAnonymousToken`, `createExpiredToken`, `createTokenWithInvalidSignature`).
-- `new MockOAuthServer(tokenFactory, options)` + `.start()` / `.stop()` — `libs/testing/src/auth/mock-oauth-server.ts:159`.
+- `TestTokenFactory.createTestToken(opts)` — `libs/auth/src/testing/token-factory.ts:135` (plus `createAdminToken`, `createUserToken`, `createAnonymousToken`, `createExpiredToken`, `createTokenWithInvalidSignature`).
+- `new MockOAuthServer(tokenFactory, options)` + `.start()` / `.stop()` — `libs/auth/src/testing/mock-oauth-server.ts:175`.
 - `TestServer.start({ command, port })` — `libs/testing/src/server/test-server.ts:101`. Get a client with `McpTestClient.create({ baseUrl }).withToken(token).buildAndConnect()`.
 - Roles, email, and other claims go inside `claims`, not as top-level fields. `CreateTokenOptions` only declares `sub`, `iss`, `aud`, `scopes`, `exp`, `claims`.
 
@@ -142,6 +142,21 @@ describe('Mock OAuth server', () => {
 ```
 
 To run the full authorization-code-with-PKCE flow against the mock server, drive the standard OAuth endpoints (`/oauth/authorize`, `/oauth/token`) directly with `fetch` — the mock server auto-approves when `autoApprove: true` and `testUser` are set.
+
+- **PKCE:** `pkce: 'strict'` makes the mock check PKCE as an OAuth 2.1 server does. An authorization request (or the manual sign-in form) without a `code_challenge`, with `code_challenge_method=plain`, or with no method (which means plain) is redirected back with `error=invalid_request`. A `code_verifier` must be 43-128 unreserved characters. The metadata lists `code_challenge_methods_supported: ['S256']`. Unset, the mock accepts those requests as before, and warns once the first time it does; `pkce: 'lenient'` accepts them without the warning. Use strict to prove a client sends S256.
+- **Lighter import:** `MockOAuthServer` and `TestTokenFactory` are also exported by `@frontmcp/auth/testing`, the same classes, for a project that needs only a mock identity provider. That subpath depends on `jose` and `@frontmcp/utils` only, so it brings no SWC, Jest preset or SDK.
+
+```typescript
+import { MockOAuthServer, TestTokenFactory } from '@frontmcp/auth/testing';
+
+const idp = new MockOAuthServer(new TestTokenFactory(), {
+  autoApprove: true,
+  testUser: { sub: 'user-123' },
+  clientId: 'my-cli',
+  validRedirectUris: ['http://127.0.0.1:*/callback'],
+  pkce: 'strict',
+});
+```
 
 ## Mock CIMD server
 

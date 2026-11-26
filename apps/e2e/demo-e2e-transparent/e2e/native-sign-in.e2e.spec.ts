@@ -42,6 +42,7 @@ describe('native sign-in against the identity provider of a transparent server',
       testUser: { sub: 'user-native', email: 'native@example.com' },
       clientId: CLIENT_ID,
       validRedirectUris: ['http://127.0.0.1:*/callback'],
+      pkce: 'strict',
     });
     await mockOAuth.start();
 
