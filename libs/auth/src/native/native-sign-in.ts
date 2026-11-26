@@ -1,7 +1,7 @@
 import { base64urlEncode, generatePkcePair, getSpawnFn, randomBytes } from '@frontmcp/utils';
 
 import { normalizeIssuer } from '../jwks/jwks.utils';
-import { assertSecureUrl, discoverAuthorizationServer, requestWithTimeout } from './authorization-server-metadata';
+import { assertSecureEndpoint, discoverAuthorizationServer, requestWithTimeout } from './authorization-server-metadata';
 import { listenForRedirect } from './loopback-redirect';
 import { NativeSignInError } from './native-sign-in.error';
 import { memoryTokenStore, type NativeTokenSet, type NativeTokenStore } from './native-token-store';
@@ -79,7 +79,7 @@ export async function signInNative(options: NativeSignInOptions): Promise<Native
     await (options.openBrowser ?? openSystemBrowser)(authorizationUrl.toString());
     const code = await redirect.code;
 
-    const tokens = await requestTokens(options, metadata.token_endpoint, {
+    const tokens = await requestTokens(options, metadata.issuer, metadata.token_endpoint, {
       grant_type: 'authorization_code',
       code,
       redirect_uri: redirect.redirectUri,
@@ -149,7 +149,7 @@ async function refreshTokens(
 ): Promise<NativeTokenSet | undefined> {
   let body: Record<string, unknown>;
   try {
-    body = await requestTokens(options, tokens.tokenEndpoint, {
+    body = await requestTokens(options, tokens.issuer, tokens.tokenEndpoint, {
       grant_type: 'refresh_token',
       refresh_token: tokens.refreshToken as string,
     });
@@ -167,10 +167,11 @@ async function refreshTokens(
 
 async function requestTokens(
   options: NativeTokenOptions,
+  issuer: string,
   tokenEndpoint: string,
   grant: Record<string, string>,
 ): Promise<Record<string, unknown>> {
-  assertSecureUrl(tokenEndpoint);
+  assertSecureEndpoint(tokenEndpoint, issuer);
   const form = new URLSearchParams({ ...grant, client_id: options.clientId });
   if (options.clientSecret) form.set('client_secret', options.clientSecret);
   for (const resource of resourcesOf(options)) form.append('resource', resource);
