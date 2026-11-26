@@ -90,28 +90,31 @@ export class SseRouteStream implements AsyncIterableIterator<Uint8Array> {
     }, this.options.coalesceMs);
   }
 
-  /** A check that fails ends the stream, since the heartbeat cannot tell whether the reader may stay. */
-  private async beat(): Promise<void> {
+  /**
+   * Whether the reader may stay. A check that answers `false` ends the stream, and so does one that fails, which is
+   * reported first: the stream cannot tell whether the reader may stay.
+   */
+  private async stillAuthorized(): Promise<boolean> {
     let authorized: boolean | undefined;
     try {
       authorized = await this.options.authorized?.();
     } catch (error) {
       this.options.onError(error);
-      this.close();
-      return;
+      authorized = false;
     }
     if (authorized === false) this.close();
-    else this.offer(HEARTBEAT, false);
+    return authorized !== false;
+  }
+
+  private async beat(): Promise<void> {
+    if (await this.stillAuthorized()) this.offer(HEARTBEAT, false);
   }
 
   private async produce(): Promise<void> {
     this.producing = true;
     this.dirty = false;
     try {
-      if ((await this.options.authorized?.()) === false) {
-        this.close();
-        return;
-      }
+      if (!(await this.stillAuthorized())) return;
       const view = await this.options.produce();
       if (view !== undefined) this.offer(encoder.encode(formatSseEvent(view)), true);
     } catch (error) {

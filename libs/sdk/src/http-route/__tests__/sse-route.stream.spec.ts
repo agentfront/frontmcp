@@ -204,6 +204,24 @@ describe('SseRouteStream', () => {
     expect(await stream.next()).toEqual({ value: undefined, done: true });
   });
 
+  it('reports an authorized check that fails before a view, and ends the stream without the view', async () => {
+    const onError = jest.fn();
+    const failure = new Error('session store unavailable');
+    const authorized = jest.fn<Promise<boolean>, []>().mockResolvedValueOnce(true).mockRejectedValueOnce(failure);
+    const produce = jest.fn(async () => ({ count: 1 }));
+    const { stream, publish, onClose, unsubscribe } = createStream(produce, { onError, authorized });
+    await stream.next();
+
+    publish();
+    await jest.advanceTimersByTimeAsync(50);
+
+    expect(onError).toHaveBeenCalledWith(failure);
+    expect(produce).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+    expect(await stream.next()).toEqual({ value: undefined, done: true });
+  });
+
   it('is its own async iterator', () => {
     const { stream } = createStream(async () => undefined);
 
