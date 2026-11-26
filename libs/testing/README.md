@@ -120,7 +120,7 @@ The client speaks MCP `2025-06-18` by default, and any revision up to `2025-11-2
 | `mockResponse`, `interceptors`                          | Mock or change MCP requests on the `mcp` client                                     |
 | `perfTest`, `LeakDetector`, `MetricsCollector`          | Measure memory and time, and find leaks                                             |
 
-`TestTokenFactory` and `MockOAuthServer` are the ones `@frontmcp/auth/testing` exports. Import them from there in a project that needs only a mock identity provider: it brings no SWC, Jest preset or SDK. `new MockOAuthServer(factory, { pkce: 'strict' })` requires S256 PKCE, as OAuth 2.1 servers do. By default it still accepts an authorization request without it, and warns once.
+`TestTokenFactory` and `MockOAuthServer` are the ones `@frontmcp/auth/testing` exports. Import them from there in a project that needs only a mock identity provider: it brings no SWC, Jest preset or SDK. `new MockOAuthServer(factory, { pkce: 'strict' })` requires S256 PKCE, as OAuth 2.1 servers do. By default it still accepts an authorization request without it, and warns once. `resourceIndicators` issues tokens for the requested `resource` / `audience`, and `users` with a `login_hint` signs in one of several test users. Tokens carry `auth_time`.
 
 ## Docs
 

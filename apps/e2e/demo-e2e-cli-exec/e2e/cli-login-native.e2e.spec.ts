@@ -82,6 +82,7 @@ describeWithFileCredentials('login with cli.oauth.nativeSignIn', () => {
       clientId: CLIENT_ID,
       validRedirectUris: ['http://127.0.0.1:*/callback'],
       pkce: 'strict',
+      resourceIndicators: [RESOURCE],
       // Within the minute before expiry, so every command refreshes first
       accessTokenTtlSeconds: 30,
     });
@@ -108,7 +109,7 @@ class TasksApp {}
     mode: 'transparent',
     provider: ${JSON.stringify(issuer)},
     providerConfig: { dcrEnabled: false },
-    expectedAudience: ${JSON.stringify(issuer)},
+    expectedAudience: ${JSON.stringify(RESOURCE)},
   },
   logging: { level: LogLevel.Warn, enableConsole: false },
 })

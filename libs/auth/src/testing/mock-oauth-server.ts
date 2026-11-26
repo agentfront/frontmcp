@@ -69,6 +69,8 @@ export interface MockTestUser {
   picture?: string;
   /** Additional claims to include in tokens */
   claims?: Record<string, unknown>;
+  /** The scopes this user can be granted; other requested scopes are left out. Unset, every requested scope. */
+  scopes?: string[];
 }
 
 /**
@@ -82,6 +84,10 @@ interface AuthorizationCodeRecord {
   codeChallengeMethod?: string;
   scopes: string[];
   user: MockTestUser;
+  /** The `aud` granted from the request's `resource` and `audience`; empty for the token factory's default. */
+  audience: string[];
+  /** When the user signed in, in epoch seconds. */
+  authTime: number;
   state?: string;
   expiresAt: number;
   used: boolean;
@@ -95,6 +101,8 @@ interface RefreshTokenRecord {
   clientId: string;
   user: MockTestUser;
   scopes: string[];
+  audience: string[];
+  authTime: number;
   expiresAt: number;
 }
 
@@ -107,8 +115,20 @@ export interface MockOAuthServerOptions {
   debug?: boolean;
   /** Auto-approve authorization requests (for E2E testing) */
   autoApprove?: boolean;
-  /** Test user to return on authorization (required if autoApprove is true) */
+  /** Test user to return on authorization (required if autoApprove is true, unless `users` is set) */
   testUser?: MockTestUser;
+  /**
+   * Test users that can sign in. The authorization request's `login_hint` (a `sub` or `email`) picks one, and the
+   * manual sign-in form's user ID picks the one with that `sub`; without a hint, `testUser`, else the first.
+   */
+  users?: MockTestUser[];
+  /**
+   * Issue the access token for the `resource` (RFC 8707) and `audience` values of the authorization and token
+   * requests, kept across refresh: `true` accepts any, a list accepts those only and refuses others with
+   * `invalid_target`. A request naming none gets the token factory's audience. Unset, they are ignored as before,
+   * with a warning the first time a request carries one.
+   */
+  resourceIndicators?: boolean | string[];
   /** Expected client ID for validation */
   clientId?: string;
   /** Expected client secret (optional, for confidential clients) */
@@ -171,6 +191,7 @@ export class MockOAuthServer {
   private readonly refreshTokenTtlSeconds: number;
 
   private warnedLenientPkce = false;
+  private warnedIgnoredTargets = false;
 
   constructor(tokenFactory: TestTokenFactory, options: MockOAuthServerOptions = {}) {
     this.tokenFactory = tokenFactory;
@@ -470,9 +491,22 @@ export class MockOAuthServer {
       return;
     }
 
+    const audience = this.requestedTargets(params);
+    const targetProblem = this.checkTargets(audience);
+    if (targetProblem) {
+      this.redirectWithError(res, redirectUri, 'invalid_target', targetProblem, state);
+      return;
+    }
+
+    const loginHint = params.get('login_hint');
+    const testUser = this.pickUser(loginHint);
+    if (loginHint && this.options.users && !testUser) {
+      this.redirectWithError(res, redirectUri, 'access_denied', `No test user matches login_hint ${loginHint}`, state);
+      return;
+    }
+
     // Auto-approve mode: immediately redirect with authorization code
     if (this.options.autoApprove) {
-      const testUser = this.options.testUser;
       if (!testUser) {
         this.logError('autoApprove is enabled but no testUser configured. Set testUser in MockOAuthServerOptions.');
         res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -487,7 +521,7 @@ export class MockOAuthServer {
 
       // Generate authorization code
       const code = this.generateCode();
-      const scopes = scope.split(' ').filter(Boolean);
+      const scopes = grantableScopes(scope, testUser);
 
       // Store the code
       this.authCodes.set(code, {
@@ -498,6 +532,8 @@ export class MockOAuthServer {
         codeChallengeMethod,
         scopes,
         user: testUser,
+        audience,
+        authTime: Math.floor(Date.now() / 1000),
         state,
         expiresAt: Date.now() + 5 * 60 * 1000, // 5 minutes
         used: false,
@@ -517,7 +553,16 @@ export class MockOAuthServer {
     }
 
     // Manual mode: render login page (for manual testing)
-    const html = this.renderLoginPage(clientId, redirectUri, scope, state, codeChallenge, codeChallengeMethod);
+    const html = this.renderLoginPage(
+      clientId,
+      redirectUri,
+      scope,
+      state,
+      codeChallenge,
+      codeChallengeMethod,
+      audience,
+      this.options.users ? testUser : undefined,
+    );
     res.writeHead(200, { 'Content-Type': 'text/html' });
     res.end(html);
   }
@@ -696,6 +741,13 @@ export class MockOAuthServer {
       }
     }
 
+    const audience = this.narrowTargets(params, codeRecord.audience);
+    if (typeof audience === 'string') {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid_target', error_description: audience }));
+      return;
+    }
+
     // Mark code as used
     codeRecord.used = true;
 
@@ -704,9 +756,11 @@ export class MockOAuthServer {
       sub: codeRecord.user.sub,
       scopes: codeRecord.scopes,
       exp: this.accessTokenTtlSeconds,
+      aud: audienceClaim(audience),
       claims: {
         email: codeRecord.user.email,
         name: codeRecord.user.name,
+        auth_time: codeRecord.authTime,
         ...(codeRecord.user.claims ?? {}),
       },
     });
@@ -718,6 +772,7 @@ export class MockOAuthServer {
       claims: {
         email: codeRecord.user.email,
         name: codeRecord.user.name,
+        auth_time: codeRecord.authTime,
         ...(codeRecord.user.claims ?? {}),
       },
     });
@@ -729,6 +784,8 @@ export class MockOAuthServer {
       clientId,
       user: codeRecord.user,
       scopes: codeRecord.scopes,
+      audience: codeRecord.audience,
+      authTime: codeRecord.authTime,
       expiresAt: Date.now() + this.refreshTokenTtlSeconds * 1000,
     });
 
@@ -800,14 +857,23 @@ export class MockOAuthServer {
       return;
     }
 
+    const audience = this.narrowTargets(params, tokenRecord.audience);
+    if (typeof audience === 'string') {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid_target', error_description: audience }));
+      return;
+    }
+
     // Generate new access token
     const accessToken = await this.tokenFactory.createTestToken({
       sub: tokenRecord.user.sub,
       scopes: tokenRecord.scopes,
       exp: this.accessTokenTtlSeconds,
+      aud: audienceClaim(audience),
       claims: {
         email: tokenRecord.user.email,
         name: tokenRecord.user.name,
+        auth_time: tokenRecord.authTime,
         ...(tokenRecord.user.claims ?? {}),
       },
     });
@@ -849,8 +915,13 @@ export class MockOAuthServer {
       return;
     }
 
-    // For mock server, we'll return the test user if configured
-    const testUser = this.options.testUser;
+    // For mock server, we'll return the test user if configured; with `users`, the one the token names
+    const testUser = this.options.users ? this.userOfToken(authHeader.slice(7)) : this.options.testUser;
+    if (this.options.users && !testUser) {
+      res.writeHead(401, { 'WWW-Authenticate': 'Bearer error="invalid_token"' });
+      res.end(JSON.stringify({ error: 'invalid_token', error_description: 'The token names no test user' }));
+      return;
+    }
     if (!testUser) {
       this.logError('UserInfo endpoint called but no testUser configured. Set testUser in MockOAuthServerOptions.');
       res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -887,6 +958,7 @@ export class MockOAuthServer {
     const codeChallenge = params.get('code_challenge') ?? undefined;
     const codeChallengeMethod = params.get('code_challenge_method') ?? undefined;
     const action = params.get('action');
+    const audience = this.requestedTargets(params);
 
     // User fields
     const sub = params.get('sub');
@@ -935,8 +1007,14 @@ export class MockOAuthServer {
       return;
     }
 
-    // Create test user from form data
-    const testUser: MockTestUser = {
+    const targetProblem = this.checkTargets(audience);
+    if (targetProblem) {
+      this.redirectWithError(res, redirectUri, 'invalid_target', targetProblem, state);
+      return;
+    }
+
+    // The listed test user with that sub, else a user from the form data
+    const testUser: MockTestUser = this.options.users?.find((user) => user.sub === sub) ?? {
       sub,
       email,
       name,
@@ -944,7 +1022,7 @@ export class MockOAuthServer {
 
     // Generate authorization code
     const code = this.generateCode();
-    const scopes = scope.split(' ').filter(Boolean);
+    const scopes = grantableScopes(scope, testUser);
 
     // Store the code
     this.authCodes.set(code, {
@@ -955,6 +1033,8 @@ export class MockOAuthServer {
       codeChallengeMethod,
       scopes,
       user: testUser,
+      audience,
+      authTime: Math.floor(Date.now() / 1000),
       state,
       expiresAt: Date.now() + 5 * 60 * 1000, // 5 minutes
       used: false,
@@ -1069,6 +1149,59 @@ export class MockOAuthServer {
     return true;
   }
 
+  /** The user a `login_hint` (a `sub` or `email`) names among `users`; without one, `testUser`, else the first. */
+  private pickUser(loginHint: string | null): MockTestUser | undefined {
+    const { users, testUser } = this.options;
+    if (!users) return testUser;
+    if (loginHint) return users.find((user) => user.sub === loginHint || user.email === loginHint);
+    return testUser ?? users[0];
+  }
+
+  /** The listed user an access token names, read without verifying it: the mock issued it. */
+  private userOfToken(token: string): MockTestUser | undefined {
+    try {
+      const payload = JSON.parse(Buffer.from(token.split('.')[1] ?? '', 'base64url').toString('utf8')) as {
+        sub?: unknown;
+      };
+      return this.options.users?.find((user) => user.sub === payload.sub);
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** A request's `resource` and `audience` values when `resourceIndicators` is set; else none, with one warning. */
+  private requestedTargets(params: URLSearchParams): string[] {
+    const targets = targetsOf(params);
+    if (this.options.resourceIndicators) return targets;
+    if (targets.length > 0 && !this.warnedIgnoredTargets) {
+      this.warnedIgnoredTargets = true;
+      console.warn(
+        `[MockOAuthServer] Ignored resource/audience ${targets.join(', ')}: the token gets the token factory's audience. ` +
+          'Set resourceIndicators: true (or a list of allowed values) to issue the token for it.',
+      );
+    }
+    return [];
+  }
+
+  /** Why the requested `resource` / `audience` values are refused (RFC 8707 §2), or `undefined`. */
+  private checkTargets(targets: string[]): string | undefined {
+    const allowed = this.options.resourceIndicators;
+    const refused = Array.isArray(allowed) ? targets.find((target) => !allowed.includes(target)) : undefined;
+    return refused ? `${refused} is not a resource this server issues tokens for` : undefined;
+  }
+
+  /**
+   * The audience of a token request: the `resource` / `audience` values it names, which must be among those granted
+   * (or, when none were, allowed), else the granted ones. A string is the reason it is refused.
+   */
+  private narrowTargets(params: URLSearchParams, granted: string[]): string[] | string {
+    const requested = this.requestedTargets(params);
+    if (requested.length === 0) return granted;
+    const outside = granted.length > 0 ? requested.find((target) => !granted.includes(target)) : undefined;
+    if (outside) return `${outside} was not granted by the authorization`;
+    return this.checkTargets(requested) ?? requested;
+  }
+
   /** Why an authorization request's PKCE is refused, or `undefined` when it is S256 or leniency accepts it. */
   private checkPkce(codeChallenge?: string, codeChallengeMethod?: string): string | undefined {
     if (codeChallenge && codeChallengeMethod === 'S256') return undefined;
@@ -1146,8 +1279,13 @@ export class MockOAuthServer {
     state?: string,
     codeChallenge?: string,
     codeChallengeMethod?: string,
+    audience: string[] = [],
+    user?: MockTestUser,
   ): string {
     const issuer = this._info?.issuer ?? 'http://localhost';
+    const targets = audience
+      .map((target) => `<input type="hidden" name="resource" value="${this.escapeHtml(target)}">`)
+      .join('');
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -1208,17 +1346,18 @@ export class MockOAuthServer {
       ${state ? `<input type="hidden" name="state" value="${this.escapeHtml(state)}">` : ''}
       ${codeChallenge ? `<input type="hidden" name="code_challenge" value="${this.escapeHtml(codeChallenge)}">` : ''}
       ${codeChallengeMethod ? `<input type="hidden" name="code_challenge_method" value="${this.escapeHtml(codeChallengeMethod)}">` : ''}
+      ${targets}
       <div class="field">
         <label for="sub">User ID (sub)</label>
-        <input type="text" id="sub" name="sub" value="test-user-123" required>
+        <input type="text" id="sub" name="sub" value="${this.escapeHtml(user?.sub ?? 'test-user-123')}" required>
       </div>
       <div class="field">
         <label for="email">Email</label>
-        <input type="email" id="email" name="email" value="test@example.com">
+        <input type="email" id="email" name="email" value="${this.escapeHtml(user?.email ?? 'test@example.com')}">
       </div>
       <div class="field">
         <label for="name">Name</label>
-        <input type="text" id="name" name="name" value="Test User">
+        <input type="text" id="name" name="name" value="${this.escapeHtml(user?.name ?? 'Test User')}">
       </div>
       <button type="submit" name="action" value="approve">Approve</button>
       <button type="submit" name="action" value="deny" class="deny">Deny</button>
@@ -1239,6 +1378,24 @@ export class MockOAuthServer {
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;');
   }
+}
+
+/** The `resource` and `audience` values of a request, once each. */
+function targetsOf(params: URLSearchParams): string[] {
+  const audience = params.get('audience');
+  return [...new Set([...params.getAll('resource'), ...(audience ? [audience] : [])])];
+}
+
+/** The `aud` claim for the granted targets; `undefined` keeps the token factory's audience. */
+function audienceClaim(audience: string[]): string | string[] | undefined {
+  if (audience.length === 0) return undefined;
+  return audience.length === 1 ? audience[0] : audience;
+}
+
+/** The requested scopes the user can be granted. */
+function grantableScopes(scope: string, user: MockTestUser): string[] {
+  const requested = scope.split(' ').filter(Boolean);
+  return user.scopes ? requested.filter((name) => user.scopes?.includes(name)) : requested;
 }
 
 /** True when a URL does not parse or carries a user name or password. */
