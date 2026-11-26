@@ -353,6 +353,32 @@ describe('frontmcp skills export --from-entry', () => {
       expect(await fileExists(path.join(project, 'skills/greeting'))).toBe(false);
     });
 
+    it("keeps another project's copies in a skills folder both export to, entry paths alike", async () => {
+      const shared = await mkdtemp(path.join(os.tmpdir(), 'frontmcp-shared-skills-'));
+      const other = await mkdtemp(path.join(os.tmpdir(), 'frontmcp-export-other-'));
+      try {
+        expect(await run({ providers: [], skillsDirs: [shared] })).toBe(0);
+        await ensureDir(path.join(other, 'src'));
+        await writeFile(path.join(other, 'src', 'main.ts'), 'export default {};');
+        const base = schema();
+        mockExtract.mockResolvedValue({
+          ...base,
+          skillAssets: [{ skillName: 'beta', instructionContent: '---\nname: beta\ndescription: B\n---\nBody.' }],
+          manifest: { ...base.manifest, skills: [{ name: 'beta', description: 'B', tools: [], hash: 'c3' }] },
+        });
+        jest.mocked(process.cwd).mockReturnValue(other);
+
+        expect(await run({ providers: [], skillsDirs: [shared] })).toBe(0);
+
+        expect(await fileExists(path.join(shared, 'beta/SKILL.md'))).toBe(true);
+        expect(await fileExists(path.join(shared, 'greeting/SKILL.md'))).toBe(true);
+        expect(await fileExists(path.join(shared, 'inline/SKILL.md'))).toBe(true);
+      } finally {
+        await rm(shared, { recursive: true, force: true });
+        await rm(other, { recursive: true, force: true });
+      }
+    });
+
     it('leaves a folder there that it did not write', async () => {
       await ensureDir(path.join(project, 'skills/greeting'));
       await writeFile(path.join(project, 'skills/greeting/SKILL.md'), 'written by hand');
