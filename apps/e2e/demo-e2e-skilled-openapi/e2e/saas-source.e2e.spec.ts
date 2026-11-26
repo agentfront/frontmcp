@@ -569,13 +569,12 @@ test.describe('a server that takes pushed bundles', () => {
 
 test.describe('a bundle server that is down at startup', () => {
   test.describe('with the bundle kept in the cache by an earlier run', () => {
-    const env = useSaasServer();
+    // No poll may run between the restart and the ready check, or its failure replaces the start's outcome
+    const env = useSaasServer({ pollIntervalMs: SLOW_POLL_INTERVAL_MS });
 
     test('starts, and serves the cached bundle without writing it back to the cache', async ({ mcp, server }) => {
       expect((await servedSkills(mcp)).versions).toEqual(['1.0.0']);
-      server.clearLogs();
       bundleServer.mode = 'outage';
-      await waitForLog(server, '[saas-source] poll failed');
       const keptAt = await cacheWrittenAt(env);
       server.clearLogs();
 
