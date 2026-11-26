@@ -14,6 +14,7 @@ import { registerHealthRoutes, type HealthService } from '../health';
 import { serverCardPath } from '../mcp-registry/mcp-registry.utils';
 import { registerMetricsRoutes, type MetricsService } from '../metrics';
 import { type HostServerAdapter } from './adapters/base.host.adapter';
+import { type UserContentListener } from './adapters/user-content.listener';
 import { resolveHttpCors } from './middleware/cors-env';
 import { auditSecurityDefaults, logSecurityFindings, resolveBindAddress } from './security/security-audit';
 
@@ -38,6 +39,7 @@ export class FrontMcpServerInstance extends FrontMcpServer {
   private metricsRouteRegistered = false;
   private _metricsService?: MetricsService;
   private _metricsConfig?: MetricsOptionsInterface;
+  private userContent?: UserContentListener;
 
   constructor(httpConfig: HttpServerOptions) {
     super();
@@ -168,10 +170,18 @@ export class FrontMcpServerInstance extends FrontMcpServer {
     );
     logSecurityFindings(findings, console);
 
-    await this.host.start(this.config.socketPath ?? this.config.port, bindAddress);
+    const mainListener = this.config.socketPath ?? this.config.port;
+    await this.host.start(mainListener, bindAddress);
+    if (this.config.userContent) {
+      const { UserContentListener } = require('#express-host') as typeof import('#express-host');
+      this.userContent = new UserContentListener(this.config.userContent);
+      await this.userContent.start(mainListener, bindAddress);
+    }
   }
 
   override async stop(): Promise<void> {
-    await this.host.stop();
+    const results = await Promise.allSettled([this.host.stop(), this.userContent?.stop()]);
+    const failure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+    if (failure) throw failure.reason;
   }
 }

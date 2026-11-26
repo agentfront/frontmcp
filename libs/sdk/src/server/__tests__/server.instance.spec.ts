@@ -34,15 +34,45 @@ jest.mock('../adapters/express.host.adapter', () => {
       }
       async start(...args: unknown[]) {
         capturedStartArgs = args;
+        events.push('host:start');
+      }
+      async stop() {
+        events.push('host:stop');
+        if (hostStopFailure) throw hostStopFailure;
       }
     },
   };
 });
 
+let events: string[] = [];
+let hostStopFailure: Error | undefined;
+let userContentStartFailure: Error | undefined;
+let capturedUserContent: { options: unknown; startArgs?: unknown[] } | undefined;
+
+jest.mock('../adapters/user-content.listener', () => ({
+  UserContentListener: class MockUserContentListener {
+    constructor(options: unknown) {
+      capturedUserContent = { options };
+    }
+    async start(...args: unknown[]) {
+      events.push('userContent:start');
+      if (capturedUserContent) capturedUserContent.startArgs = args;
+      if (userContentStartFailure) throw userContentStartFailure;
+    }
+    async stop() {
+      events.push('userContent:stop');
+    }
+  },
+}));
+
 describe('FrontMcpServerInstance', () => {
   beforeEach(() => {
     capturedAdapterArgs = [];
     capturedStartArgs = [];
+    events = [];
+    hostStopFailure = undefined;
+    userContentStartFailure = undefined;
+    capturedUserContent = undefined;
   });
 
   describe('CORS resolution in setupDefaults', () => {
@@ -144,6 +174,87 @@ describe('FrontMcpServerInstance', () => {
 
       expect(capturedAdapterArgs[0]).not.toHaveProperty('listen.bindAddress');
       expect(capturedAdapterArgs[0]).not.toHaveProperty('listen.port');
+    });
+  });
+
+  describe('http.userContent (#1364)', () => {
+    const userContent = { port: 3002, root: '/srv/content' };
+
+    it('opens no user-content listener without the option', async () => {
+      const instance = new FrontMcpServerInstance({ port: 3001, entryPath: '' });
+      await instance.start();
+      await instance.stop();
+
+      expect(capturedUserContent).toBeUndefined();
+      expect(events).toEqual(['host:start', 'host:stop']);
+    });
+
+    it('starts it after the MCP listener, told that listener, on the same bind address', async () => {
+      await new FrontMcpServerInstance({
+        port: 3001,
+        entryPath: '',
+        userContent,
+        security: { bindAddress: 'all' },
+      }).start();
+
+      expect(capturedUserContent).toEqual({ options: userContent, startArgs: [3001, '0.0.0.0'] });
+      expect(events).toEqual(['host:start', 'userContent:start']);
+    });
+
+    it('tells it the MCP socket path on a unix-socket server', async () => {
+      await new FrontMcpServerInstance({ port: 3001, entryPath: '', socketPath: '/tmp/mcp.sock', userContent }).start();
+
+      expect(capturedUserContent?.startArgs?.[0]).toBe('/tmp/mcp.sock');
+    });
+
+    it('starts it beside a hostFactory host too', async () => {
+      const host = {
+        prepare: jest.fn(),
+        registerRoute: jest.fn(),
+        start: jest.fn(),
+        stop: jest.fn(),
+        getHandler: jest.fn(),
+      };
+      const instance = new FrontMcpServerInstance({ port: 3001, entryPath: '', hostFactory: host, userContent });
+      await instance.start();
+      await instance.stop();
+
+      expect(host.start).toHaveBeenCalledWith(3001, '127.0.0.1');
+      expect(events).toEqual(['userContent:start', 'userContent:stop']);
+      expect(host.stop).toHaveBeenCalled();
+    });
+
+    it('does not build it for a serverless handler, which never starts', () => {
+      const instance = new FrontMcpServerInstance({ port: 3001, entryPath: '', userContent });
+      instance.prepare();
+      instance.getHandler();
+
+      expect(capturedUserContent).toBeUndefined();
+    });
+
+    it('fails start() when it cannot start', async () => {
+      userContentStartFailure = new Error('EADDRINUSE');
+
+      await expect(new FrontMcpServerInstance({ port: 3001, entryPath: '', userContent }).start()).rejects.toBe(
+        userContentStartFailure,
+      );
+    });
+
+    it('stops both listeners', async () => {
+      const instance = new FrontMcpServerInstance({ port: 3001, entryPath: '', userContent });
+      await instance.start();
+      await instance.stop();
+
+      expect(events).toEqual(['host:start', 'userContent:start', 'host:stop', 'userContent:stop']);
+    });
+
+    it('stops it even when the MCP host fails to stop, then reports that failure', async () => {
+      const instance = new FrontMcpServerInstance({ port: 3001, entryPath: '', userContent });
+      await instance.start();
+      hostStopFailure = new Error('host stop failed');
+
+      await expect(instance.stop()).rejects.toBe(hostStopFailure);
+      expect(events).toContain('userContent:stop');
     });
   });
 

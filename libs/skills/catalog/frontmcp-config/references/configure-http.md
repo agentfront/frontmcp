@@ -1,6 +1,6 @@
 ---
 name: configure-http
-description: Configure HTTP server port, CORS policy, unix sockets, entry path prefix, request body limits, and custom HTTP routes
+description: Configure HTTP server port, CORS policy, unix sockets, entry path prefix, request body limits, custom HTTP routes, and a user-content listener
 ---
 
 # Configuring HTTP Options
@@ -18,6 +18,8 @@ Configure the HTTP server — port, CORS policy, unix sockets, entry path prefix
   accept base64-encoded blobs (PDFs, DOCXes, large HTML payloads)
 - Adding a custom HTTP route (download endpoint, webhook, health-beyond-`/health`)
   on the same listener as the MCP endpoint via `http.routes`
+- Serving user content (rendered HTML frames, uploads) from an origin of its own,
+  apart from the MCP endpoint, via `http.userContent`
 
 ### Recommended
 
@@ -66,6 +68,7 @@ Configure the HTTP server — port, CORS policy, unix sockets, entry path prefix
       },
     ],
     forwardHeaders: ['x-acme-*'], // default: none — only x-frontmcp-* headers reach customHeaders
+    userContent: { port: 3001, root: './var/frames' }, // default: none — a second listener for static user content
   },
 })
 class Server {}
@@ -574,6 +577,49 @@ Windows named pipes are not checked):
   it) fails with `SocketInUseError` and that server keeps serving. A path that is not a socket, or a
   socket another user owns, fails with `SocketPathConflictError` and is left in place.
 
+## User-Content Listener
+
+Content your users or tools produce (rendered HTML frames, uploaded images) should not run on the origin of the MCP
+endpoint and its API routes. `http.userContent` opens a second listener that serves static files from a directory, on
+a port (or Unix socket) of its own, with its own Host check and headers. It never answers the MCP endpoint, the
+`/oauth/*`, `/.well-known/*`, `/health` or `/metrics` routes or any `http.routes` route: everything but a file under
+`root` is a `404`. The MCP listener does not serve the files either.
+
+```typescript
+http: {
+  port: 3000,
+  userContent: {
+    port: 3001,
+    root: './var/frames',
+    allowedHosts: ['content.example.com'],
+    headers: { 'Cross-Origin-Resource-Policy': 'cross-origin' },
+    csp: { directives: { 'default-src': "'none'", 'img-src': ["'self'", 'data:'] } },
+  },
+}
+```
+
+| Field          | Type                                                                          | Default                           | Notes                                                                                                   |
+| -------------- | ----------------------------------------------------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `port`         | `number`                                                                      | —                                 | Required unless `socketPath` is set. Binds the MCP listener's address; must differ from its port        |
+| `socketPath`   | `string`                                                                      | —                                 | A Unix socket, created owner-only like the MCP one. `port` is then ignored and Host is not checked      |
+| `root`         | `string`                                                                      | — (required)                      | The directory served. Relative paths resolve against the working directory; it must exist at startup    |
+| `allowedHosts` | `string[]`                                                                    | derived on a loopback bind        | Allowed `Host` values. Unset on a routable bind: no Host check, and a startup warning names this option |
+| `headers`      | `Record<string, string>`                                                      | `X-Content-Type-Options: nosniff` | Sent on every response; a header named here replaces the default                                        |
+| `csp`          | `{ directives: Record<string, string \| string[]>; reportUri?; reportOnly? }` | none                              | `Content-Security-Policy` (or `-Report-Only`) on every response                                         |
+
+- Files only: a path that leaves `root` (`..`, encoded or not), a dotfile, and a directory without `index.html`
+  get `404`; a directory is never listed. The content type comes from the file's extension
+  (`application/octet-stream` when unknown). Only `GET` and `HEAD` are served.
+- None of the MCP listener's headers apply (`securityHeaders`, `cors`, the `FRONTMCP_*` header env vars,
+  `FRONTMCP_ALLOWED_HOSTS`): no `X-Frame-Options`, so the content can be framed — limit that with a
+  `frame-ancestors` directive.
+- It starts with the server (`bootstrap()`, `runUnixSocket()`, the `@FrontMcp` decorator on Node) right after the MCP
+  listener, and graceful shutdown closes both. A content listener that cannot start (port in use, `root` missing,
+  a header that cannot be sent) fails the startup with `UserContentConfigurationError` or the listen error.
+- A serverless handler (`createHandler`), a fetch handler for Workers and edge runtimes (`createFetchHandler`) and
+  a stdio server (`runStdio`) open no listener of their own: they ignore the option and log
+  `http.userContent is ignored: ...` at startup. Serve the files from your platform's static hosting there.
+
 ## Verification
 
 ```bash
@@ -627,6 +673,12 @@ curl --unix-socket /tmp/my-mcp-server.sock http://localhost/
 - [ ] `auth: true` is set on any route that must require a verified session
 - [ ] Large payloads are served via a custom GET route + `resource_link`, not a `@Resource`
 
+### User Content
+
+- [ ] `userContent.port` (or `socketPath`) differs from the MCP listener's, and `root` exists
+- [ ] Behind a proxy or on a routable bind, `allowedHosts` names the content hostname
+- [ ] `csp` limits what the content may load, and `frame-ancestors` who may frame it
+
 ### Runtime
 
 - [ ] Server starts and binds to the expected port or socket path
@@ -650,6 +702,8 @@ curl --unix-socket /tmp/my-mcp-server.sock http://localhost/
 | Server throws at startup mentioning a "reserved" path                      | A custom `http.routes` path collides with the MCP entry path, `/oauth/*`, `/.well-known/*`, `/health`, or `/metrics`                                                             | Rename the custom route to a non-reserved path                                                           |
 | Custom route returns JSON when HTML/bytes expected                         | The Express adapter defaults responses to `application/json`                                                                                                                     | Set `res.setHeader('Content-Type', ...)` (or `res.type(...)`) in the handler before sending the body     |
 | `@FrontMcp invalid metadata for "http"` at startup naming `forwardHeaders` | A `forwardHeaders` name or glob matches `authorization`, `cookie`, `proxy-*`, a hop-by-hop header, `content-length` or a client-address header (`x-*` matches `x-forwarded-for`) | Name the application headers to keep (`x-acme-*`); read the caller's identity from `this.auth`           |
+| `http.userContent: it needs a port or socketPath of its own` at startup    | `userContent.port` or `socketPath` is the MCP listener's                                                                                                                         | Give the content listener a port or socket of its own                                                    |
+| `http.userContent is ignored` at startup                                   | The server runs serverless, on Workers or over stdio, where FrontMCP opens no listener                                                                                           | Serve the files from the platform's static hosting, or run a Node HTTP server                            |
 | Custom `auth: true` route always returns `401`                             | Auth mode has no anonymous fallback and the request carries no valid bearer token                                                                                                | Send a valid `Authorization: Bearer <jwt>`, or use `auth` mode `public`/transparent-anon for open routes |
 
 ## Examples
@@ -660,6 +714,7 @@ curl --unix-socket /tmp/my-mcp-server.sock http://localhost/
 | [`custom-http-routes`](../examples/configure-http/custom-http-routes.md)             | Intermediate | Mount first-class custom HTTP routes (download, secret-validation POST, auth-gated webhook) on the MCP listener via http.routes. |
 | [`entry-path-reverse-proxy`](../examples/configure-http/entry-path-reverse-proxy.md) | Intermediate | Mount the MCP server under a URL prefix for reverse proxy or multi-service setups.                                               |
 | [`unix-socket-local`](../examples/configure-http/unix-socket-local.md)               | Intermediate | Bind the server to a unix socket instead of a TCP port for local-only communication.                                             |
+| [`user-content-origin`](../examples/configure-http/user-content-origin.md)           | Intermediate | Serve user content (rendered frames, uploads) from a second listener on an origin of its own, with its own Host check and CSP.   |
 
 > See all examples in [`examples/configure-http/`](../examples/configure-http/)
 

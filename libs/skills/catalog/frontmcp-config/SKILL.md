@@ -62,7 +62,7 @@ Entry point for configuring FrontMCP servers. This skill helps you find the righ
 | Scenario                                                       | Reference                              | Description                                                         |
 | -------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------- |
 | Choose between SSE, Streamable HTTP, or stdio                  | `configure-transport`                  | Transport protocol selection with distributed session options       |
-| Set up CORS, port, base path, or request limits                | `configure-http`                       | HTTP server options for Streamable HTTP and SSE transports          |
+| Set up CORS, port, base path, limits, or a user-content origin | `configure-http`                       | HTTP server options for Streamable HTTP and SSE transports          |
 | Add rate limiting, concurrency, or IP filtering                | `configure-throttle`                   | Server-level and per-tool throttle configuration                    |
 | Enable tools to ask users for input                            | `configure-elicitation`                | Elicitation schemas, stores, and multi-step flows                   |
 | Set up authentication (public, transparent, local, remote)     | `configure-auth`                       | OAuth flows, credential vault, multi-app auth                       |
@@ -196,6 +196,7 @@ Each reference has matching examples under [`examples/<reference>/`](./examples/
 | [`cors-restricted-origins`](./examples/configure-http/cors-restricted-origins.md)   | Basic        | Configure CORS to allow only specific frontend origins with credentials.             |
 | [`entry-path-reverse-proxy`](./examples/configure-http/entry-path-reverse-proxy.md) | Intermediate | Mount the MCP server under a URL prefix for reverse proxy or multi-service setups.   |
 | [`unix-socket-local`](./examples/configure-http/unix-socket-local.md)               | Intermediate | Bind the server to a unix socket instead of a TCP port for local-only communication. |
+| [`user-content-origin`](./examples/configure-http/user-content-origin.md)           | Intermediate | Serve user content from a second listener on an origin of its own, with its own CSP. |
 
 ### `configure-session`
 

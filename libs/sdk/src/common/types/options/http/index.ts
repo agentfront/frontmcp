@@ -9,6 +9,8 @@ export type {
   SecurityHeadersOptions,
   CspHeaderOptions,
   HttpAuthOptions,
+  UserContentOptions,
+  UserContentCspOptions,
 } from './interfaces';
 export { defaultHttpPort, httpOptionsSchema } from './schema';
 export type { HttpOptions, HttpOptionsInput } from './schema';
