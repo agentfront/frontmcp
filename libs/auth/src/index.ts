@@ -720,6 +720,7 @@ export type {
   PeopleSession,
   PeopleSessionCookie,
   PeopleSessionIssue,
+  PeopleSessionPersistence,
   PeopleSignInRefusal,
 } from './people';
 

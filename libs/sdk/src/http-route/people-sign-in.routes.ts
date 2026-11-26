@@ -87,11 +87,12 @@ export class PeopleLoginPageRoute extends HttpRouteContext {
 /** Spends a one-time code for an HttpOnly, SameSite=Strict session cookie. */
 @HttpRoute({ method: 'POST', path: PEOPLE_LOGIN_PATH, auth: 'public' })
 export class PeopleLoginRoute extends HttpRouteContext {
-  handle(): HttpOutput {
+  async handle(): Promise<HttpOutput> {
     const fields = parseFormBody(this.request.body);
     const auth = this.get(LoopbackTokenAuth);
     const session = auth.exchangeCode(first(fields['code']), clientOf(this));
     if (!session.ok) throw refusal(session);
+    await auth.flush();
     const next = escapeHtml(nextPath(fields['next']));
     const cookie = peopleSessionCookie(session.cookieValue, {
       path: auth.options.cookiePath,
