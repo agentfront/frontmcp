@@ -5,7 +5,7 @@
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { ensureDir, mkdtemp, readFile, rm, writeFile } from '@frontmcp/utils';
+import { ensureDir, fileExists, mkdtemp, readFile, rm, writeFile } from '@frontmcp/utils';
 
 import { getFixtureDir, runFrontmcpCli } from './helpers/exec-cli';
 
@@ -18,6 +18,10 @@ function exportSkills(cwd: string, ...extra: string[]) {
     cwd,
     90_000,
   );
+}
+
+function exportTo(cwd: string, ...args: string[]) {
+  return runFrontmcpCli(['skills', 'export', '--from-entry', 'src/main.ts', '--all', ...args], undefined, cwd, 90_000);
 }
 
 describe('frontmcp skills export --from-entry', () => {
@@ -111,6 +115,71 @@ export default class Server {}
       expect(await readFile(path.join(projectDir, '.codex', 'skills', 'deploy-runbook', 'SKILL.md'))).toContain(
         'Ship on Thursdays.',
       );
+    }, 300_000);
+  });
+
+  describe("to a plugin's skills folder, with every folder beside a SKILL.md", () => {
+    let projectDir: string;
+    const pluginSkills = path.join('plugin', 'skills');
+
+    beforeAll(async () => {
+      projectDir = await mkdtemp(path.join(SCRATCH_ROOT, '.scratch-skills-export-dir-'));
+      const skillDir = path.join(projectDir, 'src', 'skills', 'lens-review');
+      for (const folder of ['references', 'rules']) await ensureDir(path.join(skillDir, folder));
+      await writeFile(path.join(skillDir, 'SKILL.md'), '# Lens review\n\nApply rules/naming.md.\n');
+      await writeFile(path.join(skillDir, 'references', 'lenses.md'), 'Every lens.\n');
+      await writeFile(path.join(skillDir, 'rules', 'naming.md'), 'Name lenses by focal length.\n');
+      await writeFile(
+        path.join(projectDir, 'src', 'main.ts'),
+        `import 'reflect-metadata';
+import { App, FrontMcp, LogLevel, Skill } from '@frontmcp/sdk';
+
+@Skill({
+  name: 'lens-review',
+  description: 'Review a lens catalog',
+  instructions: { file: './skills/lens-review/SKILL.md' },
+  resources: { references: './skills/lens-review/references' },
+})
+class LensReviewSkill {}
+
+@App({ name: 'lens', skills: [LensReviewSkill] })
+class LensApp {}
+
+@FrontMcp({ info: { name: 'Lens', version: '1.0.0' }, apps: [LensApp], logging: { level: LogLevel.Off } })
+export default class Server {}
+`,
+      );
+    });
+
+    afterAll(async () => {
+      await rm(projectDir, { recursive: true, force: true });
+    });
+
+    it('writes only the declared folders into --skills-dir by default, naming the folder it left out', async () => {
+      const result = exportTo(projectDir, '--skills-dir', pluginSkills);
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain(
+        'left out rules/ of lens-review: pass --all-folders to copy every folder beside its SKILL.md',
+      );
+      const copy = path.join(projectDir, pluginSkills, 'lens-review');
+      expect(await readFile(path.join(copy, 'references', 'lenses.md'))).toBe('Every lens.\n');
+      expect(await fileExists(path.join(copy, 'rules'))).toBe(false);
+      expect(await fileExists(path.join(projectDir, '.claude'))).toBe(false);
+    }, 300_000);
+
+    it('copies rules/ too with --all-folders, and --check guards that copy', async () => {
+      expect(exportTo(projectDir, '--skills-dir', pluginSkills, '--all-folders').exitCode).toBe(0);
+      const rule = path.join(projectDir, pluginSkills, 'lens-review', 'rules', 'naming.md');
+      expect(await readFile(rule)).toBe('Name lenses by focal length.\n');
+
+      const clean = exportTo(projectDir, '--skills-dir', pluginSkills, '--all-folders', '--check');
+      expect(clean.exitCode).toBe(0);
+      expect(clean.stdout).toContain('1 skill(s) in plugin/skills match src/main.ts.');
+
+      await writeFile(rule, 'Name lenses any way.\n');
+      const drifted = exportTo(projectDir, '--skills-dir', pluginSkills, '--all-folders', '--check');
+      expect(drifted.exitCode).toBe(1);
+      expect(drifted.stderr).toContain('plugin/skills/lens-review: modified: rules/naming.md differs from the source');
     }, 300_000);
   });
 });
