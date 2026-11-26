@@ -42,6 +42,7 @@ Configure how clients connect to your FrontMCP server — SSE, Streamable HTTP, 
       defaultTtlMs: 3600000,
     },
     distributedMode: 'auto', // boolean | 'auto'
+    sse: { heartbeatMs: 15_000 }, // keep-alive on open streams; 0 or false sends none
     eventStore: {
       enabled: true,
       provider: 'redis', // 'memory' | 'redis' | 'sqlite'
@@ -151,6 +152,22 @@ From 1.7.2 each session gets a view over the shared store scoped to its own sess
 
 Code that builds its own transport can import the stores and transports: `createEventStore`, `MemoryEventStore`, `RedisEventStore`, `RecreateableStreamableHTTPServerTransport`, `RecreateableSSEServerTransport` and `SSEServerTransport` come from `@frontmcp/sdk`, and from `@frontmcp/sdk/transport`, which re-exports them from the root entry. Up to 1.10 neither loaded them at runtime: the root did not export them, and the subpath shipped type declarations only (`MODULE_NOT_FOUND` under `require`, `ERR_MODULE_NOT_FOUND` under `import`).
 
+## Stream Keep-alive
+
+An open MCP stream sends an SSE comment while it has nothing else to send, so a proxy's idle timeout doesn't cut a long tool call that sends no progress: `: keep-alive` after `transport.sse.heartbeatMs` without a write, or, on the Streamable HTTP streams, `: keepalive` every `heartbeatMs`. Cloudflare (Tunnel or proxied DNS) closes after 100 seconds without a byte and answers `524`; load balancers often close after 60. SSE readers ignore comments, and a comment is only written between two events.
+
+```typescript
+transport: {
+  sse: { heartbeatMs: 20_000 }, // default 15_000; 0 or false sends none
+}
+```
+
+It covers the Streamable HTTP `POST` response stream and the standalone `GET` stream, the legacy SSE stream (`GET /sse`), and the 2026-07-28 request stream (a call that sent `progressToken` or `logLevel`) and `subscriptions/listen` stream, on Node and on Cloudflare Workers.
+
+- **Since 1.13.2.** Before it, the 2026-07-28 request stream and the legacy SSE stream sent nothing between events. The Streamable HTTP streams already sent `: keepalive` every 15 s, fixed.
+- A 2026-07-28 call that opted into no notifications is answered with one JSON object, so it has no stream to keep alive. For a long call behind a proxy, send a `progressToken`.
+- `events/stream` keeps its own heartbeat: `events.push.heartbeatMs`.
+
 ## Target-Specific Recommendations
 
 | Target                   | Recommended Preset | Persistence | Event Store |
@@ -205,6 +222,10 @@ curl -X POST http://localhost:3000/ -H 'Content-Type: application/json' -d '{"js
 - [ ] `maxEvents` and `ttlMs` are tuned for expected traffic volume
 - [ ] Event store is disabled for stateless-api deployments
 
+### Stream Keep-alive
+
+- [ ] `transport.sse.heartbeatMs` is below the idle timeout of every proxy in front of the server (Cloudflare: 100 s)
+
 ### Runtime Validation
 
 - [ ] Server starts without transport-related errors
@@ -220,6 +241,7 @@ curl -X POST http://localhost:3000/ -H 'Content-Type: application/json' -d '{"js
 | `distributedMode` startup error                                                                                                                       | Redis persistence is not configured                                                         | Add a `persistence.redis` block with valid connection details                                                                                                                                                         |
 | Clients lose state after reconnect                                                                                                                    | Event store is disabled or using in-memory provider behind a load balancer                  | Enable event store with `provider: 'redis'` for distributed deployments                                                                                                                                               |
 | Serverless function times out on SSE                                                                                                                  | Using a stateful preset on a serverless target                                              | Switch to the `'stateless-api'` preset                                                                                                                                                                                |
+| A long tool call fails with `524` behind Cloudflare, or is cut by a load balancer                                                                     | The stream stays quiet longer than the proxy's idle timeout                                 | Keep `transport.sse.heartbeatMs` below that timeout (default 15 s). A 2026-07-28 call needs a `progressToken` to be answered as a stream                                                                              |
 | Session not found after server restart                                                                                                                | In-memory sessions do not survive restarts                                                  | Enable Redis persistence with `distributedMode: true`                                                                                                                                                                 |
 | Streamable HTTP returns 404                                                                                                                           | Streamable HTTP is not enabled in the current preset                                        | Use `'modern'`, `'legacy'`, or `'full'` preset, or set `streamable: true` in custom config                                                                                                                            |
 | Startup warning `transport.sessionMode ... is ignored and will be removed in the next major` (or `session.sessionMode` / `session.platformDetection`) | The deprecated session options are set; nothing reads them, and the next major removes them | `sessionMode: 'stateless'` → `protocol: 'stateless-api'`; drop `sessionMode: 'stateful'`; `session.platformDetection` → `transport.platformDetection`. Provider tokens always stay server-side in `auth.tokenStorage` |

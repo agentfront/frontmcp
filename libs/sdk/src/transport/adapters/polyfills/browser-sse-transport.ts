@@ -5,6 +5,7 @@ export interface SSEServerTransportOptions {
   allowedOrigins?: string[];
   enableDnsRebindingProtection?: boolean;
   sessionId?: string;
+  heartbeatMs?: number;
 }
 
 export class SSEServerTransport {

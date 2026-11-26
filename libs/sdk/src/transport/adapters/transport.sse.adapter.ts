@@ -5,6 +5,7 @@ import { type ServerResponse } from '../../common';
 import { DEFAULT_ELICIT_TTL, type ElicitOptions, type ElicitResult } from '../../elicitation/elicitation.types';
 import { ElicitationTimeoutError, InternalMcpError, InvalidInputError } from '../../errors';
 import { type AuthenticatedServerRequest } from '../../server/server.types';
+import { streamHeartbeatMs } from '../stream-keep-alive';
 import { rpcRequest } from '../transport.error';
 import type { RecreateableSSEServerTransport } from './sse-transport';
 import { LocalTransportAdapter } from './transport.local.adapter';
@@ -43,6 +44,7 @@ export class TransportSSEAdapter extends LocalTransportAdapter<RecreateableSSESe
     const SseTransport = sseTransportClass();
     const transport = new SseTransport(`${this.scope.fullPath}/message`, res, {
       sessionId: sessionId,
+      heartbeatMs: streamHeartbeatMs(this.scope.metadata.transport),
     });
     this.configureTransportHandlers(transport);
     return transport;
@@ -67,6 +69,7 @@ export class TransportSSEAdapter extends LocalTransportAdapter<RecreateableSSESe
     const transport = new SseTransport(`${this.scope.fullPath}/message`, res, {
       sessionId: sessionId,
       initialEventId: lastEventId,
+      heartbeatMs: streamHeartbeatMs(this.scope.metadata.transport),
     });
     this.configureTransportHandlers(transport);
     return transport;
