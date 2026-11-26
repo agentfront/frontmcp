@@ -1121,6 +1121,30 @@ describe('TransportService', () => {
       expect(mockRedisSessionStore.exists).toHaveBeenCalledTimes(2);
     });
 
+    it('keeps serving without a new handover read until every timed-out read is answered', async () => {
+      service = new TransportService(mockScope as never, { redis: { host: 'localhost' }, sessionCheckTimeoutMs: 20 });
+      await service.ready;
+      await service.createTransporter('streamable-http', 'test-token', 'held', mockResponse as never);
+      const sessionEnded = service.sessionEndCheck('held') as () => Promise<boolean>;
+
+      const answers: Array<(exists: boolean) => void> = [];
+      const unanswered = () => new Promise<boolean>((resolve) => answers.push(resolve));
+      mockRedisSessionStore.exists.mockImplementationOnce(unanswered).mockImplementationOnce(unanswered);
+      expect(await Promise.all([sessionEnded(), sessionEnded()])).toEqual([false, false]);
+      expect(mockRedisSessionStore.exists).toHaveBeenCalledTimes(2);
+
+      answers[0](true);
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(await sessionEnded()).toBe(false);
+      expect(mockRedisSessionStore.exists).toHaveBeenCalledTimes(2);
+
+      answers[1](true);
+      await new Promise((resolve) => setImmediate(resolve));
+      mockRedisSessionStore.exists.mockResolvedValueOnce(false);
+      expect(await sessionEnded()).toBe(true);
+      expect(mockRedisSessionStore.exists).toHaveBeenCalledTimes(3);
+    });
+
     it('clears the timer when the store answers in time', async () => {
       service = new TransportService(mockScope as never, { redis: { host: 'localhost' } });
       await service.ready;
