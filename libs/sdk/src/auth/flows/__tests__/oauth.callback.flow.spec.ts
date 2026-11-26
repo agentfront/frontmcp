@@ -8,7 +8,7 @@
  */
 import 'reflect-metadata';
 
-import { generatePkceChallenge, SessionCredentialVault } from '@frontmcp/auth';
+import { generatePkceChallenge, SessionCredentialVault, type LoginRenderContext } from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
 import { MemoryStorageAdapter } from '@frontmcp/utils';
 
@@ -247,6 +247,31 @@ describe('OAuth Callback Flow — custom authenticate() (Checkpoint 3a)', () => 
     expect(String(output?.body)).not.toContain('value="wrong"');
     // No subject derived — login did not complete.
     expect(state.userSub).toBeUndefined();
+  });
+
+  it('gives a login.render page shown again the redirect_uri and the form-action source it needs (#1477)', async () => {
+    const authenticate = jest.fn().mockResolvedValue({ ok: false, message: 'Invalid API key' });
+    const render = jest.fn((ctx: LoginRenderContext) => `<html>${ctx.error}</html>`);
+    const scope = createMockScopeEntry({ auth: { mode: 'local', authenticate, login: { render } } as any });
+    const pendingAuthId = await seedPendingAuth(scope);
+
+    const input = createMockHttpRequest({
+      headers: { cookie: signinCookie(pendingAuthId) },
+      method: 'GET',
+      path: '/oauth/callback',
+      query: { pending_auth_id: pendingAuthId, apiKey: 'wrong' },
+    });
+    const flow = new OauthCallbackFlow(createCallbackMetadata(), input as any, scope, jest.fn(), new Map());
+    const { output } = await runFlowStages(flow, ['parseInput', 'validatePendingAuth']);
+
+    expect(output?.kind).toBe('html');
+    expect(render).toHaveBeenCalledWith(
+      expect.objectContaining({
+        redirectUri: 'http://127.0.0.1:54321/callback',
+        formTargets: ['http://127.0.0.1:54321'],
+      }),
+    );
+    expect((output as { headers: Record<string, string> }).headers['Content-Security-Policy']).toBeUndefined();
   });
 
   it('derives sub from the per-account subject strategy when no explicit sub is returned', async () => {

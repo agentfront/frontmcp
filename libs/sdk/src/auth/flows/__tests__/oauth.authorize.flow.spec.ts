@@ -798,6 +798,29 @@ describe('OAuth Authorize Flow', () => {
       expectOAuthHtmlPage(output, { contains: ['FULLY-CUSTOM-LOGIN'] });
     });
 
+    it('gives login.render the validated redirect_uri and the form-action source it needs (#1477)', async () => {
+      const render = jest.fn<string, [LoginRenderContext]>(() => '<html><body>custom</body></html>');
+      const scope = createMockScopeEntry({ auth: { mode: 'local', login: { render } } as never });
+      const params = createValidOAuthRequest();
+      const flow = new OauthAuthorizeFlow(createFlowMetadata(), createOAuthInput(params), scope, jest.fn(), new Map());
+
+      const { output } = await runFlowStages(flow, [
+        'parseInput',
+        'validateInput',
+        'checkIfAuthorized',
+        'prepareAuthorizationRequest',
+        'buildAuthorizeOutput',
+      ]);
+
+      const ctx = render.mock.calls[0][0];
+      expect(ctx.redirectUri).toBe('https://client.example.com/callback');
+      expect(ctx.formTargets).toEqual(['https://client.example.com']);
+      // The page's own markup: FrontMCP still sends it no CSP of its own.
+      const headers = (output as { headers: Record<string, string> }).headers;
+      expect(headers['Content-Security-Policy']).toBeUndefined();
+      expect(headers['Referrer-Policy']).toBe('same-origin');
+    });
+
     it('still renders the default login page when no login config is set (default preserved)', async () => {
       const scope = createMockScopeEntry({ auth: { mode: 'local' } as never });
       const metadata = createFlowMetadata();
