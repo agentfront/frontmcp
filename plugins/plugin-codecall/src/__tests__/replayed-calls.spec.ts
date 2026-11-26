@@ -6,7 +6,7 @@
 import CodeCallConfig from '../providers/code-call.config';
 import { argumentsHashOf } from '../runs/run-journal';
 import type { CodeCallJournalEntry } from '../runs/run-record.types';
-import { RunReplay, type RunReplaySource } from '../runs/run-replay';
+import { RunReplay, type RunReplayPending, type RunReplaySource } from '../runs/run-replay';
 import EnclaveService from '../services/enclave.service';
 import { AGENT_SCRIPT_RUNNER_EXPORT, createInterpreterRuntime } from '../services/runtime/interpreter.runtime';
 import { createNodeVmRuntime, runFeaturesOf } from '../services/runtime/node-vm.runtime';
@@ -29,7 +29,7 @@ const replayedCalls = [
   { callIndex: 0, toolName: 'orders.list', elapsedMs: 10 },
   { callIndex: 1, toolName: 'mail.send', elapsedMs: 7_000 },
 ];
-const resumed: RunReplaySource = {
+const resumed: RunReplaySource & { pending: RunReplayPending } = {
   ...timed,
   pending: { call: { position: 3, tool: 'mail.send', argumentsHash: argumentsHashOf({}), arrivedAtMs: 12_500 } },
 };
@@ -57,7 +57,7 @@ describe('the calls a resumed run replays', () => {
   });
 
   it('carry when the paused call first reached the host, never before the last replayed call', () => {
-    const early = { ...resumed, pending: { call: { ...resumed.pending!.call, arrivedAtMs: 6_000 } } };
+    const early = { ...resumed, pending: { call: { ...resumed.pending.call, arrivedAtMs: 6_000 } } };
 
     expect(new RunReplay(resumed).hooks.replayedCallsResumeAtMs).toBe(12_500);
     expect(new RunReplay(early).hooks.replayedCallsResumeAtMs).toBe(7_000);
