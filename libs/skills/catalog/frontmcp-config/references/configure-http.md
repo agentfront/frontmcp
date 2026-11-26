@@ -610,8 +610,9 @@ http: {
 | `headers`      | `Record<string, string>`                                                      | `X-Content-Type-Options: nosniff` | Sent on every response; a header named here replaces the default                                        |
 | `csp`          | `{ directives: Record<string, string \| string[]>; reportUri?; reportOnly? }` | none                              | `Content-Security-Policy` (or `-Report-Only`) on every response                                         |
 
-- Files only: a path that leaves `root` (`..`, encoded or not), a dotfile, and a directory without `index.html`
-  get `404`; a directory is never listed. The content type comes from the file's extension
+- Files only: a path that leaves `root` (`..`, encoded or not), a symlink under `root` that points outside it (for a
+  file or a directory's `index.html`; from 1.13.2), a dotfile, and a directory without `index.html` get `404`; a
+  symlink that stays under `root` is served, and a directory is never listed. The content type comes from the file's extension
   (`application/octet-stream` when unknown). Only `GET` and `HEAD` are served.
 - None of the MCP listener's headers apply (`securityHeaders`, `cors`, the `FRONTMCP_*` header env vars,
   `FRONTMCP_ALLOWED_HOSTS`): no `X-Frame-Options`, so the content can be framed — limit that with a

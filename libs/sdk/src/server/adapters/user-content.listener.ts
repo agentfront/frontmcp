@@ -4,7 +4,7 @@ import * as path from 'node:path';
 
 import express from 'express';
 
-import { stat } from '@frontmcp/utils';
+import { realpath, stat } from '@frontmcp/utils';
 
 import type { UserContentOptions } from '../../common/types/options/http/interfaces';
 import { UserContentConfigurationError } from '../../errors/transport.errors';
@@ -20,6 +20,30 @@ import {
 } from '../security/unix-socket-guard';
 
 const SERVER_DRAIN_MS = 5_000;
+
+/** Whether `candidate` is `root` or under it; both are absolute and normalized. */
+function isUnder(candidate: string, root: string): boolean {
+  const relative = path.relative(root, candidate);
+  return relative === '' || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+}
+
+/**
+ * Whether the file at `target`, or the `index.html` of the directory at `target`, resolves outside `realRoot`
+ * through a symlink. `send` follows symlinks, and its `..` and dotfile checks read the path as written.
+ */
+async function resolvesOutside(target: string, realRoot: string): Promise<boolean> {
+  const real = await realpath(target).catch(() => undefined);
+  // Nothing there: `send` answers 404.
+  if (real === undefined) return false;
+  if (!isUnder(real, realRoot)) return true;
+  const isDirectory = await stat(real).then(
+    (stats) => stats.isDirectory(),
+    () => false,
+  );
+  if (!isDirectory) return false;
+  const index = await realpath(path.join(real, 'index.html')).catch(() => undefined);
+  return index !== undefined && !isUnder(index, realRoot);
+}
 
 type HostValidation = ReturnType<typeof createHostValidationMiddleware>;
 
@@ -50,8 +74,9 @@ export class UserContentListener {
       () => false,
     );
     if (!isDirectory) throw new UserContentConfigurationError(`root ${root} is not a directory`);
+    const realRoot = await realpath(root);
 
-    const server = http.createServer(this.createApp(root, this.responseHeaders()));
+    const server = http.createServer(this.createApp(root, realRoot, this.responseHeaders()));
     this.httpServer = server;
     server.keepAliveTimeout = 75_000;
 
@@ -111,7 +136,7 @@ export class UserContentListener {
     }
   }
 
-  private createApp(root: string, headers: Record<string, string>): express.Application {
+  private createApp(root: string, realRoot: string, headers: Record<string, string>): express.Application {
     const app = express();
     app.disable('x-powered-by');
     app.use((_req, res, next) => {
@@ -123,6 +148,7 @@ export class UserContentListener {
       if (!validate) return next();
       return validate(req as never, res as never, next);
     }) as express.RequestHandler);
+    app.use(this.confinedToRoot(root, realRoot));
     // `send` refuses `..` and dotfiles, never lists a directory, and sets Content-Type from the file's extension.
     app.use(express.static(root, { dotfiles: 'ignore', fallthrough: true }));
     app.use((_req: express.Request, res: express.Response) => {
@@ -132,6 +158,31 @@ export class UserContentListener {
       res.status(500).type('text/plain').send('Internal Server Error');
     });
     return app;
+  }
+
+  /**
+   * A 404 for a file, or a directory's `index.html`, that a symlink under `root` points outside it; a symlink that
+   * stays under `root` is served. The path is checked when the request comes in: a process that can replace entries
+   * under `root` while the file is being served can still race it.
+   */
+  private confinedToRoot(root: string, realRoot: string): express.RequestHandler {
+    return (req, res, next) => {
+      if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+      let pathname: string;
+      try {
+        pathname = decodeURIComponent(req.path);
+      } catch {
+        // `send` answers a malformed path itself.
+        return next();
+      }
+      const target = path.join(root, pathname);
+      // A null byte or `..` out of root: `send` refuses those as written.
+      if (pathname.includes('\0') || !isUnder(target, root)) return next();
+      resolvesOutside(target, realRoot).then(
+        (outside) => (outside ? res.status(404).type('text/plain').send('Not Found') : next()),
+        next,
+      );
+    };
   }
 
   /** A routable bind cannot know the names it is reached by, so without `allowedHosts` it warns instead. */

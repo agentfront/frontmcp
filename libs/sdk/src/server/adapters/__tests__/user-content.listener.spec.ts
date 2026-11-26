@@ -47,6 +47,8 @@ function request(
   });
 }
 
+const posixIt = process.platform === 'win32' ? it.skip : it;
+
 describe('UserContentListener', () => {
   let directory: string;
   let root: string;
@@ -154,6 +156,40 @@ describe('UserContentListener', () => {
         expect(res.body).not.toContain('a.txt');
         expect(res.body).not.toContain('frame.html');
       }
+    });
+
+    posixIt.each([
+      [
+        'a file symlink',
+        () => fs.symlinkSync(path.join(directory, 'outside.txt'), path.join(root, 'download')),
+        '/download',
+      ],
+      ['a directory symlink', () => fs.symlinkSync(directory, path.join(root, 'up')), '/up/outside.txt'],
+      [
+        "a directory's index.html symlink",
+        () => {
+          fs.mkdirSync(path.join(root, 'docs'));
+          fs.symlinkSync(path.join(directory, 'outside.txt'), path.join(root, 'docs', 'index.html'));
+        },
+        '/docs/',
+      ],
+    ])('never serves a file outside root through %s', async (_label, link, requestPath) => {
+      link();
+      const target = await start();
+
+      const res = await request(target, { path: requestPath });
+
+      expect(res.status).toBe(404);
+      expect(res.body).not.toContain('outside the root');
+    });
+
+    posixIt('serves a symlink that stays inside root', async () => {
+      fs.symlinkSync(path.join(root, 'frame.html'), path.join(root, 'latest.html'));
+      fs.symlinkSync(path.join(root, 'site'), path.join(root, 'home'));
+      const target = await start();
+
+      expect((await request(target, { path: '/latest.html' })).body).toBe('<p>frame</p>');
+      expect((await request(target, { path: '/home/' })).body).toBe('<p>site</p>');
     });
 
     it("serves a directory's index.html", async () => {
@@ -324,8 +360,6 @@ describe('UserContentListener', () => {
       await second.stop(0);
     });
   });
-
-  const posixIt = process.platform === 'win32' ? it.skip : it;
 
   describe('on a Unix socket', () => {
     posixIt('serves files owner-only, with no Host check', async () => {
