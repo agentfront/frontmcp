@@ -1,8 +1,9 @@
 /**
  * openDatabase
  *
- * Shared helper to open a SQLite database: with the driver set by `useSqliteDriver()`,
- * or else with better-sqlite3, which needs two things done for every file-backed store:
+ * Shared helper to open a SQLite database: with the driver set by `useSqliteDriver()`, or else with
+ * better-sqlite3 (node:sqlite when it is not installed, or with `FRONTMCP_SQLITE_DRIVER=node:sqlite`),
+ * which needs two things done for every file-backed store:
  *
  * 1. **Parent-directory creation.** better-sqlite3 will NOT create missing
  *    parent directories — opening `~/.frontmcp/data/auth.sqlite` when
@@ -14,10 +15,17 @@
 
 import type Database from 'better-sqlite3';
 
-import { dirname, ensureDirSync } from '@frontmcp/utils';
+import { dirname, ensureDirSync, getEnv } from '@frontmcp/utils';
 
 import { loadBetterSqlite3 } from './better-sqlite3-loader';
+import { hasNodeSqlite, openNodeSqlite } from './node-sqlite';
 import { currentSqliteDriver, type SqliteDatabase, type SqliteDriver } from './sqlite-driver';
+
+/** Picks the SQLite library when no driver is set: `better-sqlite3` or `node:sqlite`. */
+const SQLITE_DRIVER_ENV = 'FRONTMCP_SQLITE_DRIVER';
+
+/** node:sqlite's `errcode` for SQLITE_BUSY, in the low byte of its extended codes. */
+const SQLITE_BUSY_CODE = 5;
 
 /** Special better-sqlite3 path that opens a transient in-memory database. */
 const MEMORY_PATH = ':memory:';
@@ -38,7 +46,8 @@ export interface BusyRetryOptions {
 }
 
 export function isBusyError(err: unknown): boolean {
-  const code = (err as { code?: unknown } | null)?.code;
+  const { code, errcode } = (err ?? {}) as { code?: unknown; errcode?: unknown };
+  if (code === 'ERR_SQLITE_ERROR') return typeof errcode === 'number' && (errcode & 0xff) === SQLITE_BUSY_CODE;
   return code === 'SQLITE_BUSY' || code === 'SQLITE_BUSY_RECOVERY' || code === 'SQLITE_BUSY_SNAPSHOT';
 }
 
@@ -65,43 +74,63 @@ export function withBusyRetry<T>(operation: () => T, options: BusyRetryOptions =
   }
 }
 
-/** better-sqlite3 as a driver, once the parent directory of `path` exists: better-sqlite3 does not create it. */
-function builtInDriver(path: string, storeName: string): SqliteDriver {
-  const BetterSqlite3 = loadBetterSqlite3();
+/** Whether `error` is better-sqlite3 itself missing, not a broken install of it. */
+function isBetterSqlite3Missing(error: unknown): boolean {
+  return (
+    (error as { code?: unknown } | null)?.code === 'MODULE_NOT_FOUND' &&
+    String((error as Error).message).includes("'better-sqlite3'")
+  );
+}
 
-  // better-sqlite3 does not create parent dirs. Skip for in-memory and for
-  // anonymous temp/disk databases (the empty-string path).
-  if (path !== MEMORY_PATH && path !== '') {
-    const dir = dirname(path);
-    // dirname('foo.sqlite') === '.'; nothing to create in that case.
-    if (dir && dir !== '.') {
-      try {
-        ensureDirSync(dir);
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        throw new Error(`${storeName}: failed to create directory "${dir}" for database "${path}": ${message}`, {
-          cause: err,
-        });
-      }
-    }
+/** better-sqlite3, or node:sqlite when `FRONTMCP_SQLITE_DRIVER` asks for it or better-sqlite3 is not installed. */
+function defaultDriver(storeName: string): SqliteDriver {
+  const choice = getEnv(SQLITE_DRIVER_ENV);
+  if (choice === 'node:sqlite') return openNodeSqlite;
+  if (choice && choice !== 'better-sqlite3') {
+    throw new Error(`${storeName}: ${SQLITE_DRIVER_ENV} must be "better-sqlite3" or "node:sqlite", not "${choice}"`);
   }
+  try {
+    const BetterSqlite3 = loadBetterSqlite3();
+    return (databasePath) => new BetterSqlite3(databasePath);
+  } catch (error: unknown) {
+    if (choice || !isBetterSqlite3Missing(error) || !hasNodeSqlite()) throw error;
+    return openNodeSqlite;
+  }
+}
 
-  return (databasePath) => new BetterSqlite3(databasePath);
+/** Creates the parent directory of `path`: neither better-sqlite3 nor node:sqlite does. */
+function ensureDatabaseDirectory(path: string, storeName: string): void {
+  // Skip for in-memory and for anonymous temp/disk databases (the empty-string path).
+  if (path === MEMORY_PATH || path === '') return;
+  const dir = dirname(path);
+  // dirname('foo.sqlite') === '.'; nothing to create in that case.
+  if (!dir || dir === '.') return;
+  try {
+    ensureDirSync(dir);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`${storeName}: failed to create directory "${dir}" for database "${path}": ${message}`, {
+      cause: err,
+    });
+  }
 }
 
 /**
  * Open (or create) the database at `path`: with the driver set by `useSqliteDriver()`, or else with
- * better-sqlite3, creating the parent directory if necessary.
+ * better-sqlite3 (node:sqlite when it is not installed, or with `FRONTMCP_SQLITE_DRIVER=node:sqlite`),
+ * creating the parent directory if necessary; `nodeSqlite()` creates it too.
  *
  * @param path - Filesystem path to the `.sqlite` file, or `:memory:`.
  * @param storeName - Name used in error messages (e.g. `'SqliteKvStore'`).
  * @param options - `busyTimeoutMs` (set before anything else touches the file) and `walMode`.
- * @returns An open better-sqlite3 `Database` instance. With a driver set by `useSqliteDriver()` it is the
- *   driver's database, which has the members of `SqliteDatabase` only.
+ * @returns An open better-sqlite3 `Database` instance. Opened by another driver (node:sqlite, or one set by
+ *   `useSqliteDriver()`), it is that driver's database, which has the members of `SqliteDatabase` only.
  * @throws Error wrapping the underlying failure with the store name and path.
  */
 export function openDatabase(path: string, storeName: string, options: OpenDatabaseOptions = {}): Database.Database {
-  const open = currentSqliteDriver() ?? builtInDriver(path, storeName);
+  const driver = currentSqliteDriver();
+  const open = driver ?? defaultDriver(storeName);
+  if (!driver || driver === openNodeSqlite) ensureDatabaseDirectory(path, storeName);
 
   let db: SqliteDatabase;
   try {

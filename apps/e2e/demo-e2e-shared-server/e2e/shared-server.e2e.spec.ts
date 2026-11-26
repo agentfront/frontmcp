@@ -59,6 +59,17 @@ describe('a shared local server', () => {
     240_000,
   );
 
+  it('starts one server for two sessions with the start lock on node:sqlite', async () => {
+    const onNodeSqlite = { FRONTMCP_SQLITE_DRIVER: 'node:sqlite' };
+    const first = shared.start('unix', onNodeSqlite);
+    const second = shared.start('unix', onNodeSqlite);
+
+    const [firstServer, secondServer] = await Promise.all([serverPidOf(first), serverPidOf(second)]);
+
+    expect(firstServer).toBe(secondServer);
+    expect(shared.startedServers()).toEqual([firstServer]);
+  }, 240_000);
+
   it('keeps one server when the session that started it dies while the server is slow to start', async () => {
     const slow = { SHARED_BOOT_DELAY_MS: '14000' };
     const first = shared.start('http', slow);

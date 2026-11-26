@@ -2,12 +2,12 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import type Database from 'better-sqlite3';
-
 import { escapeGlob, MemoryStorageAdapter, StorageOperationError, StorageTTLError } from '@frontmcp/utils';
 
+import { openRawDatabase } from '../__test-utils__/raw-database';
 import { loadBetterSqlite3 } from '../better-sqlite3-loader';
-import { useSqliteDriver } from '../sqlite-driver';
+import { isBusyError } from '../open-database';
+import { useSqliteDriver, type SqliteDatabase } from '../sqlite-driver';
 import { SqliteKvStore } from '../sqlite-kv.store';
 import { SqliteStorageAdapter } from '../sqlite-storage.adapter';
 
@@ -435,10 +435,10 @@ describe('SqliteStorageAdapter', () => {
   });
 
   describe('atomic across connections', () => {
-    let foreign: Database.Database;
+    let foreign: SqliteDatabase;
 
     beforeEach(() => {
-      foreign = new (loadBetterSqlite3())(dbPath);
+      foreign = openRawDatabase(dbPath);
       foreign.pragma('busy_timeout = 0');
     });
 
@@ -454,7 +454,7 @@ describe('SqliteStorageAdapter', () => {
           foreign.prepare("INSERT OR REPLACE INTO kv (key, value) VALUES ('foreign', 'x')").run();
           seen.outcome = 'wrote';
         } catch (error) {
-          seen.outcome = (error as { code?: string }).code;
+          seen.outcome = isBusyError(error) ? 'SQLITE_BUSY' : (error as { code?: string }).code;
         }
         return original(key) as never;
       });

@@ -31,12 +31,12 @@ This skill covers setting up session storage in FrontMCP. Sessions track authent
 
 ## Storage Providers
 
-| Provider    | Use Case                                   | Persistence | Package Required                              |
-| ----------- | ------------------------------------------ | ----------- | --------------------------------------------- |
-| `memory`    | Development/testing                        | None        | None (default)                                |
-| `redis`     | Node.js production                         | Yes         | `ioredis`                                     |
-| `vercel-kv` | Vercel deployments                         | Yes         | `@vercel/kv`                                  |
-| `sqlite`    | Single-node persistent (CLI / Docker / VM) | Yes         | `@frontmcp/storage-sqlite` + `better-sqlite3` |
+| Provider    | Use Case                                   | Persistence | Package Required                                       |
+| ----------- | ------------------------------------------ | ----------- | ------------------------------------------------------ |
+| `memory`    | Development/testing                        | None        | None (default)                                         |
+| `redis`     | Node.js production                         | Yes         | `ioredis`                                              |
+| `vercel-kv` | Vercel deployments                         | Yes         | `@vercel/kv`                                           |
+| `sqlite`    | Single-node persistent (CLI / Docker / VM) | Yes         | `@frontmcp/storage-sqlite` (`better-sqlite3` optional) |
 
 Never use the memory store in production. Sessions are lost on process restart, which breaks authentication for all connected clients.
 
