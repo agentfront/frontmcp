@@ -511,6 +511,10 @@ export interface LocalDcrConfig {
    * Once reached, further dynamic registrations are rejected (existing clients,
    * including confidential ones, are preserved — never evicted); `0` disables
    * dynamic registration. Pre-registered `clients` are exempt. Default: 1000.
+   *
+   * With a Redis or SQLite `tokenStorage`, registered clients are kept there too, for a refresh token's lifetime
+   * after their registration or last token grant, so a restart or another instance on it knows them. The cap
+   * counts the clients this process registered; clients read from the storage do not count.
    */
   maxDynamicClients?: number;
 }

@@ -257,6 +257,11 @@ export class HooksThatCompile {
   prompt(ctx: FlowCtxOf<'prompts:get-prompt'>) {
     return ctx.promptName;
   }
+
+  @OAuthRegisterHook.Did('registerClient')
+  registeredClient(ctx: FlowCtxOf<'oauth:register'>) {
+    return [ctx.state.registered?.client_id, ctx.state.registered?.redirect_uris];
+  }
 }
 
 @Tool({ name: 'typed-ctx', inputSchema: {} })

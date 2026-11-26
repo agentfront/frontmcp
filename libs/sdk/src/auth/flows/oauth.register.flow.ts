@@ -18,7 +18,10 @@
  * allowed to register: 400 `invalid_redirect_uri` for a redirect URI that is not a URL, 400
  * `invalid_client_metadata` for anything else (`redirect_uris` missing or empty, an unknown value).
  * Registered clients are stored on the per-instance {@link DcrClientRegistry}
- * (LocalPrimaryAuth), so the authorize/token flows can validate them.
+ * (LocalPrimaryAuth), so the authorize/token flows can validate them, and in a
+ * Redis or SQLite `tokenStorage` too, so a restart or another instance on it
+ * knows them (#1478). A `Did('registerClient')` hook reads the accepted
+ * registration from `ctx.state.registered`.
  */
 
 /**
@@ -88,6 +91,8 @@ const stateSchema = z.object({
   body: registrationRequestSchema,
   /** Whether DCR is active (explicit `dcr.enabled` or the dev/prod default). */
   dcrEnabled: z.boolean(),
+  /** The registration the server accepted, set by `registerClient`: a confidential client's `client_secret` included. */
+  registered: z.custom<RegisteredClient>().optional(),
 });
 
 const plan = {
@@ -360,6 +365,8 @@ export default class OauthRegisterFlow extends FlowBase<typeof name> {
       );
       return;
     }
+    await this.localAuth.dcrClientRegistry.persist(this.registered);
+    this.state.set('registered', this.registered);
   }
 
   @Stage('respondRegistration')

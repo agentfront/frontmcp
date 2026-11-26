@@ -725,6 +725,16 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
         providerIssuer: (providerId) => this.providerAuthorizationServer(providerId),
       });
       this.consentStoreImpl = new StorageConsentStore(adapter);
+      // Dynamically registered clients are kept next to the tokens issued to them (#1478)
+      if (this.isDcrEnabled()) {
+        this.dcrClientRegistryImpl.useStore(adapter, {
+          onError: (operation, error) =>
+            this.logger.warn(
+              `Dynamic client registration: cannot ${operation} a client in the token storage, so only this ` +
+                `process knows it: ${String(error)}`,
+            ),
+        });
+      }
 
       const backend: 'sqlite' | 'redis' | 'unknown' = isSqliteTokenStorage(this.tokenStorage)
         ? 'sqlite'
@@ -1178,6 +1188,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     // unregistered / CIMD clients ('none' / 'unknown') carry no secret and are
     // unaffected; a registered confidential client MUST present a matching
     // secret (timing-safe) — previously the secret was never checked.
+    await this.dcrClientRegistryImpl.load(clientId);
     if (this.dcrClientRegistryImpl.verifyClientSecret(clientId, clientSecret) === 'invalid') {
       this.logger.warn('Client authentication failed at token endpoint (authorization_code)');
       return { error: 'invalid_client', error_description: 'Client authentication failed' };
@@ -1296,6 +1307,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       providerTokensId = await this.moveProviderTokens(`pending:${codeRecord.pendingAuthId}`, accessToken);
     }
 
+    await this.dcrClientRegistryImpl.touch(clientId);
     this.logger.info(`Tokens issued for user: ${user.sub}`);
     const tokens: TokenResponse = {
       access_token: accessToken,
@@ -1338,8 +1350,8 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   /**
    * Refuse a grant the client did not declare in its `grant_types` (RFC 7591): in its registration, its
    * `dcr.clients` entry or its client ID metadata document. A client that declared nothing (an unregistered
-   * id under `requireRegisteredClients: false`, or one registered on another instance or before a restart)
-   * is not limited, and gets `grantTypes: undefined` and `authMethod: undefined`. A CIMD client whose document
+   * id under `requireRegisteredClients: false`, or one registered on another instance or before a restart
+   * with a memory token storage) is not limited, and gets `grantTypes: undefined` and `authMethod: undefined`. A CIMD client whose document
    * declares `private_key_jwt` must also present a valid client assertion.
    */
   private async checkDeclaredGrant(
@@ -1445,6 +1457,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   ): Promise<TokenResponse | { error: string; error_description: string }> {
     // Authenticate confidential clients on refresh too (RFC 6749 §6): a stolen
     // refresh token must not be redeemable with just the public client_id.
+    await this.dcrClientRegistryImpl.load(clientId);
     if (this.dcrClientRegistryImpl.verifyClientSecret(clientId, clientSecret) === 'invalid') {
       this.logger.warn('Client authentication failed at token endpoint (refresh_token)');
       return { error: 'invalid_client', error_description: 'Client authentication failed' };
@@ -1547,6 +1560,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       }
     }
 
+    await this.dcrClientRegistryImpl.touch(clientId);
     this.logger.info(`Tokens refreshed for user: ${user.sub}`);
 
     return {

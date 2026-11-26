@@ -446,6 +446,7 @@ export {
   type RegisteredClient,
   type PreRegisteredClientInput,
   type DcrRegistryConfig,
+  type DcrClientStoreOptions,
   clientAuthMethodToRecord,
   meetsRecordedClientAuth,
 } from './authorization';
