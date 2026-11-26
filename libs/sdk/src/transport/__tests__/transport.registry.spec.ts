@@ -1102,6 +1102,25 @@ describe('TransportService', () => {
       expect(transport.destroy).toHaveBeenCalledWith('the session was deleted');
     });
 
+    it("sends no new handover read while the last one is unanswered, and reads again once it's answered", async () => {
+      service = new TransportService(mockScope as never, { redis: { host: 'localhost' }, sessionCheckTimeoutMs: 20 });
+      await service.ready;
+      await service.createTransporter('streamable-http', 'test-token', 'held', mockResponse as never);
+      const sessionEnded = service.sessionEndCheck('held') as () => Promise<boolean>;
+
+      let answer: (exists: boolean) => void = () => undefined;
+      mockRedisSessionStore.exists.mockImplementationOnce(() => new Promise<boolean>((resolve) => (answer = resolve)));
+      expect(await sessionEnded()).toBe(false);
+      expect(await sessionEnded()).toBe(false);
+      expect(mockRedisSessionStore.exists).toHaveBeenCalledTimes(1);
+
+      answer(true);
+      await new Promise((resolve) => setImmediate(resolve));
+      mockRedisSessionStore.exists.mockResolvedValueOnce(false);
+      expect(await sessionEnded()).toBe(true);
+      expect(mockRedisSessionStore.exists).toHaveBeenCalledTimes(2);
+    });
+
     it('clears the timer when the store answers in time', async () => {
       service = new TransportService(mockScope as never, { redis: { host: 'localhost' } });
       await service.ready;
