@@ -99,6 +99,24 @@ describe('people sessions across a restart', () => {
     expect(await openBoard(other, cookie)).toBe(401);
   });
 
+  it('end on every server on the store when the person signs out on one of them', async () => {
+    const config = {
+      sqlite: { path: join(dir, 'instances.sqlite') },
+      http: { auth: { people: 'loopback-token' as const } },
+    };
+    const first = await start(config);
+    const second = await start(config);
+    const cookie = await signIn(first);
+    expect(await openBoard(second, cookie)).toBe(200);
+
+    const people = (second.instance.getScopes()[0] as Scope).httpRouteTable?.people;
+    people?.endSession(cookie.slice(cookie.indexOf('=') + 1));
+    await people?.flush();
+
+    expect(await openBoard(second, cookie)).toBe(401);
+    expect(await openBoard(first, cookie)).toBe(401);
+  });
+
   it('end with the process under store: false, as without a store', async () => {
     const config = {
       sqlite: { path: join(dir, 'memory.sqlite') },

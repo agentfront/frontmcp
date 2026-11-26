@@ -32,6 +32,8 @@ interface StoredSecret {
   digest: Uint8Array;
   expiresAt: number;
   subject?: string;
+  /** A session the store has taken, so the store says whether it is still signed in. */
+  kept?: boolean;
 }
 
 /** A signed-out session the store may still hold: refused here until the store removes it, or it would have expired. */
@@ -146,28 +148,32 @@ export class LoopbackTokenAuth {
     this.failures.delete(client);
     const cookieValue = newSecret();
     const expiresAt = Date.now() + this.options.sessionTtlMs;
-    const digest = sha256(cookieValue);
-    this.sessions = [...unexpired(this.sessions), { digest, expiresAt, ...(subject ? { subject } : {}) }];
-    this.keep(digest, toSession({ expiresAt, subject }));
+    const session: StoredSecret = { digest: sha256(cookieValue), expiresAt, ...(subject ? { subject } : {}) };
+    this.sessions = [...unexpired(this.sessions), session];
+    this.keep(session);
     return { ok: true, cookieValue, expiresAt };
   }
 
-  /** A session this process made; {@link findSession} also finds one kept in the store. */
+  /**
+   * A session this process made, from memory only; {@link findSession} also finds one kept in the store, and sees a
+   * sign-out by another process on it.
+   */
   verifySession(presented: string | undefined): PeopleSession | undefined {
-    if (!presented) return undefined;
-    this.sessions = unexpired(this.sessions);
-    const session = this.sessions.find((stored) => matches(presented, stored.digest));
+    const session = this.knownSession(presented);
     return session ? toSession(session) : undefined;
   }
 
   /**
-   * A session this process made, else one kept in the store; a store that cannot be read finds none. A session signed
-   * out here is refused while the store still holds it.
+   * A session this process made, else one kept in the store. With a store, the store is read every time, so a session
+   * that another process on it signed out ends here too. A store that cannot be read finds none, except a session this
+   * process made, which stays signed in until the store answers again. A session signed out here is refused while the
+   * store still holds it.
    */
   async findSession(presented: string | undefined): Promise<PeopleSession | undefined> {
-    const known = this.verifySession(presented);
+    const known = this.knownSession(presented);
     const store = this.persistence?.store;
-    if (known || !presented || !store) return known;
+    // Without a store, or for a session the store did not take, only this process knows the session.
+    if (!presented || !store || (known && !known.kept)) return known && toSession(known);
     const key = sessionKey(sha256(presented));
     if (this.isRevoked(key)) {
       this.removeKept(key);
@@ -178,11 +184,16 @@ export class LoopbackTokenAuth {
       raw = await store.get(key);
     } catch (error) {
       this.report('a kept people session could not be read', error);
-      return undefined;
+      return known && toSession(known);
     }
     if (this.isRevoked(key)) return undefined;
     const session = keptSession(raw);
-    return session && session.expiresAt > Date.now() ? session : undefined;
+    const signedIn = session !== undefined && session.expiresAt > Date.now();
+    if (!known) return signedIn ? session : undefined;
+    if (signedIn) return toSession(known);
+    // Another process on the store signed it out.
+    this.sessions = this.sessions.filter((stored) => stored !== known);
+    return undefined;
   }
 
   /**
@@ -216,12 +227,23 @@ export class LoopbackTokenAuth {
     await Promise.all(this.writes);
   }
 
-  private keep(digest: Uint8Array, session: PeopleSession): void {
+  private knownSession(presented: string | undefined): StoredSecret | undefined {
+    if (!presented) return undefined;
+    this.sessions = unexpired(this.sessions);
+    return this.sessions.find((stored) => matches(presented, stored.digest));
+  }
+
+  private keep(session: StoredSecret): void {
     const store = this.persistence?.store;
     if (!store) return;
     const ttlSeconds = Math.max(1, Math.ceil((session.expiresAt - Date.now()) / 1000));
-    const write = store.set(sessionKey(digest), JSON.stringify(session), { ttlSeconds });
-    this.track(write, 'a people session could not be kept, so a restart ends it');
+    const write = store.set(sessionKey(session.digest), JSON.stringify(toSession(session)), { ttlSeconds });
+    this.track(
+      write.then(() => {
+        session.kept = true;
+      }),
+      'a people session could not be kept, so a restart ends it',
+    );
   }
 
   /** Removes a signed-out session from the store, unless a removal is already on its way; refused here until then. */

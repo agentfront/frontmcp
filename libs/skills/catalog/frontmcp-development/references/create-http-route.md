@@ -249,6 +249,14 @@ An invalid value fails startup with `InvalidPeopleAuthOptionsError` (`http.auth.
   is kept, with its expiry and subject, under `mcp:people:<info.name>:`, so two servers sharing a store never share a
   sign-in. Without a store, or with `store: false`, sessions live in memory and a restart signs everyone out; startup
   warns about that unless `store: false` is set. A store that cannot be opened is logged and leaves sessions in memory.
+- `this.get(LoopbackTokenAuth).endSession(cookieValue)` signs a person out. With a store, each people request and each
+  SSE check reads the store, so a sign-out on one process ends the session on every process that shares the store,
+  from its next request (from 1.13.2). The limits, all while the store fails: a process that cannot read the store
+  keeps the sessions it made itself signed in, and refuses the others; a session the store could not keep lives only
+  in the process that made it, so only that process can sign it out; and when the store cannot remove a signed-out
+  session, the process that signed it out refuses it at once and tries the removal again (when the cookie comes back,
+  at the next sign-in, and at shutdown), but other processes, and that process after a restart, accept it until the
+  removal succeeds or the session expires.
 - The token and the codes always live in memory: a restart prints a new token, and an unspent code stops working. All
   the scopes of one server share one token and one set of sessions.
 - Cookies are not isolated by port: another server on `localhost` receives `frontmcp_people`, and two FrontMCP servers

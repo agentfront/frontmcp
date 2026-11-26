@@ -447,6 +447,36 @@ describe('LoopbackTokenAuth with a session store (#1355)', () => {
     });
   });
 
+  describe('a session this process made, on a store other processes share', () => {
+    it('ends here once another process on the store signs it out', async () => {
+      const cookieValue = await keptSignIn();
+      const other = new LoopbackTokenAuth(DEFAULTS, { store });
+
+      other.endSession(cookieValue);
+      await other.flush();
+
+      expect(await auth.findSession(cookieValue)).toBeUndefined();
+      expect(auth.verifySession(cookieValue)).toBeUndefined();
+    });
+
+    it('stays signed in while the store cannot be read, and says so', async () => {
+      const onError = jest.fn();
+      auth = new LoopbackTokenAuth(DEFAULTS, { store, onError });
+      const cookieValue = await keptSignIn();
+      store.get.mockRejectedValueOnce(new Error('store down'));
+
+      expect(await auth.findSession(cookieValue)).toEqual({ expiresAt: 1_000_000 + 43_200_000 });
+      expect(onError).toHaveBeenCalledWith(expect.stringContaining('could not be read'), expect.any(Error));
+    });
+
+    it('stays signed in when the store could not keep it, as it lives only here', async () => {
+      store.set.mockRejectedValueOnce(new Error('store down'));
+      const cookieValue = await keptSignIn();
+
+      expect(await auth.findSession(cookieValue)).toEqual({ expiresAt: 1_000_000 + 43_200_000 });
+    });
+  });
+
   it('finds no kept session once it has expired', async () => {
     const cookieValue = await keptSignIn();
 
