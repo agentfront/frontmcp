@@ -81,7 +81,8 @@ export async function askPersistentQuestion<S extends ZodType>(
     };
     if (signal?.aborted) throw await putBack();
     const result = await delivered(taken.answer, schema);
-    if (signal?.aborted || (await sessionEnded?.())) throw await putBack();
+    const ended = await sessionEnded?.();
+    if (ended || signal?.aborted) throw await putBack();
     return result;
   };
 

@@ -249,6 +249,30 @@ describe('askPersistentQuestion', () => {
     expect(await store.list(SUBJECT)).toEqual([]);
   });
 
+  it('leaves a waiting answer for the next call when its call is cancelled while its session is checked', async () => {
+    const question = await answeredQuestion();
+    const controller = new AbortController();
+    const sessionEnded = async () => {
+      controller.abort();
+      return false;
+    };
+
+    await expect(
+      askPersistentQuestion(
+        { store, subject: SUBJECT, signal: controller.signal, sessionEnded },
+        'Deploy v2?',
+        schema,
+        {
+          key: 'deploy',
+          ttlMs: DAY_MS,
+          waitMs: 10_000,
+        },
+      ),
+    ).rejects.toThrow(QuestionPendingError);
+
+    await expectAnswerKept(question.expiresAt);
+  });
+
   it('does not wait at all for a call already aborted', async () => {
     const controller = new AbortController();
     controller.abort();

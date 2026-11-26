@@ -288,6 +288,32 @@ describe('RedisTransportBus', () => {
       }
     });
 
+    it('answers by the deadline when Redis never answers a read of the entry', async () => {
+      jest.useFakeTimers();
+      try {
+        const logger = { info: jest.fn(), warn: jest.fn(), debug: jest.fn() };
+        bus = new RedisTransportBus(redis, 'node-1', { logger });
+        redis.hgetall
+          .mockResolvedValueOnce(entry({ nodeId: 'node-2' }))
+          .mockImplementation(() => new Promise<never>(() => undefined));
+        let resolved = false;
+        const destroyed = bus.destroyRemote(createKey()).then(() => (resolved = true));
+
+        await jest.advanceTimersByTimeAsync(4_900);
+        expect(resolved).toBe(false);
+        await jest.advanceTimersByTimeAsync(100);
+        await destroyed;
+
+        expect(redis.hgetall).toHaveBeenCalledTimes(2);
+        expect(logger.warn).toHaveBeenCalledWith(
+          '[TransportBus] The session owner did not release the session in time',
+          expect.objectContaining({ ownerNodeId: 'node-2' }),
+        );
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
     it('does not wait when no node listens on the owner channel', async () => {
       redis.hgetall.mockResolvedValue(entry({ nodeId: 'node-2' }));
       redis.publish.mockResolvedValueOnce(0);

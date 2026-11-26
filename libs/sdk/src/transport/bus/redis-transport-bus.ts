@@ -249,11 +249,22 @@ export class RedisTransportBus implements TransportBus {
 
   /** The owner revokes a session's entry only after it closed the session's transport, which ends its calls. */
   private async untilReleased(sessionId: string, ownerNodeId: string): Promise<void> {
-    const deadline = Date.now() + RELEASE_TIMEOUT_MS;
-    while (Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, RELEASE_POLL_MS));
-      if ((await this.readEntry(sessionId))?.nodeId !== ownerNodeId) return;
-    }
+    let polling = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const released = (async () => {
+      while (polling) {
+        await new Promise((resolve) => setTimeout(resolve, RELEASE_POLL_MS));
+        if ((await this.readEntry(sessionId))?.nodeId !== ownerNodeId) return true;
+      }
+      return false;
+    })();
+    // The deadline bounds the reads too: a Redis that never answers one cannot hold the DELETE open.
+    const timedOut = new Promise<false>((resolve) => (timer = setTimeout(() => resolve(false), RELEASE_TIMEOUT_MS)));
+    const releasedInTime = await Promise.race([released, timedOut]).finally(() => {
+      polling = false;
+      clearTimeout(timer);
+    });
+    if (releasedInTime) return;
     this.logger?.warn('[TransportBus] The session owner did not release the session in time', {
       sessionId: sessionId.slice(0, 20),
       ownerNodeId,
