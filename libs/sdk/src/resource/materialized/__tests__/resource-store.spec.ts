@@ -463,6 +463,37 @@ describe('resourceStore()', () => {
       await expect(board.get()).resolves.toMatchObject({ value: 1, revision: 1 });
     });
 
+    it('reports to onError, once, a failed run that a read started, and fails that read', async () => {
+      const onError = jest.fn();
+      const board = open({ onError }).key('board', {
+        produce: () => {
+          throw new Error('source offline');
+        },
+      });
+
+      await expect(board.get()).rejects.toThrow('source offline');
+
+      expect(onError).toHaveBeenCalledTimes(1);
+      expect(onError).toHaveBeenCalledWith(new Error('source offline'));
+    });
+
+    it('reports a failed run the timer started once', async () => {
+      const onError = jest.fn();
+      const board = open({ onError }).key('board', {
+        minIntervalMs: 0,
+        produce: () => {
+          throw new Error('source offline');
+        },
+      });
+
+      const unsubscribe = board.subscribe(() => undefined);
+      await until(() => onError.mock.calls.length > 0);
+      await later(30);
+      unsubscribe();
+
+      expect(onError).toHaveBeenCalledTimes(1);
+    });
+
     it.each([
       [{ produce: 'board' }, 'produce'],
       [{ produce: () => 1, minIntervalMs: -1 }, 'minIntervalMs'],

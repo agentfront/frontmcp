@@ -454,7 +454,8 @@ class ProducedKey<T> extends StoredResourceKey<T> implements ProducedResourceKey
       () => {
         this.timer = undefined;
         if (this.subscribers > 0 && !this.run && this.producedGeneration < this.generation) {
-          this.start().catch((error: unknown) => this.backend.reportError(error));
+          // start() reports the failure; no read waits for this run.
+          this.start().catch(() => undefined);
         }
       },
       Math.max(0, this.lastEndedAt + waitMs - performance.now()),
@@ -476,9 +477,13 @@ class ProducedKey<T> extends StoredResourceKey<T> implements ProducedResourceKey
       // A failed run waits for the next dirty mark or read, so a failing producer is not rerun on every interval.
       if (this.subscribers > 0 && (produced || this.generation !== generation)) this.schedule();
     };
+    // Every failed run is told to onError once, here: one a read started fails that read too.
     run.then(
       () => settle(true),
-      () => settle(false),
+      (error: unknown) => {
+        settle(false);
+        this.backend.reportError(error);
+      },
     );
     return run;
   }
