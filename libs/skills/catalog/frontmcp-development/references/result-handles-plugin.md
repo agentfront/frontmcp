@@ -184,7 +184,8 @@ substring, or a list member), `startsWith`, `endsWith` and `exists`; `field` is 
 when left out. No code runs. A `grep` on a string answers its matching lines as `{ line, text }` items. A
 `regex: true` pattern runs on a matcher with no backtracking (ReDoS-safe: time grows with the text, and one query
 stops after 20,000,000 steps); it takes literals, `.`, classes, `\d \w \s \b`, `^ $`, groups, `|` and quantifiers up to
-`{100}`, and refuses backreferences and lookarounds with `INVALID_INPUT`.
+`{100}` (a larger count of any length is refused), and refuses backreferences and lookarounds with `INVALID_INPUT`.
+`ignoreCase` folds case as a JavaScript RegExp's `i` flag does, a literal pattern's too (`σ` finds `ς` and `Σ`).
 
 ```json
 {

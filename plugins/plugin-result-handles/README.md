@@ -171,7 +171,8 @@ itself when it's left out. No code is run: `op` is one of these comparisons.
 literal unless `regex: true`. A regex runs on a matcher with no backtracking, so its time grows with the text, not with
 the pattern's shape, and one query stops after 20,000,000 steps. It takes literals, `.`, classes (`[a-z]`, `[^0-9]`),
 `\d \w \s` and their negations, `\b`, `^` and `$` (the start and end of each string or line), groups, `|`, and the
-quantifiers `* + ? {m} {m,} {m,n}` (counts up to 100); backreferences and lookarounds are refused. Its errors carry a
+quantifiers `* + ? {m} {m,} {m,n}` (counts up to 100; a larger one is refused); backreferences and lookarounds are
+refused. `ignoreCase` folds case as a JavaScript RegExp's `i` flag does, for a literal pattern too (`σ` finds `ς`). Its errors carry a
 remedy for the model:
 
 | Code                           | When                                                                                                 |
