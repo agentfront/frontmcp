@@ -8,8 +8,10 @@
 import 'reflect-metadata';
 
 import { App } from '../../common/decorators/app.decorator';
+import { type PersistentQuestions } from '../../elicitation/questions/question-scope.helper';
 import { InvalidQuestionStoreError } from '../../elicitation/questions/question.errors';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
+import { type TransportService } from '../../transport/transport.registry';
 
 /** What the scope asked each store factory for. */
 const mockStoreRequests: { elicitation: Array<Record<string, unknown>>; questions: Array<Record<string, unknown>> } = {
@@ -55,7 +57,8 @@ jest.mock('../../elicitation/questions/question-store.factory', () => {
 });
 
 interface StartedScope {
-  persistentQuestions?: unknown;
+  persistentQuestions?: PersistentQuestions;
+  transportService?: TransportService;
   dispose(): Promise<void>;
 }
 
@@ -101,6 +104,19 @@ describe('the stores of persistent questions', () => {
     expect(mockStoreRequests.elicitation).toEqual([expect.objectContaining({ storage: QUESTIONS_REDIS })]);
     expect(mockStoreRequests.questions).toEqual([expect.objectContaining({ storage: QUESTIONS_REDIS })]);
     expect(scope.persistentQuestions).toBeDefined();
+  });
+
+  it("asks the scope's transport service whether a caller's session has ended", async () => {
+    const instance = await withQuestionsRedis();
+    const [scope] = instance.getScopes() as unknown as StartedScope[];
+    startedScopes.push(scope);
+    const check = async () => true;
+    const sessionEndCheck = jest
+      .spyOn(scope.transportService as TransportService, 'sessionEndCheck')
+      .mockReturnValue(check);
+
+    expect(scope.persistentQuestions?.sessionEndCheck?.('session-1')).toBe(check);
+    expect(sessionEndCheck).toHaveBeenCalledWith('session-1');
   });
 
   it('closes the connection of the elicitation store it opened when the scope is disposed', async () => {

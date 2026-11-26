@@ -518,8 +518,13 @@ export class Scope extends ScopeEntry {
               onEdgeRuntime,
               logger: this.logger,
             });
-            this._persistentQuestions = questions;
-            if (questions) this.onDispose(() => questions.store.close());
+            if (questions) {
+              this._persistentQuestions = {
+                ...questions,
+                sessionEndCheck: (sessionId) => this.transportService?.sessionEndCheck(sessionId),
+              };
+              this.onDispose(() => questions.store.close());
+            }
           }
         })()
       : undefined;

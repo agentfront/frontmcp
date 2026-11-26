@@ -17,6 +17,8 @@ export interface PersistentAskDeps {
   subject: string;
   /** Aborted when the call stops: the question stays for the next call. */
   signal?: AbortSignal;
+  /** Whether the call's session has ended where no abort reaches it: the answer then stays for the next call. */
+  sessionEnded?: () => Promise<boolean>;
 }
 
 /** An answer a call took from the store, and the expiry of the question it answered. */
@@ -58,7 +60,7 @@ export async function askPersistentQuestion<S extends ZodType>(
   schema: S,
   options: PersistentAskOptions,
 ): Promise<ElicitResult<S extends ZodType<infer O> ? O : unknown>> {
-  const { store, subject, signal } = deps;
+  const { store, subject, signal, sessionEnded } = deps;
   const request: QuestionRequest = {
     subject,
     key: options.key,
@@ -69,8 +71,8 @@ export async function askPersistentQuestion<S extends ZodType>(
   };
   /**
    * Hand this call an answer it took, checked against its schema. When the call was cancelled first, or while the answer
-   * was checked, the answer is put back for the next call, with its question's expiry, and the call gets
-   * `QuestionPendingError`.
+   * was checked, or its session has ended, the answer is put back for the next call, with its question's expiry, and
+   * the call gets `QuestionPendingError`.
    */
   const handOver = async (taken: TakenAnswer) => {
     const putBack = async () => {
@@ -79,7 +81,7 @@ export async function askPersistentQuestion<S extends ZodType>(
     };
     if (signal?.aborted) throw await putBack();
     const result = await delivered(taken.answer, schema);
-    if (signal?.aborted) throw await putBack();
+    if (signal?.aborted || (await sessionEnded?.())) throw await putBack();
     return result;
   };
 
@@ -150,7 +152,7 @@ export async function askPersistentQuestion<S extends ZodType>(
 
 /** `this.elicit(message, schema, { persist })`: checks the call, then asks for the caller the request names. */
 export async function elicitPersistent<S extends ZodType>(
-  deps: Pick<ElicitHelperDeps, 'questions' | 'signal' | 'tryGetContext'>,
+  deps: Pick<ElicitHelperDeps, 'questions' | 'signal' | 'tryGetContext' | 'sessionId'>,
   message: string,
   requestedSchema: S,
   options: ElicitOptions & { persist: PersistOptions },
@@ -180,9 +182,11 @@ export async function elicitPersistent<S extends ZodType>(
     );
   }
   const zodSchema = requestedSchema instanceof z.ZodType ? requestedSchema : z.object(requestedSchema as z.ZodRawShape);
-  return askPersistentQuestion({ store: questions.store, subject, signal: deps.signal }, message, zodSchema as S, {
-    key: persist.key,
-    ttlMs,
-    waitMs,
-  });
+  const sessionEnded = deps.sessionId ? questions.sessionEndCheck?.(deps.sessionId) : undefined;
+  return askPersistentQuestion(
+    { store: questions.store, subject, signal: deps.signal, sessionEnded },
+    message,
+    zodSchema as S,
+    { key: persist.key, ttlMs, waitMs },
+  );
 }

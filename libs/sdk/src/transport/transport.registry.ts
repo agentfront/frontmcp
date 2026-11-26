@@ -636,6 +636,17 @@ export class TransportService {
     return false;
   }
 
+  /** A check, outside distributed mode, of whether a session held here was deleted through another instance. */
+  sessionEndCheck(sessionId: string): (() => Promise<boolean>) | undefined {
+    const store = this.sessionStore;
+    if (this.distributed || !store || !this.storedLocalSessions.has(sessionId)) return undefined;
+    return () =>
+      this.withSessionCheckTimeout(`exists:${sessionId}`, () => store.exists(sessionId)).then(
+        (stored) => !stored,
+        () => false,
+      );
+  }
+
   /**
    * Bound a session-store read made while serving a session held in memory. A store that accepts the
    * connection but never answers (a paused Redis, a partition that does not reset TCP) would otherwise
