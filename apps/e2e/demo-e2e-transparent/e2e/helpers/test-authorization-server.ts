@@ -1,6 +1,6 @@
 import { createServer, type Server } from 'node:http';
 
-import { verifyPkce } from '../../session/authorization.store';
+import { verifyPkce } from '@frontmcp/auth';
 
 export interface TestAuthorizationServer {
   issuer: string;
@@ -77,7 +77,14 @@ export async function startTestAuthorizationServer(): Promise<TestAuthorizationS
       json(404, { error: 'not_found' });
     });
   });
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  // A refused bind (a sandbox without loopback) fails the start instead of leaving it pending.
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', reject);
+      resolve();
+    });
+  });
   const address = server.address();
   const issuer = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}`;
   const state: TestAuthorizationServer = {
