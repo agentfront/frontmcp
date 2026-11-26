@@ -352,3 +352,26 @@ describe('getNativeTokens, signInNative and signOutNative on one store and key',
     expect(kept.entries.get(KEY)).toBeUndefined();
   });
 });
+
+describe('getNativeTokens without a refresh token', () => {
+  it('returns the access token while it is still valid, then undefined once it expires', async () => {
+    const idp = fakeIdp();
+    const kept = testStore();
+    const options = { issuer: ISSUER, clientId: 'notes-cli', store: kept.store };
+    const tokens: NativeTokenSet = {
+      accessToken: 'access-short',
+      tokenType: 'Bearer',
+      expiresAt: Date.now() + 30_000,
+      issuer: ISSUER,
+      tokenEndpoint: `${ISSUER}/token`,
+      clientId: 'notes-cli',
+    };
+    kept.entries.set(KEY, tokens);
+
+    expect(await getNativeTokens(options)).toEqual(tokens);
+
+    kept.entries.set(KEY, { ...tokens, expiresAt: Date.now() - 1 });
+    expect(await getNativeTokens(options)).toBeUndefined();
+    expect(idp.tokenRequests).toHaveLength(0);
+  });
+});

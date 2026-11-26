@@ -140,9 +140,10 @@ export async function signInNative(options: NativeSignInOptions): Promise<Native
 }
 
 /**
- * The kept tokens, refreshed first when the access token has expired or is about to. `undefined` when there are
- * none, or the server refused the refresh token, which is then dropped: the app has to sign in again. Callers at the
- * same time share one read and refresh, which waits for a sign-in or sign-out queued before it.
+ * The kept tokens, refreshed first when the access token has expired or expires within a minute. Without a refresh
+ * token, the access token is returned until it expires. `undefined` when there are none, when they expired and cannot
+ * be refreshed, or when the server refused the refresh token, which is then dropped: the app has to sign in again.
+ * Callers at the same time share one read and refresh, which waits for a sign-in or sign-out queued before it.
  */
 export function getNativeTokens(options: NativeTokenOptions): Promise<NativeTokenSet | undefined> {
   const store = storeOf(options);
@@ -197,7 +198,8 @@ async function currentTokens(
     tokens = await store.get(key);
   }
   if (!tokens || !isExpiring(tokens)) return tokens;
-  if (!tokens.refreshToken) return undefined;
+  // The margin is for a refresh: an access token nothing can refresh serves until it expires.
+  if (!tokens.refreshToken) return (tokens.expiresAt as number) > Date.now() ? tokens : undefined;
   return refreshTokens(options, store, key, tokens, lane);
 }
 
