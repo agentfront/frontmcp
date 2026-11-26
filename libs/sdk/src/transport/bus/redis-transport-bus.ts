@@ -32,6 +32,10 @@ const DEFAULT_BUS_TTL_SECONDS = 3600;
 /** `Retry-After` for a request that cannot be relayed (the default heartbeat TTL). */
 const DEFAULT_RETRY_AFTER_SECONDS = 30;
 
+/** How long a remote destroy waits for the owner to release the session, and how often it looks. */
+const RELEASE_TIMEOUT_MS = 5_000;
+const RELEASE_POLL_MS = 25;
+
 /**
  * Lua script for atomic advertise: the entry never exists without its TTL.
  * KEYS[1] = bus key, ARGV = nodeId, channel, type, tokenHash, TTL (seconds)
@@ -218,9 +222,7 @@ export class RedisTransportBus implements TransportBus {
     await this.relay.forward(location.nodeId, sessionId, serializeRelayRequest(request), response);
   }
 
-  /**
-   * Destroy a session on a remote node via pub/sub relay.
-   */
+  /** Destroy a session on the node that owns it, and wait (bounded) until that node has released it. */
   async destroyRemote(key: TransportKey, reason?: string): Promise<void> {
     const entry = await this.readEntry(key.sessionId);
     if (!entry || entry.nodeId === this.machineId) return;
@@ -233,7 +235,7 @@ export class RedisTransportBus implements TransportBus {
       timestamp: Date.now(),
     });
 
-    await this.redis.publish(entry.channel, message);
+    const receivers = await this.redis.publish(entry.channel, message);
 
     // Let the owning node revoke after it destroys the transport.
     // Don't blindly delete — another node may have already taken ownership.
@@ -241,6 +243,20 @@ export class RedisTransportBus implements TransportBus {
     this.logger?.info('[TransportBus] Sent destroy-remote', {
       sessionId: key.sessionId.slice(0, 20),
       targetNodeId: entry.nodeId,
+    });
+    if (receivers > 0) await this.untilReleased(key.sessionId, entry.nodeId);
+  }
+
+  /** The owner revokes a session's entry only after it closed the session's transport, which ends its calls. */
+  private async untilReleased(sessionId: string, ownerNodeId: string): Promise<void> {
+    const deadline = Date.now() + RELEASE_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, RELEASE_POLL_MS));
+      if ((await this.readEntry(sessionId))?.nodeId !== ownerNodeId) return;
+    }
+    this.logger?.warn('[TransportBus] The session owner did not release the session in time', {
+      sessionId: sessionId.slice(0, 20),
+      ownerNodeId,
     });
   }
 
