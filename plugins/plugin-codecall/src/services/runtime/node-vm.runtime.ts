@@ -142,10 +142,12 @@ export function createNodeVmRuntime(loader: NodeVmModuleLoader = loadNodeVmModul
   let loading: Promise<NodeVmModule> | undefined;
   const load = (): Promise<NodeVmModule> => {
     // A load that failed is tried again by the next caller, as every run did before the preload.
-    loading ??= loader().catch((error: unknown) => {
-      loading = undefined;
-      throw error;
-    });
+    loading ??= Promise.resolve()
+      .then(loader)
+      .catch((error: unknown) => {
+        loading = undefined;
+        throw error;
+      });
     return loading;
   };
   return {

@@ -224,6 +224,19 @@ describe('node-vm runtime', () => {
     expect(loader).not.toHaveBeenCalled();
   });
 
+  it('turns a loader that throws synchronously into the usual refusal, and tries it again', async () => {
+    const loader = jest.fn(() => {
+      throw new Error('No such module "@enclave-vm/core"');
+    });
+    const runtime = createNodeVmRuntime(loader);
+    runtime.preload?.();
+    await new Promise((resolve) => setImmediate(resolve));
+    const error = await refusalOf(runtime.createRunner(spec()));
+
+    expect(error.code).toBe('RUNTIME_UNAVAILABLE');
+    expect(loader).toHaveBeenCalledTimes(2);
+  });
+
   it('refuses when the Node barrel cannot be loaded', async () => {
     const error = await refusalOf(
       createNodeVmRuntime(() => Promise.reject(new Error('No such module "@enclave-vm/core"'))).createRunner(spec()),
