@@ -1,17 +1,17 @@
 // file: libs/sdk/src/tool/undeclared-arguments-message.ts
-import { formatKeyPath, type ArgumentKeyPath } from './undeclared-arguments';
+import { declaredKeysAt, formatKeyPath, type ArgumentKeyPath } from './undeclared-arguments';
+
+/** The tool's `inputSchema` shape, whose declared keys the closest-key search compares with. */
+type InputShape = Readonly<Record<string, unknown>>;
 
 /** The `INVALID_INPUT` message of a call refused under `input.undeclaredKeys: 'fail'`. */
-export function undeclaredArgumentsRefusal(
-  keyPaths: readonly ArgumentKeyPath[],
-  declaredKeys: readonly string[],
-): string {
-  return `Unknown arguments: ${describeUndeclaredArguments(keyPaths, declaredKeys)}`;
+export function undeclaredArgumentsRefusal(keyPaths: readonly ArgumentKeyPath[], shape: InputShape): string {
+  return `Unknown arguments: ${describeUndeclaredArguments(keyPaths, shape)}`;
 }
 
 /** The last text line of an answer under `input.undeclaredKeys: 'warn'`, for the model that called. */
-export function undeclaredArgumentsNote(keyPaths: readonly ArgumentKeyPath[], declaredKeys: readonly string[]): string {
-  return `These arguments are not declared and were ignored: ${describeUndeclaredArguments(keyPaths, declaredKeys)}.`;
+export function undeclaredArgumentsNote(keyPaths: readonly ArgumentKeyPath[], shape: InputShape): string {
+  return `These arguments are not declared and were ignored: ${describeUndeclaredArguments(keyPaths, shape)}.`;
 }
 
 /** The server warning under `input.undeclaredKeys: 'warn'`, naming the key paths not reported for the tool before. */
@@ -32,17 +32,16 @@ const MAX_KEY_LENGTH = 64;
 const MAX_COMPARED_KEYS = 200;
 
 /**
- * Each undeclared argument, quoted, with the declared key it is closest to when one is close enough to be a slip: the
- * first {@link MAX_NAMED_ARGUMENTS}, each cut to {@link MAX_KEY_LENGTH} characters, then how many more there are.
+ * Each undeclared argument, quoted, with the key declared beside it that it is closest to when one is close enough to
+ * be a slip: the first {@link MAX_NAMED_ARGUMENTS}, each cut to {@link MAX_KEY_LENGTH} characters, then how many more.
  */
-export function describeUndeclaredArguments(
-  keyPaths: readonly ArgumentKeyPath[],
-  declaredKeys: readonly string[],
-): string {
+export function describeUndeclaredArguments(keyPaths: readonly ArgumentKeyPath[], shape: InputShape): string {
   const described = keyPaths.slice(0, MAX_NAMED_ARGUMENTS).map((keyPath) => {
     const shown = shortened(formatKeyPath(keyPath));
-    const closest = keyPath.length === 1 ? closestKey(keyPath[0], declaredKeys) : undefined;
-    return closest ? `'${shown}' (did you mean '${closest}'?)` : `'${shown}'`;
+    const parentPath = keyPath.slice(0, -1);
+    const closest = closestKey(keyPath[keyPath.length - 1], declaredKeysAt(shape, parentPath));
+    if (!closest) return `'${shown}'`;
+    return `'${shown}' (did you mean '${shortened(formatKeyPath([...parentPath, closest]))}'?)`;
   });
   return namedWithTheRestCounted(described, keyPaths.length);
 }

@@ -61,7 +61,18 @@ class CachedWaitTool extends ToolContext {
   }
 }
 
-@App({ id: 'agents', name: 'Agents', tools: [AgentWaitTool, LenientWaitTool, CachedWaitTool] })
+@Tool({
+  name: 'scheduled_wait',
+  inputSchema: { wait: z.object({ timeoutSec: z.number().default(45) }).default({ timeoutSec: 45 }) },
+  outputSchema: 'string',
+})
+class ScheduledWaitTool extends ToolContext {
+  async execute(input: { wait: { timeoutSec: number } }) {
+    return `waited ${input.wait.timeoutSec}s`;
+  }
+}
+
+@App({ id: 'agents', name: 'Agents', tools: [AgentWaitTool, LenientWaitTool, CachedWaitTool, ScheduledWaitTool] })
 class AgentsApp {}
 
 @Tool({ name: 'strict_wait', inputSchema: { timeoutSec: z.number().default(45) }, outputSchema: 'string' })
@@ -91,8 +102,8 @@ describe('tools/call input.undeclaredKeys', () => {
     });
   }
 
-  async function callWait(server: TestFetchServer, name: string) {
-    const { message } = await rpc20260728(server.handler, 'tools/call', { name, arguments: { timeoutMs: '1800000' } });
+  async function callWait(server: TestFetchServer, name: string, args: object = { timeoutMs: '1800000' }) {
+    const { message } = await rpc20260728(server.handler, 'tools/call', { name, arguments: args });
     const result = message.result ?? {};
     const texts = ((result['content'] ?? []) as Array<{ text?: string }>).map((block) => block.text);
     return { isError: result['isError'] === true, texts, wire: JSON.stringify(message) };
@@ -159,6 +170,18 @@ describe('tools/call input.undeclaredKeys', () => {
     expect(refused.wire).toContain('INVALID_INPUT');
     expect(refused.wire).toContain("Unknown arguments: 'timeoutMs' (did you mean 'timeoutSec'?)");
     expect(refused.wire).not.toContain('waited');
+  });
+
+  it('names the closest key declared beside a nested slip, under both policies', async () => {
+    const nested = { wait: { timeoutMs: '1800000' } };
+    const warned = await callWait(await startServer({ undeclaredKeys: 'warn' }), 'scheduled_wait', nested);
+    const refused = await callWait(await startServer({ undeclaredKeys: 'fail' }), 'scheduled_wait', nested);
+
+    expect(warned.texts).toEqual([
+      'waited 45s',
+      "These arguments are not declared and were ignored: 'wait.timeoutMs' (did you mean 'wait.timeoutSec'?).",
+    ]);
+    expect(refused.wire).toContain("Unknown arguments: 'wait.timeoutMs' (did you mean 'wait.timeoutSec'?)");
   });
 
   it("does not compare the arguments under 'strip'", async () => {
