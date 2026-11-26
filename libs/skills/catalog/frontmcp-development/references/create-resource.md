@@ -188,7 +188,7 @@ const { value, revision, updatedAt } = await board.get();
 - **Who can write.** The write API is code, not an MCP method: no client can write a value. A client changes one only through a tool you write, and that tool runs through `tools:call-tool` with its own `authorities`, `enabled` and hooks. Any process that can open the store's file or Redis can write, so protect them as you protect the server's data.
 - **Caching (2026-07-28).** A materialized read answers `ttlMs: 0`, since another process can change the value at any moment; `cacheScope` follows the usual rule (`public` only for an anonymous read nothing shaped per caller).
 - **Topics for other live views.** `store.subscribe(topic, listener)` and `store.publish(topic)` are the same change feed with no value attached (a key's topic is its name): a listener reads the current state. Use them for SSE routes or other views that follow the store.
-- **Lifecycle.** The server opens the stores its resources use at boot and closes them at shutdown. A script that writes calls `await store.close()` when it is done.
+- **Lifecycle.** The server opens the stores its resources use at boot and closes them at shutdown. A script that writes calls `await store.close()` when it is done. A store's next use after `close()` opens it again. A producer run still going when the store closes does not open it again to store its output: the read that waited for it fails with `ResourceStoreClosedError` (`RESOURCE_STORE_CLOSED`), which is not reported to `onError`. After a close, each computed key counts as dirty, since a reopened `memory` store holds none of its values, so its next read runs `produce` again.
 
 ### Computed values and templates
 

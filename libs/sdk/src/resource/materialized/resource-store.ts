@@ -15,7 +15,7 @@ import type {
   ResourceSnapshot,
   ResourceStoreHandle,
 } from '../../common/metadata/materialized.metadata';
-import { InvalidResourceStoreError } from '../../errors/mcp.error';
+import { InvalidResourceStoreError, ResourceStoreClosedError } from '../../errors/mcp.error';
 import { refuseServerStoresInBrowser } from '../../scope/browser-stores';
 
 /** The backends with an atomic `setIfEquals`, which every write uses. */
@@ -128,7 +128,15 @@ interface OpenStore {
 
 /** What a key needs from its store beyond the public API. */
 interface KeyBackend {
-  storage(): Promise<NamespacedStorage>;
+  /**
+   * The storage, opened on first use. With the `epoch` a write started in, a store closed since then refuses it
+   * (`ResourceStoreClosedError`) instead of opening its storage again.
+   */
+  storage(epoch?: number): Promise<NamespacedStorage>;
+  /** Tell the listeners of `topic`; nothing once the store closed after `epoch`. */
+  publish(topic: string, epoch?: number): Promise<void>;
+  /** Moves on each close: storage opened after it is a new one, which may hold none of the values. */
+  epoch(): number;
   reportError(error: unknown): void;
 }
 
@@ -142,8 +150,16 @@ const NAMESPACE = 'frontmcp-resources';
 export class ResourceStore implements ResourceStoreHandle {
   private opened?: Promise<OpenStore>;
   private connections = 0;
+  private closes = 0;
   private readonly backend: KeyBackend = {
-    storage: async () => (await this.open()).storage,
+    storage: async (epoch) => {
+      if (epoch !== undefined && epoch !== this.closes) throw new ResourceStoreClosedError();
+      return (await this.open()).storage;
+    },
+    publish: async (topic, epoch) => {
+      if (epoch === undefined || epoch === this.closes) await this.publish(topic);
+    },
+    epoch: () => this.closes,
     reportError: (error) => this.options.onError?.(error),
   };
 
@@ -230,6 +246,8 @@ export class ResourceStore implements ResourceStoreHandle {
       return;
     }
     this.connections = 0;
+    // A producer run that began before this close must not open the storage again when it ends.
+    this.closes++;
     const opened = this.opened;
     this.opened = undefined;
     if (!opened) return;
@@ -311,9 +329,16 @@ class StoredResourceKey<T> implements ResourceKey<T> {
     return this.write(change, false);
   }
 
-  /** Store what `change` makes of the value; with `onlyIfChanged`, output with the same JSON keeps the revision. */
-  protected async write(change: (current: T) => T | Promise<T>, onlyIfChanged: boolean): Promise<ResourceSnapshot<T>> {
-    const storage = await this.backend.storage();
+  /**
+   * Store what `change` makes of the value; with `onlyIfChanged`, output with the same JSON keeps the revision. With
+   * the `epoch` it began in, a write the store closed during fails instead of opening the store again.
+   */
+  protected async write(
+    change: (current: T) => T | Promise<T>,
+    onlyIfChanged: boolean,
+    epoch?: number,
+  ): Promise<ResourceSnapshot<T>> {
+    const storage = await this.backend.storage(epoch);
     for (;;) {
       const raw = await storage.get(this.recordKey);
       if (raw === null) {
@@ -332,7 +357,7 @@ class StoredResourceKey<T> implements ResourceKey<T> {
         updatedAt: new Date().toISOString(),
       } satisfies StoredRecord<T>);
       if (await storage.setIfEquals(this.recordKey, raw, next)) {
-        await this.store.publish(this.name).catch((error) => this.backend.reportError(error));
+        await this.backend.publish(this.name, epoch).catch((error) => this.backend.reportError(error));
         return this.parse(next);
       }
     }
@@ -388,8 +413,11 @@ class ProducedKey<T> extends StoredResourceKey<T> implements ProducedResourceKey
   /** Moves on each `markDirty()`; the key is clean once a run that started at the current one has stored its output. */
   private generation = 1;
   private producedGeneration = 0;
+  /** The store's epoch the stored output was produced in: after a close, the reopened storage may not hold it. */
+  private producedEpoch = -1;
   private run?: Promise<ResourceSnapshot<T>>;
   private runGeneration = 0;
+  private runEpoch = -1;
   private timer?: ReturnType<typeof setTimeout>;
   private subscribers = 0;
   private lastEndedAt = -Infinity;
@@ -421,10 +449,15 @@ class ProducedKey<T> extends StoredResourceKey<T> implements ProducedResourceKey
 
   override async get(): Promise<ResourceSnapshot<T>> {
     for (;;) {
-      if (!this.run) return this.producedGeneration < this.generation ? this.start() : super.get();
-      if (this.runGeneration === this.generation) return this.run;
+      if (!this.run) return this.dirty ? this.start() : super.get();
+      if (this.runGeneration === this.generation && this.runEpoch === this.backend.epoch()) return this.run;
       await this.run.catch(() => undefined);
     }
+  }
+
+  /** Marked dirty since the last stored run, or the store closed since then, so its storage may not hold the output. */
+  private get dirty(): boolean {
+    return this.producedGeneration < this.generation || this.producedEpoch !== this.backend.epoch();
   }
 
   /** A subscription reads the stored value: only a read or the throttled timer runs the producer. */
@@ -448,12 +481,12 @@ class ProducedKey<T> extends StoredResourceKey<T> implements ProducedResourceKey
   }
 
   private schedule(): void {
-    if (this.timer || this.run || this.producedGeneration === this.generation) return;
+    if (this.timer || this.run || !this.dirty) return;
     const waitMs = Math.max(this.minIntervalMs, this.lastDurationMs * this.costFactor);
     this.timer = setTimeout(
       () => {
         this.timer = undefined;
-        if (this.subscribers > 0 && !this.run && this.producedGeneration < this.generation) {
+        if (this.subscribers > 0 && !this.run && this.dirty) {
           // start() reports the failure; no read waits for this run.
           this.start().catch(() => undefined);
         }
@@ -467,8 +500,9 @@ class ProducedKey<T> extends StoredResourceKey<T> implements ProducedResourceKey
     clearTimeout(this.timer);
     this.timer = undefined;
     const generation = (this.runGeneration = this.generation);
+    const epoch = (this.runEpoch = this.backend.epoch());
     const startedAt = performance.now();
-    const run = this.produceAndStore(generation);
+    const run = this.produceAndStore(generation, epoch);
     this.run = run;
     const settle = (produced: boolean) => {
       this.lastEndedAt = performance.now();
@@ -482,16 +516,23 @@ class ProducedKey<T> extends StoredResourceKey<T> implements ProducedResourceKey
       () => settle(true),
       (error: unknown) => {
         settle(false);
-        this.backend.reportError(error);
+        // A run the store closed under failed for no fault of the producer.
+        if (!(error instanceof ResourceStoreClosedError)) this.backend.reportError(error);
       },
     );
     return run;
   }
 
-  private async produceAndStore(generation: number): Promise<ResourceSnapshot<T>> {
+  private async produceAndStore(generation: number, epoch: number): Promise<ResourceSnapshot<T>> {
     const value = await this.produce();
-    const snapshot = await this.write(() => value, true);
+    let snapshot: ResourceSnapshot<T>;
+    try {
+      snapshot = await this.write(() => value, true, epoch);
+    } catch (error) {
+      throw error instanceof ResourceStoreClosedError ? new ResourceStoreClosedError(this.name) : error;
+    }
     this.producedGeneration = Math.max(this.producedGeneration, generation);
+    this.producedEpoch = epoch;
     return snapshot;
   }
 }

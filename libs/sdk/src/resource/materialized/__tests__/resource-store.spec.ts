@@ -6,6 +6,12 @@ import { isResourceKey } from '../../../common/metadata/materialized.metadata';
 import { InvalidResourceStoreError } from '../../../errors';
 import { resourceStore, type ResourceStore } from '../resource-store';
 
+// Counts the storages the stores open, so a test can tell that a closed store opened none.
+jest.mock('@frontmcp/utils', () => {
+  const actual = jest.requireActual<typeof import('@frontmcp/utils')>('@frontmcp/utils');
+  return { ...actual, createStorage: jest.fn(actual.createStorage) };
+});
+
 interface Board {
   open: number;
 }
@@ -461,6 +467,38 @@ describe('resourceStore()', () => {
 
       expect(onError.mock.calls[0][0]).toEqual(new Error('source offline'));
       await expect(board.get()).resolves.toMatchObject({ value: 1, revision: 1 });
+    });
+
+    it('runs the producer again once the store closed and opened again, as its storage was replaced', async () => {
+      const store = open();
+      let runs = 0;
+      const board = store.key('board', { produce: () => ++runs });
+      await expect(board.get()).resolves.toMatchObject({ value: 1 });
+
+      await store.close();
+
+      await expect(board.get()).resolves.toMatchObject({ value: 2 });
+    });
+
+    it('opens no storage for a run that ends after the store closed, and fails the read that waited for it', async () => {
+      const onError = jest.fn();
+      const store = open({ onError });
+      let finish: (value: number) => void = () => undefined;
+      const board = store.key('board', { produce: () => new Promise<number>((resolve) => (finish = resolve)) });
+      await store.connect();
+      const opens = jest.mocked(createStorage).mock.calls.length;
+
+      const reading = board.get();
+      await store.close();
+      finish(1);
+
+      await expect(reading).rejects.toThrow('closed');
+      expect(jest.mocked(createStorage).mock.calls.length).toBe(opens);
+      expect(onError).not.toHaveBeenCalled();
+      // A read after the close is the next use, which opens the store again.
+      const next = board.get();
+      finish(2);
+      await expect(next).resolves.toMatchObject({ value: 2 });
     });
 
     it('reports to onError, once, a failed run that a read started, and fails that read', async () => {
