@@ -1,7 +1,7 @@
 // file: libs/plugins/src/codecall/tools/execute.tool.ts
 
 import { getCallSurface, toMcpError, Tool, ToolContext, type McpError, type ToolEntry } from '@frontmcp/sdk';
-import { escapeControlCharacters, sha256Hex } from '@frontmcp/utils';
+import { escapeControlCharacters, randomUUID, sha256Hex } from '@frontmcp/utils';
 
 import { budgetMeterOf, withBudgets, type BudgetMeter } from '../budgets/budget-meter';
 import { CodeCallBudgetStoreToken } from '../budgets/budget-store';
@@ -36,6 +36,7 @@ import { ApprovalServiceViewToken } from '../review/review-approvals';
 import { reviewDecisionOf, reviewResultOf } from '../review/review-result';
 import CodeCallReviewService from '../review/review.service';
 import { reviewOutcomeOf, type PendingApproval, type RunReview } from '../review/run-review';
+import { withCallIdempotencyKey, type ScriptToolCall } from '../runs/call-idempotency-key';
 import { jsonBytes, RunJournal } from '../runs/run-journal';
 import type { CodeCallRunInput, CodeCallRunStore } from '../runs/run-record.store';
 import { CodeCallRunStoreToken } from '../runs/run-record.types';
@@ -129,6 +130,9 @@ function toolCallErrorOf(error: unknown, toolName: string): ToolCallError {
   outputSchema: executeToolOutputSchema,
 })
 export default class ExecuteTool extends ToolContext {
+  /** The id of this call's run: its record's, and what each call's idempotency key is derived from. */
+  protected scriptRunId: string = randomUUID();
+
   /**
    * Resolve the server-side CodeCall policy for a tool name (GHSA-6w3j-82v5-6qrr).
    *
@@ -160,6 +164,7 @@ export default class ExecuteTool extends ToolContext {
         status: result.status,
         startedAt: startedAt.toISOString(),
         endedAt: new Date().toISOString(),
+        runId: this.scriptRunId,
         reviewDecision: review || budgets ? reviewDecisionOf(result) : null,
         ...(result.status === 'ok' && { resultBytes: jsonBytes(result.result) }),
         journal: [...journal.close()],
@@ -307,7 +312,7 @@ export default class ExecuteTool extends ToolContext {
         name: string,
         toolInput: TInput,
         options?: CallToolOptions,
-        call?: { callIndex: number },
+        call?: ScriptToolCall,
       ): Promise<TResult | ToolCallResult<TResult>> => {
         const throwOnError = options?.throwOnError !== false; // Default: true
 
@@ -375,12 +380,12 @@ export default class ExecuteTool extends ToolContext {
           };
 
           // Build context with auth info and the caller's surface, marked as CodeCall's own call,
-          // which may reach a tool CodeCall hides from a client's direct tools/call
-          const ctx = asCodeCallDispatch({
-            authInfo: this.authInfo,
-            surface: callerSurface,
-            ...budgetedCall?.dispatch,
-          });
+          // which may reach a tool CodeCall hides from a client's direct tools/call, and with its idempotency key
+          const ctx = withCallIdempotencyKey(
+            asCodeCallDispatch({ authInfo: this.authInfo, surface: callerSurface, ...budgetedCall?.dispatch }),
+            this.scriptRunId,
+            call,
+          );
 
           // Execute through the flow system - this runs all stages:
           // PRE: parseInput → findTool → createToolCallContext → acquireQuota → acquireSemaphore

@@ -150,12 +150,17 @@ export class SendElicitationResultTool extends ToolContext {
         // The call context of this call, whose caller is the owner: its auth info as its transport
         // gave it (the tool reads it as `this.auth`), on the surface it was made from. Not the
         // request context object, whose auth info is a getter a call context does not carry over.
-        ctx: {
-          authInfo: this.authInfo,
-          requestId: this.tryGetContext()?.requestId ?? this.runId,
-          surface: getCallSurface(),
-          ...(this.signal ? { signal: this.signal } : {}),
-        },
+        // The first try's idempotency key is kept, not enumerable, as its dispatcher set it.
+        ctx: Object.defineProperty(
+          {
+            authInfo: this.authInfo,
+            requestId: this.tryGetContext()?.requestId ?? this.runId,
+            surface: getCallSurface(),
+            ...(this.signal ? { signal: this.signal } : {}),
+          },
+          'idempotencyKey',
+          { value: pending.idempotencyKey },
+        ),
       });
 
       this.logger.info('sendElicitationResult: original tool completed', {

@@ -1069,6 +1069,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       // These are used by the elicit() method when throwing ElicitationFallbackRequired
       context._toolNameInternal = tool.metadata.id ?? tool.metadata.name;
       context._toolInputInternal = input.arguments;
+      context.idempotencyKey = (ctx as { idempotencyKey?: string }).idempotencyKey;
       context._jsonRpcRequestIdInternal = this.state.jsonRpcRequestId;
       // A hook that answers with `respond(value)` ends the call before validateOutput records the output
       context._onRespondInternal = (value) => this.state.set('rawOutput', value);
@@ -1396,6 +1397,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
           // no `tools/call` resolves.
           toolName: tool.fullName,
           toolInput: this.state.required.input.arguments,
+          idempotencyKey: toolContext.idempotencyKey,
           elicitMessage: error.elicitMessage,
           elicitSchema: error.schema,
           createdAt: Date.now(),

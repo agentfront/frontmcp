@@ -7,8 +7,8 @@ import type { CodeCallJournalEntry, CodeCallRunRecord } from './run-record.types
 /** The tool context a run ran in, which names its owner. */
 export type CodeCallRunCaller = Parameters<typeof resultOwnerOf>[0];
 
-/** A run record before the store gives it an id and an owner. */
-export type CodeCallRunInput = Omit<CodeCallRunRecord, 'runId' | 'owner' | 'omittedEntries'>;
+/** A run record before the store gives it an owner, and an id unless the run has one already. */
+export type CodeCallRunInput = Omit<CodeCallRunRecord, 'runId' | 'owner' | 'omittedEntries'> & { runId?: string };
 
 export interface CodeCallRunStoreOptions {
   maxRecordBytes: number;
@@ -45,10 +45,12 @@ export class CodeCallRunStore implements OnShutdown {
   }
 
   /** Keeps `run` for the caller and returns its id; none without an owner, and a RangeError for metadata over the limit. */
-  async keep(caller: CodeCallRunCaller, run: CodeCallRunInput): Promise<string | undefined> {
+  async keep(
+    caller: CodeCallRunCaller,
+    { runId = this.handles.newHandle(), ...run }: CodeCallRunInput,
+  ): Promise<string | undefined> {
     const owner = resultOwnerOf(caller);
     if (owner.session === undefined && owner.caller === undefined) return undefined;
-    const runId = this.handles.newHandle();
     await this.handles.save(runId, fittedRecord({ runId, owner, ...run }, this.options.maxRecordBytes), owner);
     return runId;
   }

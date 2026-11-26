@@ -2,6 +2,9 @@ module.exports = {
   displayName: 'plugin-codecall',
   preset: '../../jest.preset.js',
   testEnvironment: 'node',
+  maxWorkers: '50%',
+  // The flow specs start real servers on both runtimes; recycling a worker past this heap keeps a coverage run in memory
+  workerIdleMemoryLimit: '512MB',
   transformIgnorePatterns: ['node_modules/(?!(jose|@enclave-vm)/)'],
   moduleNameMapper: {
     ...require('../../jest.imports-mapper'),
