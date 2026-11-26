@@ -175,8 +175,8 @@ export class TransportService {
   /** Session-store reads of the per-request check that have not settled yet, by read and session. */
   private readonly pendingSessionChecks = new Map<string, Promise<unknown>>();
 
-  /** Sessions whose handover read timed out and has not settled yet. */
-  private readonly silentHandoverReads = new Set<string>();
+  /** For each session, the handover reads that timed out and have not settled yet. */
+  private readonly silentHandoverReads = new Map<string, number>();
 
   /**
    * Redis key prefix under which session records are stored.
@@ -650,11 +650,13 @@ export class TransportService {
       return this.raceSessionCheckTimeout(read).then(
         (stored) => !stored,
         () => {
-          this.silentHandoverReads.add(sessionId);
-          read.then(
-            () => this.silentHandoverReads.delete(sessionId),
-            () => this.silentHandoverReads.delete(sessionId),
-          );
+          this.silentHandoverReads.set(sessionId, (this.silentHandoverReads.get(sessionId) ?? 0) + 1);
+          const settled = () => {
+            const outstanding = (this.silentHandoverReads.get(sessionId) ?? 1) - 1;
+            if (outstanding > 0) this.silentHandoverReads.set(sessionId, outstanding);
+            else this.silentHandoverReads.delete(sessionId);
+          };
+          read.then(settled, settled);
           return false;
         },
       );
