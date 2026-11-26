@@ -16,6 +16,13 @@ export type CodeCallCallPhase = 'access' | 'input' | 'limit' | 'execute';
 /** A call CodeCall answers itself under a reserved name: `keep(name, value)` or `recall(name)`, never a tool call. */
 export type CodeCallKeptValueCallKind = 'keep' | 'recall';
 
+/** A failed call's error as the script got it, kept to replay the call. */
+export interface CodeCallScriptError {
+  name?: string;
+  code?: string;
+  message: string;
+}
+
 /** One tool call of a run. */
 export interface CodeCallJournalEntry {
   /** The call's place in the run, from 1: the order in which the host's tool handler was entered. */
@@ -33,8 +40,10 @@ export interface CodeCallJournalEntry {
   durationMs: number;
   /** UTF-8 bytes of the result's JSON, for a call that succeeded. */
   resultBytes?: number;
-  /** The result itself, only with `runs.resume`. */
+  /** The result itself, kept only in the record of a run that can be replayed. */
   result?: unknown;
+  /** The error the script got for a failed call, kept only in the record of a run that can be replayed. */
+  error?: CodeCallScriptError;
 }
 
 /** What one `codecall:execute` did, kept for its owner until `runs.ttlSeconds` runs out. */
@@ -56,6 +65,12 @@ export interface CodeCallRunRecord {
   journal: CodeCallJournalEntry[];
   /** Journal entries left out because the record reached `runs.maxRecordBytes`. */
   omittedEntries?: number;
+  /** What the script's `Date` read, in order, kept only in the record of a run that can be replayed. */
+  clock?: number[];
+  /** What the script's `Math.random()` returned, in order, kept only in the record of a run that can be replayed. */
+  random?: number[];
+  /** How many lines of output (console, `mcpLog`, `mcpNotify`) the script wrote, which a replay does not write again. */
+  outputs?: number;
 }
 
 /** The store of run records: `this.get(CodeCallRunStoreToken)`, registered while `runs.enabled` is true. */

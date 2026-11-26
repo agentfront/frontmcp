@@ -408,12 +408,12 @@ describe('CodeCall vm runtime and budgets', () => {
 });
 
 describe('CodeCall runs options', () => {
-  it('keeps run records by default, for 600 seconds, up to 256 KiB each, without results', () => {
+  it('keeps run records by default, for 600 seconds, up to 256 KiB each, with results', () => {
     expect(codeCallPluginOptionsSchema.parse({}).runs).toEqual({
       enabled: true,
       ttlSeconds: 600,
       maxRecordBytes: 256 * 1024,
-      resume: false,
+      resume: true,
       storage: { type: 'auto', memory: { maxEntries: DEFAULT_RUNS_MEMORY_MAX_ENTRIES } },
       namespace: 'codecall-runs',
     });

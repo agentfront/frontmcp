@@ -1083,10 +1083,39 @@ describe('ExecuteTool', () => {
     });
   });
 
+  describe('A replay that diverged', () => {
+    it('ends with the divergence, whatever the review decided at a call after it', async () => {
+      const { tool } = createExecuteTool({
+        enclaveResult: {
+          success: false,
+          timedOut: false,
+          logs: [],
+          error: {
+            name: 'RunDivergedError',
+            code: 'RUN_DIVERGED',
+            message: 'The run diverged from its journal: call 1 to "users.get" had other arguments',
+          },
+          review: {
+            decisions: [
+              { phase: 'call', toolName: 'users.delete', callIndex: 1, decision: 'needs_approval', durationMs: 1 },
+            ],
+          },
+        },
+      });
+
+      const result = await tool.execute({ script: 'return 1;' });
+
+      expect(result).toMatchObject({
+        status: 'runtime_error',
+        error: { name: 'RunDivergedError', message: expect.stringContaining('diverged from its journal') },
+      });
+    });
+  });
+
   describe('Run records', () => {
     function withRunStore(keep: jest.Mock, enclaveResult?: Partial<EnclaveExecutionResult>) {
       const created = createExecuteTool({ enclaveResult });
-      const runs = { keepsResults: false, keep };
+      const runs = { keepsResultsOf: () => false, keep };
       const warn = jest.fn();
       created.tool._setDependency(CodeCallRunStoreToken, runs);
       created.tool.logger = { warn };

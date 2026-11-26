@@ -3,7 +3,8 @@ import { canonicalJson, sha256Hex } from '@frontmcp/utils';
 import { TOOL_CALL_ERROR_CODES } from '../errors';
 import { keptValueCallOf } from '../kept-values/kept-value-script';
 import { toPlainJson } from '../utils/plain-json';
-import type { CodeCallCallPhase, CodeCallJournalEntry } from './run-record.types';
+import type { CodeCallCallPhase, CodeCallJournalEntry, CodeCallScriptError } from './run-record.types';
+import type { RunReplay } from './run-replay';
 
 const PHASE_BY_ERROR_CODE: Partial<Record<string, CodeCallCallPhase>> = {
   [TOOL_CALL_ERROR_CODES.SELF_REFERENCE]: 'access',
@@ -33,6 +34,26 @@ export function argumentsHashOf(args: unknown): string {
   }
 }
 
+/** A tool name as a journal entry keeps it. */
+export function journalToolNameOf(tool: string): string {
+  return String(tool).slice(0, MAX_TOOL_NAME_CHARS);
+}
+
+/** Journal entries without what replaying them needs (results and errors): what a run that did not pause keeps. */
+export function journalMetadataOf(entries: readonly CodeCallJournalEntry[]): CodeCallJournalEntry[] {
+  return entries.map(({ result: _result, error: _error, ...metadata }) => metadata);
+}
+
+/** A failed call's error as the script got it: its name, code and message. */
+function scriptErrorOf(error: unknown): CodeCallScriptError {
+  const { name, code, message } = (typeof error === 'object' && error !== null ? error : {}) as Record<string, unknown>;
+  return {
+    ...(typeof name === 'string' && { name }),
+    ...(typeof code === 'string' && { code }),
+    message: typeof message === 'string' ? message : String(error),
+  };
+}
+
 /** The phase of a failed call, from the code of the error CodeCall's tool handler threw. */
 function phaseOf(error: unknown): CodeCallCallPhase {
   const code = (error as { code?: unknown } | null | undefined)?.code;
@@ -58,8 +79,10 @@ export interface RunJournalObserver {
 }
 
 export interface RunJournalOptions {
-  /** Keep each call's result in its entry (`runs.resume`). */
+  /** Keep each call's result, or the error the script got, in its entry, for replaying the run (`runs.resume`). */
   keepResults?: boolean;
+  /** The replay of the run: what it answers from the run it replays, and the clock and random values it records. */
+  replay?: RunReplay;
   /** Keep each call's arguments and result beside its entry, never in it (`trace.values`). */
   keepValues?: boolean;
   observer?: RunJournalObserver;
@@ -74,12 +97,19 @@ export class RunJournal {
 
   constructor(private readonly options: RunJournalOptions = {}) {}
 
-  /** Records a call as the tool handler is entered; a `keep` or `recall` never keeps its values, which are kept data. */
+  get replay(): RunReplay | undefined {
+    return this.options.replay;
+  }
+
+  /**
+   * Records a call as the tool handler is entered; a `keep` or `recall` never shows its values in the trace, which are
+   * kept data, and keeps its result for a replay only as any call does.
+   */
   begin(tool: string, args: unknown): RunJournalCall {
     const keptValueCall = keptValueCallOf(tool, args);
     const entry: CodeCallJournalEntry = {
       position: this.entries.length + 1,
-      tool: String(tool).slice(0, MAX_TOOL_NAME_CHARS),
+      tool: journalToolNameOf(tool),
       ...keptValueCall,
       argumentsHash: argumentsHashOf(args),
       outcome: 'unfinished',
@@ -104,6 +134,7 @@ export class RunJournal {
         if (!this.settle(entry)) return;
         entry.outcome = 'failure';
         entry.phase = phaseOf(error);
+        if (this.options.keepResults) entry.error = scriptErrorOf(error);
         this.ended(entry);
       },
     };

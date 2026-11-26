@@ -37,9 +37,10 @@ import { reviewDecisionOf, reviewResultOf } from '../review/review-result';
 import CodeCallReviewService from '../review/review.service';
 import { reviewOutcomeOf, type PendingApproval, type RunReview } from '../review/run-review';
 import { withCallIdempotencyKey, type ScriptToolCall } from '../runs/call-idempotency-key';
-import { jsonBytes, RunJournal } from '../runs/run-journal';
+import { journalMetadataOf, jsonBytes, RunJournal } from '../runs/run-journal';
 import type { CodeCallRunInput, CodeCallRunStore } from '../runs/run-record.store';
 import { CodeCallRunStoreToken } from '../runs/run-record.types';
+import { RUN_DIVERGED, RunReplay } from '../runs/run-replay';
 import { RunSpans, RunTelemetryToken } from '../runs/run-spans';
 import { traceOf } from '../runs/run-trace';
 import {
@@ -64,6 +65,11 @@ import {
   type CodeCallExecuteResult,
   type ExecuteToolInput,
 } from './execute.schema';
+
+/** What records a run for replaying it, when its calls' results are kept. */
+function replayOf(keepResults: boolean): RunReplay | undefined {
+  return keepResults ? new RunReplay() : undefined;
+}
 
 /** One run of the script, with its journal and, when they are on, its review and its budgets. */
 interface ReviewedAttempt {
@@ -150,8 +156,9 @@ export default class ExecuteTool extends ToolContext {
     const scriptHash = sha256Hex(input.script);
     const runs = this.tryGet(CodeCallRunStoreToken);
     const spans = this.startRunSpans(scriptHash, resolvedVm.runtime);
+    const keepResults = runs?.keepsResultsOf(this) === true;
     const newJournal = () =>
-      new RunJournal({ keepResults: runs?.keepsResults, keepValues: trace.values, observer: spans });
+      new RunJournal({ keepResults, keepValues: trace.values, observer: spans, replay: replayOf(keepResults) });
     const startedAt = new Date();
     let attempt: ReviewedAttempt | undefined;
     let run: CodeCallRunInput | undefined;
@@ -167,7 +174,7 @@ export default class ExecuteTool extends ToolContext {
         runId: this.scriptRunId,
         reviewDecision: review || budgets ? reviewDecisionOf(result) : null,
         ...(result.status === 'ok' && { resultBytes: jsonBytes(result.result) }),
-        journal: [...journal.close()],
+        journal: journalMetadataOf(journal.close()),
       };
       runId = runs ? await this.keepRun(runs, run) : undefined;
       const traceLines = traceOf(result.status, journal, trace);
@@ -541,9 +548,10 @@ export default class ExecuteTool extends ToolContext {
       );
       const durationMs = elapsed(executionResult.stats?.duration);
 
-      const reviewOutcome = executionResult.review
-        ? reviewOutcomeOf(executionResult.review.decisions, executionResult.error)
-        : undefined;
+      const reviewOutcome =
+        executionResult.review && executionResult.error?.code !== RUN_DIVERGED
+          ? reviewOutcomeOf(executionResult.review.decisions, executionResult.error)
+          : undefined;
       if (reviewOutcome) {
         audit?.logExecutionFailure(executionId, script, durationMs, `review: ${reviewOutcome.status}`);
         const pending = budgets?.pendingApprovalAt(reviewOutcome.callIndex) ?? review?.pendingApproval;
