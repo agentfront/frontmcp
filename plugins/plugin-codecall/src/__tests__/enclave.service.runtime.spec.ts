@@ -21,6 +21,7 @@ import {
 } from '../services/runtime';
 import { ExecutionEndedError } from '../services/runtime/execution-gate';
 import { createInterpreterRuntime } from '../services/runtime/interpreter.runtime';
+import { createNodeVmRuntime, type NodeVmModule } from '../services/runtime/node-vm.runtime';
 
 /** Calls a tool handler as the sandbox does: Enclave 2.21 adds the call's position, which 2.20 ignores. */
 function callToolHandler(
@@ -458,6 +459,76 @@ describe('EnclaveService host functions and tool calls', () => {
 
     const result = await service.execute("return await callTool('a', {});", environment());
     expect(result.stats).toEqual({ duration: 3, toolCallCount: 1, iterationCount: 0 });
+  });
+});
+
+describe('EnclaveService node-vm preload', () => {
+  const nextTurn = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
+
+  it('starts loading Enclave in the background when it is set up, and its first run awaits that load', async () => {
+    let finishLoad: (module: NodeVmModule) => void = () => undefined;
+    const loader = jest.fn(() => new Promise<NodeVmModule>((resolve) => (finishLoad = resolve)));
+    const run = jest.fn(async () => okResult('ran'));
+    class FakeEnclave {
+      run = run;
+      dispose = jest.fn();
+    }
+    const service = new EnclaveService(configWith({}), undefined, {
+      'node-vm': createNodeVmRuntime(loader),
+      interpreter: unusedRuntime('interpreter'),
+    });
+
+    expect(loader).not.toHaveBeenCalled();
+    await nextTurn();
+    expect(loader).toHaveBeenCalledTimes(1);
+
+    const execution = service.execute('return 1;', environment());
+    await nextTurn();
+    finishLoad({ Enclave: FakeEnclave } as never);
+
+    await expect(execution).resolves.toMatchObject({ success: true, result: 'ran' });
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(loader).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves a failed load to the first run, which reports it as it did before the preload', async () => {
+    const loader = jest.fn(() => Promise.reject(new Error('No such module "@enclave-vm/core"')));
+    const service = new EnclaveService(configWith({}), undefined, {
+      'node-vm': createNodeVmRuntime(loader),
+      interpreter: unusedRuntime('interpreter'),
+    });
+    await nextTurn();
+    expect(loader).toHaveBeenCalledTimes(1);
+
+    await expect(service.execute('return 1;', environment())).resolves.toEqual({
+      success: false,
+      error: {
+        name: 'CodeCallRuntimeError',
+        code: 'RUNTIME_UNAVAILABLE',
+        runtime: 'node-vm',
+        message:
+          "CodeCall vm.runtime 'node-vm' could not load @enclave-vm/core: it needs Node.js with node:vm. " +
+          "Set vm.runtime: 'interpreter' outside Node.js.",
+      },
+      logs: [],
+      timedOut: false,
+      stats: { duration: 0, toolCallCount: 0, iterationCount: 0 },
+    });
+    expect(loader).toHaveBeenCalledTimes(2);
+  });
+
+  it('preloads nothing for the interpreter runtime', async () => {
+    const nodeVmLoader = jest.fn();
+    const workerEntryLoader = jest.fn();
+    const service = new EnclaveService(configWith({ runtime: 'interpreter' }), undefined, {
+      'node-vm': createNodeVmRuntime(nodeVmLoader),
+      interpreter: createInterpreterRuntime(workerEntryLoader),
+    });
+    await nextTurn();
+
+    expect(service).toBeInstanceOf(EnclaveService);
+    expect(nodeVmLoader).not.toHaveBeenCalled();
+    expect(workerEntryLoader).not.toHaveBeenCalled();
   });
 });
 
