@@ -90,6 +90,8 @@ export interface CodeCallRunPause {
   allowedTools?: string[];
   /** The corrected arguments a resume sent for the paused call, when the run paused at that same call again. */
   arguments?: Record<string, unknown>;
+  /** Its replay needs an Enclave that judges replayed calls by their recorded times (2.21.1 and later). */
+  needsReplayedCalls?: boolean;
 }
 
 /** What one `codecall:execute` did, kept for its owner until `runs.ttlSeconds` runs out. */

@@ -110,6 +110,18 @@ export interface CodeCallScriptRunSpec {
   clock?: () => number;
   /** What the script's `Math.random()` returns, for a run that may be replayed. */
   random?: () => number;
+  /** The calls a resumed run answers from its record, with when each first reached the host, for Enclave's detectors. */
+  replayedCalls?: readonly CodeCallReplayedCall[];
+  /** When the run a resumed run continues first reached its paused call, in ms from its start: Enclave maps it to now. */
+  replayedCallsResumeAtMs?: number;
+}
+
+/** A call Enclave's detectors judge by when it first reached the host: Enclave's `ReplayedCall`. */
+export interface CodeCallReplayedCall {
+  callIndex: number;
+  toolName: string;
+  /** When the call reached the host, in ms from the start of the run that first made it. */
+  elapsedMs: number;
 }
 
 /** The outcome of one run, in Enclave's `ExecutionResult` shape. */
@@ -122,6 +134,10 @@ export interface CodeCallScriptRunner {
   dispose(): void;
   /** Whether the runner applies the spec's `toolResultOrder`, `clock` and `random`, which a replayed run needs. */
   readonly replays?: boolean;
+  /** Whether the runner gives Enclave's detectors the spec's `replayedCalls` (Enclave 2.21.1 and later). */
+  readonly replaysCallTimes?: boolean;
+  /** Whether its result names the first call Enclave refused (`refusedCall`), which no script can forge. */
+  readonly reportsRefusals?: boolean;
 }
 
 /** A runtime CodeCall can execute scripts in. */
@@ -132,6 +148,8 @@ export interface CodeCallScriptRuntime {
    * unavailable here or cannot enforce every part of the spec.
    */
   createRunner(spec: CodeCallScriptRunSpec): Promise<CodeCallScriptRunner>;
+  /** Whether its Enclave judges replayed calls by their recorded times (`replayedCalls`); false when it cannot load. */
+  replaysCallTimes?(): Promise<boolean>;
 }
 
 /** The options of one run: the review hooks' context, and the sidecar entries the run starts with. */

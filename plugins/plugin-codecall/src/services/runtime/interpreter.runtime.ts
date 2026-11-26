@@ -32,6 +32,7 @@ import {
   CODECALL_ENCLAVE_SECURITY_LEVEL,
   runOptionsOf,
   type CodeCallHostFunction,
+  type CodeCallReplayedCall,
   type CodeCallScriptRunner,
   type CodeCallScriptRunSpec,
   type CodeCallScriptRuntime,
@@ -59,7 +60,13 @@ export type AgentScriptRunnerCapability =
   /** Sidecar entries an earlier run kept, which the run starts with. */
   | 'kept-references'
   /** `toolResultOrder: 'call'` and the host's `clock` and `random`, which a replayed run needs. */
-  | 'replay';
+  | 'replay'
+  /** The `replayedCalls` run option: Enclave's detectors judge replayed calls by when they first reached the host. */
+  | 'replayed-calls'
+  /** The `replayedCallsResumeAtMs` run option: when the paused call first reached the host maps to now. */
+  | 'replayed-calls-resume'
+  /** The result's `refusedCall`: the first call Enclave refused. */
+  | 'refused-call';
 
 /** The options CodeCall gives the runner. */
 export interface AgentScriptRunnerOptions {
@@ -94,7 +101,12 @@ export interface AgentScriptRunnerInstance {
   run<T = unknown>(
     code: string,
     toolHandler?: ToolHandler,
-    options?: { reviewContext?: ReviewContext; preloadReferences?: readonly ReferenceEntry[] },
+    options?: {
+      reviewContext?: ReviewContext;
+      preloadReferences?: readonly ReferenceEntry[];
+      replayedCalls?: readonly CodeCallReplayedCall[];
+      replayedCallsResumeAtMs?: number;
+    },
   ): Promise<ExecutionResult<T>>;
   dispose(): void;
 }
@@ -181,6 +193,13 @@ function createRunner(Runner: AgentScriptRunnerClass, options: AgentScriptRunner
 export function createInterpreterRuntime(loader: WorkerEntryLoader = loadWorkerEntry): CodeCallScriptRuntime {
   return {
     name: 'interpreter',
+    async replaysCallTimes(): Promise<boolean> {
+      const Runner = await loader().then(
+        (entry) => entry[AGENT_SCRIPT_RUNNER_EXPORT],
+        () => undefined,
+      );
+      return isRunnerClass(Runner) && ['replay', 'replayed-calls'].every((name) => Runner.capabilities.includes(name));
+    },
     async createRunner(spec: CodeCallScriptRunSpec): Promise<CodeCallScriptRunner> {
       let entry: Record<string, unknown>;
       try {
@@ -212,12 +231,21 @@ export function createInterpreterRuntime(loader: WorkerEntryLoader = loadWorkerE
         );
       }
       const replays = spec.clock !== undefined && Runner.capabilities.includes('replay');
+      const replaysCallTimes = replays && Runner.capabilities.includes('replayed-calls');
+      const resumesAtPausedCall = replaysCallTimes && Runner.capabilities.includes('replayed-calls-resume');
+      const runOptions = {
+        ...runOptionsOf(spec),
+        ...(replaysCallTimes && spec.replayedCalls && { replayedCalls: spec.replayedCalls }),
+        ...(resumesAtPausedCall && spec.replayedCalls && { replayedCallsResumeAtMs: spec.replayedCallsResumeAtMs }),
+      };
       // A runner without 'replay' runs the script as before, and the run cannot be replayed
       const runner = createRunner(Runner, toRunnerOptions(replays ? spec : { ...spec, clock: undefined }));
       return {
-        run: (code) => runner.run<unknown>(code, undefined, runOptionsOf(spec)),
+        run: (code) => runner.run<unknown>(code, undefined, runOptions),
         dispose: () => runner.dispose(),
         replays,
+        replaysCallTimes,
+        reportsRefusals: Runner.capabilities.includes('refused-call'),
       };
     },
   };

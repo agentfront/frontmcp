@@ -17,6 +17,16 @@ export function runNotPausedError(runId: string, status: string): PublicMcpError
   return new PublicMcpError(`Run "${runId}" is not paused: it is ${status}`, 'RUN_NOT_PAUSED', 409);
 }
 
+/** A paused run whose replay needs an Enclave this server does not have: it stays paused for one that has it. */
+export function runNeedsReplayedCallsError(runId: string): PublicMcpError {
+  return new PublicMcpError(
+    `Run "${runId}" stays paused: replaying it needs @enclave-vm/core 2.21.1 or later, which judges replayed calls by ` +
+      'their recorded times. Resume it on a server that has it.',
+    'RUN_NEEDS_REPLAYED_CALLS',
+    409,
+  );
+}
+
 /** The caller's paused run `runId`, or the error that says why it cannot be resumed or cancelled. */
 export async function readPausedRun(
   runs: CodeCallRunStore,

@@ -12,7 +12,7 @@ import { isKeptValueCall } from '../kept-values/kept-value-script';
 import type CodeCallConfig from '../providers/code-call.config';
 import { extractionThresholdOf, MAX_ITERATIONS_PER_LOOP } from '../providers/code-call.config';
 import { RunJournal } from '../runs/run-journal';
-import { callOrReplay, journaledReviewHooks, replayedEnvironment, type RunDivergedError } from '../runs/run-replay';
+import { callOrReplay, journaledReviewHooks, replayedEnvironment, type RunReplay } from '../runs/run-replay';
 import { findScriptPolicyIssues } from '../security/script-policy';
 import { toSandboxToolNamespaces } from '../utils/build-tool-namespaces';
 import { withScriptLines } from '../utils/script-lines';
@@ -114,6 +114,29 @@ const ITERATION_LIMIT_ERROR = {
   name: 'Error',
   message: `${ITERATION_LIMIT_PREFIX} (${MAX_ITERATIONS_PER_LOOP}). This limit prevents infinite loops.`,
 };
+
+/** The codes Enclave gives any error a script ends with: the script's own, and the refusals of a call it throws into it. */
+const SCRIPT_ERROR_CODES = new Set(['DOUBLE_VM_EXECUTION_ERROR', 'VM_EXECUTION_ERROR']);
+
+/** How Enclave's refusals of a call start, for an Enclave whose result does not name them: detectors, limits, an abort. */
+const CALL_REFUSAL =
+  /^(?:Suspicious pattern detected: |Operation rate limit exceeded |Operation ".*" (?:does not match allowed|matches blocked) pattern$|Maximum tool call limit exceeded|Execution aborted$)/;
+
+/**
+ * Whether Enclave stopped the script itself, never a tool: a timeout, a call it refused (from its result, or from its
+ * error message where the result cannot say), or an error with a code of Enclave's own, the loop limit included.
+ */
+function stoppedBySandbox(
+  result: CodeCallRunResult,
+  mapped: EnclaveExecutionResult,
+  reportsRefusals: boolean,
+): boolean {
+  const { error } = mapped;
+  if (mapped.timedOut || result.refusedCall) return true;
+  if (!error || error.toolName) return false;
+  if (error.code !== undefined && !SCRIPT_ERROR_CODES.has(error.code)) return true;
+  return error.message.startsWith(ITERATION_LIMIT_PREFIX) || (!reportsRefusals && CALL_REFUSAL.test(error.message));
+}
 
 /** `@enclave-vm/ast`'s message for a script that doesn't parse. */
 const PARSE_FAILURE_PREFIX = 'Failed to parse AgentScript code: ';
@@ -423,7 +446,7 @@ export default class EnclaveService {
       throw error;
     }
 
-    replay?.appliedByRuntime(runner.replays === true);
+    replay?.appliedByRuntime(runner.replays === true, runner.replaysCallTimes === true);
     if (replay?.replaysRun && !runner.replays) {
       gate.close();
       runner.dispose();
@@ -434,13 +457,21 @@ export default class EnclaveService {
       const result = await runner.run(script);
       const { pendingToolCalls } = gate.close();
       const mapped = this.mapEnclaveResult(result, logs, toolFailures, script, pendingToolCalls);
-      const divergence = replay?.divergenceOf(mapped.timedOut);
-      const ended = divergence ? divergedResult(divergence, mapped) : mapped;
+      const ended = replay ? replayEndOf(replay, result, mapped, runner.reportsRefusals === true) : mapped;
       return result.review ? { ...ended, review: result.review } : ended;
     } finally {
       gate.close();
       journal.close();
       runner.dispose();
+    }
+  }
+
+  /** Whether the configured runtime's Enclave judges replayed calls by their recorded times, which some paused runs need. */
+  async replaysCallTimes(): Promise<boolean> {
+    try {
+      return (await this.runtimes[runtimeSettingsOf(this.vmOptions).runtime].replaysCallTimes?.()) === true;
+    } catch {
+      return false;
     }
   }
 
@@ -592,9 +623,32 @@ export default class EnclaveService {
   }
 }
 
-/** A replayed run whose script did not make the calls its journal recorded: whatever it returned, it ends with the divergence. */
-function divergedResult(divergence: RunDivergedError, mapped: EnclaveExecutionResult): EnclaveExecutionResult {
-  const { name, message, code } = divergence;
+/**
+ * How a replayed run ends: as it ran, unless it made a recorded call with another tool or arguments, or ended before
+ * making them all by itself; then with the divergence. A run Enclave stopped there ends with Enclave's error, and one
+ * whose script caught Enclave's refusal and returned ends with that refusal.
+ */
+function replayEndOf(
+  replay: RunReplay,
+  result: CodeCallRunResult,
+  mapped: EnclaveExecutionResult,
+  reportsRefusals: boolean,
+): EnclaveExecutionResult {
+  const divergence = replay.divergenceOf(stoppedBySandbox(result, mapped, reportsRefusals));
+  if (divergence) return divergedResult(divergence, mapped);
+  if (!mapped.success || !result.refusedCall || !replay.endedEarly) return mapped;
+  const { code, pattern } = result.refusedCall;
+  const refusal = pattern ? `${code}: ${pattern}` : code;
+  const message = `The sandbox refused a call (${refusal}); the script caught it and ended before the calls its run made`;
+  return divergedResult({ name: 'CallRefusedError', code, message }, mapped);
+}
+
+/** A replayed run whose script did not make the calls its journal recorded: whatever it returned, it ends with why. */
+function divergedResult(
+  why: { name: string; message: string; code: string },
+  mapped: EnclaveExecutionResult,
+): EnclaveExecutionResult {
+  const { name, message, code } = why;
   return { success: false, error: { name, message, code }, logs: mapped.logs, timedOut: false, stats: mapped.stats };
 }
 

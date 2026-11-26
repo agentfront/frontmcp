@@ -15,7 +15,7 @@
 // threads do not contain either outcome. The `interpreter` runtime does not depend on that boundary
 // for this class of failure.
 
-import type { CreateEnclaveOptions, Enclave } from '@enclave-vm/core';
+import type { CreateEnclaveOptions, Enclave, EnclaveRunOptions } from '@enclave-vm/core';
 
 import { CodeCallRuntimeError } from './runtime.errors';
 import {
@@ -34,6 +34,8 @@ export interface NodeVmModule {
   Enclave: new (options: CreateEnclaveOptions) => Pick<Enclave, 'run' | 'dispose'>;
   /** Exported since 2.21, whose `review` option runs its hooks and whose `run()` takes `preloadReferences`. */
   REVIEW_ERROR_CODES?: unknown;
+  /** What `run()` takes and reports since Enclave 2.21.1: `replayed-calls`, `replayed-calls-resume`, `refused-call`. */
+  ENCLAVE_RUN_FEATURES?: readonly string[];
 }
 
 /**
@@ -127,10 +129,21 @@ function createEnclave(module: NodeVmModule, options: CreateEnclaveOptions): Pic
   }
 }
 
+/** The run features the loaded Enclave names, none for one before 2.21.1 or one that cannot load. */
+export function runFeaturesOf(module: Pick<NodeVmModule, 'ENCLAVE_RUN_FEATURES'> | undefined): readonly unknown[] {
+  const features: unknown = module?.ENCLAVE_RUN_FEATURES;
+  return Array.isArray(features) ? features : [];
+}
+
 /** The `node-vm` runtime. */
 export function createNodeVmRuntime(loader: NodeVmModuleLoader = loadNodeVmModule): CodeCallScriptRuntime {
   return {
     name: 'node-vm',
+    async replaysCallTimes(): Promise<boolean> {
+      return (
+        !isCloudflareWorkersRuntime() && runFeaturesOf(await loader().catch(() => undefined)).includes('replayed-calls')
+      );
+    },
     async createRunner(spec: CodeCallScriptRunSpec): Promise<CodeCallScriptRunner> {
       if (isCloudflareWorkersRuntime()) {
         throw new CodeCallRuntimeError('RUNTIME_UNAVAILABLE', 'node-vm', UNAVAILABLE_IN_WORKERS);
@@ -168,10 +181,21 @@ export function createNodeVmRuntime(loader: NodeVmModuleLoader = loadNodeVmModul
         );
       }
       const enclave = createEnclave(module, toEnclaveOptions(spec));
+      const replays = spec.clock !== undefined;
+      const features = runFeaturesOf(module);
+      const replaysCallTimes = replays && features.includes('replayed-calls');
+      const resumesAtPausedCall = replaysCallTimes && features.includes('replayed-calls-resume');
+      const runOptions: EnclaveRunOptions = {
+        ...runOptionsOf(spec),
+        ...(replaysCallTimes && spec.replayedCalls && { replayedCalls: spec.replayedCalls }),
+        ...(resumesAtPausedCall && spec.replayedCalls && { replayedCallsResumeAtMs: spec.replayedCallsResumeAtMs }),
+      };
       return {
-        run: (code) => enclave.run<unknown>(code, undefined, runOptionsOf(spec)),
+        run: (code) => enclave.run<unknown>(code, undefined, runOptions),
         dispose: () => enclave.dispose(),
-        replays: spec.clock !== undefined,
+        replays,
+        replaysCallTimes,
+        reportsRefusals: features.includes('refused-call'),
       };
     },
   };
