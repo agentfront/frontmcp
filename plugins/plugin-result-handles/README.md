@@ -96,7 +96,7 @@ ResultHandlesPlugin.init({ resources: (uri, answer, { bytes, fullName, request }
 
 The plugin runs on the `fitAnswer` stage of `resources/read`, before the answer budget. A read folds when a client
 read it (an agent's `read_resource` gets it whole), it has one text content that isn't HTML, the text (parsed when
-it's a JSON object or array) is larger than `thresholdBytes`, the call has a verified session or an authenticated
+it's a JSON object or array, or any JSON value under a JSON `mimeType`) is larger than `thresholdBytes`, the call has a verified session or an authenticated
 caller, and the `resources` policy, when it's a function, returns `true`. The folded read has two contents: the JSON of
 `{ preview, shape, handle }` (`mimeType: 'application/json'`), then a `text/plain` note naming `result_query`.
 `_meta['frontmcp/result-handle']` holds `{ handle, bytes, ttlSeconds }`, as for a tool. A resource handle is bound to

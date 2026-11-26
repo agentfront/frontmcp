@@ -119,7 +119,8 @@ ResultHandlesPlugin.init({ resources: true }); // off by default
 ResultHandlesPlugin.init({ resources: (uri, answer, { bytes, fullName, request }) => uri.startsWith('reports://') });
 ```
 
-A client's `resources/read` of one text content that is not HTML folds when its text (parsed when JSON) is over the
+A client's `resources/read` of one text content that is not HTML folds when its text (parsed when JSON: any JSON value, a string included, under an `application/json` or `+json`
+`mimeType`) is over the
 threshold and the read has a session or a signed-in caller. The folded read has two contents: the JSON of
 `{ preview, shape, handle }` (`application/json`) and a `text/plain` note naming `result_query`. An agent's
 `read_resource` and `ui://` widgets are never folded. A resource handle is bound to the session and caller of the read.
