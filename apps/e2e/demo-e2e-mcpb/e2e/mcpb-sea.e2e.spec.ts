@@ -97,7 +97,8 @@ function extractEntry(archivePath: string, entryName: string, dest: string): Pro
         zip.openReadStream(entry, (streamErr, stream) => {
           if (streamErr || !stream) return reject(streamErr ?? new Error(`cannot read ${entryName}`));
           const out = createWriteStream(dest, { mode: 0o755 });
-          out.on('finish', () => {
+          // Resolve once the file is closed: running a binary still open for writing fails with ETXTBSY on Linux
+          out.on('close', () => {
             zip.close();
             resolve();
           });
