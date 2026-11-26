@@ -90,8 +90,17 @@ export class SseRouteStream implements AsyncIterableIterator<Uint8Array> {
     }, this.options.coalesceMs);
   }
 
+  /** A check that fails ends the stream, since the heartbeat cannot tell whether the reader may stay. */
   private async beat(): Promise<void> {
-    if ((await this.options.authorized?.()) === false) this.close();
+    let authorized: boolean | undefined;
+    try {
+      authorized = await this.options.authorized?.();
+    } catch (error) {
+      this.options.onError(error);
+      this.close();
+      return;
+    }
+    if (authorized === false) this.close();
     else this.offer(HEARTBEAT, false);
   }
 

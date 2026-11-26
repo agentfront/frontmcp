@@ -188,6 +188,22 @@ describe('SseRouteStream', () => {
     expect(await stream.next()).toEqual({ value: undefined, done: true });
   });
 
+  it('reports an authorized check that fails at a heartbeat, and ends the stream', async () => {
+    const onError = jest.fn();
+    const failure = new Error('session store unavailable');
+    const authorized = jest.fn<Promise<boolean>, []>().mockResolvedValueOnce(true).mockRejectedValueOnce(failure);
+    const { stream, onClose, unsubscribe } = createStream(async () => ({ count: 1 }), { onError, authorized });
+    await stream.next();
+
+    // Unhandled, the rejection would fail this test on its own, as it would crash a server.
+    await jest.advanceTimersByTimeAsync(15_000);
+
+    expect(onError).toHaveBeenCalledWith(failure);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+    expect(await stream.next()).toEqual({ value: undefined, done: true });
+  });
+
   it('is its own async iterator', () => {
     const { stream } = createStream(async () => undefined);
 
