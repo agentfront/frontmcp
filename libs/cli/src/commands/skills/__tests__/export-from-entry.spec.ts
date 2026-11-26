@@ -417,7 +417,7 @@ describe('frontmcp skills export --from-entry', () => {
       expect(await readFile(path.join(copy, 'SKILL.md'))).toContain('Follow rules/naming.md.');
       expect(logs()).not.toContain('pass --all-folders');
 
-      const check = { providers: [], skillsDirs: ['plugins/lens/skills'], check: true } as const;
+      const check = { providers: [], skillsDirs: ['plugins/lens/skills'], check: true };
       expect(await run({ ...check, allFolders: true })).toBe(0);
       await writeFile(path.join(lensDir, 'rules', 'naming.md'), 'Name things well.');
       expect(await run({ ...check, allFolders: true })).toBe(1);
