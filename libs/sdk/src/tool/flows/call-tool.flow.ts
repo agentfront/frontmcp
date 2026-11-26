@@ -1080,11 +1080,12 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       // Cast with TransportExtension since MCP SDK's AuthInfo doesn't include transport
       const frontmcpContext = context.tryGetContext();
       const authInfoWithTransport = authInfo as (AuthInfo & TransportExtension) | undefined;
-      if (frontmcpContext && authInfoWithTransport?.transport?.sendElicitRequest) {
+      const jsonRpcRequestId = this.state.jsonRpcRequestId;
+      // A call dispatched in process has no request id of its own: it keeps the request's, so the caller can still elicit
+      if (frontmcpContext && authInfoWithTransport?.transport?.sendElicitRequest && jsonRpcRequestId !== undefined) {
         const transport = authInfoWithTransport.transport;
         // Pass the JSON-RPC request ID for proper elicitation routing
         // The MCP SDK uses this to route messages through the correct SSE stream
-        const jsonRpcRequestId = this.state.jsonRpcRequestId;
         frontmcpContext.setTransport({
           sendElicitRequest: transport.sendElicitRequest.bind(transport),
           type: transport.type,

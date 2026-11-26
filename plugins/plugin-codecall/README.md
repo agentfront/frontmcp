@@ -202,8 +202,9 @@ replayable either.
 
 With `runs.resume` (on by default), a run that stops **before** a call ran is kept `paused`, with its journal and the
 call it stopped before, instead of failing: a call-phase decision refused that call (the review's `needs_approval`, or
-an uncaught `needs_changes` or `denied`, and a budget's decision of the same shape), or the call flow refused its
-input, uncaught. The answer keeps its status (`needs_approval`, `tool_error`, ...) and adds `paused`:
+an uncaught `needs_changes` or `denied`, and a budget's decision of the same shape), or the call flow refused it,
+uncaught, before its tool ran: its input, or a [budget](#budgets) as the tool started. The answer keeps its status
+(`needs_approval`, `tool_error`, ...) and adds `paused`:
 
 ```json
 {
@@ -407,7 +408,7 @@ With `review` on, `codecall:execute` has four more statuses, and its description
 | `status`         | Payload                                                             | What the agent does                                                                                                                                                                                                   |
 | ---------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `needs_changes`  | `findings`: `rule`, `message`, `location`, `suggestion`, `toolName` | Fixes the script and sends it again.                                                                                                                                                                                  |
-| `needs_approval` | `reason`, `approval`, `findings?`                                   | Waits for a person to approve, then sends the same script again.                                                                                                                                                      |
+| `needs_approval` | `reason`, `approval`, `findings?`, `paused?`                        | Waits for a person to approve, then resumes the run with `codecall:resume` when it has `paused`, or sends the same script again.                                                                                      |
 | `denied`         | `reason`, `findings?`                                               | Doesn't retry.                                                                                                                                                                                                        |
 | `review_failed`  | `error.message`                                                     | Reads the message: a review that failed before the script ran nothing, and the same script can be sent again; one that failed at a call stopped the run after the calls before it, whose effects are not rolled back. |
 
@@ -415,19 +416,26 @@ A refused script runs no statement. A call the rules refuse while the script run
 type, a computed tool name) throws in the script, which may catch it; uncaught, it ends the run with that status. A
 call that needs approval stops the run, after the calls before it ran.
 
-An approved script runs again from the start. So when a call needs approval after a call to a tool without
-`readOnlyHint` has run in the same script (sending an email, say), the answer is `needs_changes`, not
-`needs_approval`: the finding (`approval-after-effects`) names those tools and asks for the call in a script of its
-own, or for the earlier calls in a separate script. No approval is asked for, by elicitation either. A call that needs
-approval after read-only calls only, or before the script runs, asks as usual. Resuming a run from its journal (#1335)
-will lift this.
+A call that needs approval while the script runs [pauses](#pause-and-resume) the run before it: the answer is
+`needs_approval` with `runId` and `paused`, and once a person approves, `codecall:resume` runs that call, and the rest
+of the script, without running the calls before it again; the call is reviewed again then, with its approval, and the
+calls before it are not. A call that needs approval before the script runs asks as usual: nothing ran, and the same
+script is sent again.
+
+A run that cannot pause (without `runs.resume`, without an owner, on a runtime that cannot replay, or when its record
+would not fit) would run again from the start once approved. So when its call needs approval after a call to a tool
+without `readOnlyHint` has run (sending an email, say), the answer is `needs_changes`, not `needs_approval`: the
+finding (`approval-after-effects`) names those tools, which already ran, and asks for the call and the calls after it
+in a script of their own. No approval is asked for, by elicitation either.
 
 ### Approvals
 
 `approval.id` covers this script (its SHA-256), the call's arguments and the review policy version. The Approval
 plugin's record binds the caller (its session or user) and the expiry, and `review.approvalMaxAgeSeconds` caps the
 expiry. A changed script, other arguments or another policy ask again. `approval.anyArgumentsId` covers any
-arguments of that tool in that script, for as many calls per run as the grant's `metadata.maxCalls` allows. When
+arguments of that tool in that script, for as many calls per run as the grant's `metadata.maxCalls` allows; a
+resumed run counts the calls to that tool it made before it paused, as its next call to the tool is made, and leaves
+the approvals of its script to its live calls, which are each checked as they come. When
 `provider` or `reviewer` asks for approval, `approval.id` covers the whole script. Enclave keeps their decisions by
 the script's SHA-256 for 5 minutes, so the same script sent again within that time gets the same answer without a new
 model call.
@@ -435,7 +443,8 @@ model call.
 A person approves through one of two channels:
 
 - **The Approval plugin** (`@frontmcp/plugin-approval`), installed on the server or CodeCall's app. Your code grants
-  the id with any of its scopes, and the agent sends the same script again:
+  the id with any of its scopes, and the agent resumes the paused run (or sends the same script again when nothing
+  ran yet):
 
   ```ts
   await this.approval.grantSessionApproval(approval.id);
@@ -445,8 +454,9 @@ A person approves through one of two channels:
   A denial recorded for the id gives `denied`.
 
 - **Elicitation**, with `elicitation: { enabled: true }` on the server and a client that declares it. CodeCall asks
-  the person, showing the tool and its arguments; once they approve, it runs the same script again in the same call
-  (up to 5 approvals), and a decline gives `denied`.
+  the person, showing the tool and its arguments; once they approve, it resumes the run from that call in the same
+  request (up to 5 approvals), or runs the same script again when it could not pause there, and a decline gives
+  `denied`.
 
 Without either, a destructive call is `denied`, and the reason says why.
 
@@ -506,8 +516,9 @@ async execute({ ids }: { ids: string[] }) {
   (`budget-exceeded`) names the budget and when its window resets. As the tool starts, after the review and any wait
   for a person, the call is counted at once with an atomic increment of each `toolCalls` budget, and the approvals it
   needs for the budgets it is then over are spent; when it lacks one, it is taken back off the count and fails there,
-  with `RATE_LIMITED` and the budget's reason in a script, and with the budget's answer from `codecall:invoke`. Budgets count per caller, not per run, so they carry across runs that
-  resume.
+  with `RATE_LIMITED` and the budget's reason in a script, and with the budget's answer from `codecall:invoke`.
+  Budgets count per caller, not per run, so they carry across runs that resume; the calls a resumed run answers from
+  its record are neither checked nor counted again.
 - **Approving a call over a budget.** A budget's `needs_approval` carries an `approval` whose `id` covers this script,
   this call's tool and arguments, its place in the run, and that budget; it has no `anyArgumentsId`. A person grants it
   as a review approval ([Approvals](#approvals)): through the Approval plugin, or through elicitation, which asks in
@@ -518,11 +529,15 @@ async execute({ ids }: { ids: string[] }) {
   the grant no longer counts), so two runs, on one instance or on several sharing the store, never spend one grant. A
   budget approval and a review approval never stand for each other, so approving a destructive call never lifts a
   budget. A refused approval gives `denied`, and so does a budget stop when nobody can approve it (no Approval plugin,
-  and a client that can't elicit), as review answers a destructive call. Until a run resumes from its journal (#1335),
-  an approved script runs again from the start, so once a tool without `readOnlyHint` ran in the script, a call over a
-  budget gets `needs_changes` (`approval-after-effects`), as review answers, rather than an approval that would run
-  that tool again. After read-only calls, the calls before the approved one run and count again, and each that is over
-  the limit asks for its own approval; an approval is bound to its place, so an earlier identical call never spends it.
+  and a client that can't elicit), as review answers a destructive call.
+- **A stopped run pauses.** With `runs.resume`, a run a budget stopped, before the call or as its tool started, is kept
+  [paused](#pause-and-resume) at that call where it can be: once a person approves it, the window resets or the store
+  answers, `codecall:resume` runs it from that call, and the calls before it are answered from the record. The
+  findings say so. Where the run can't pause, an approved script runs again from the start, so once a tool without
+  `readOnlyHint` ran in the script, a call over a budget gets `needs_changes` (`approval-after-effects`), as review
+  answers, rather than an approval that would run that tool again. After read-only calls, the calls before the
+  approved one run and count again, and each that is over the limit asks for its own approval; an approval is bound to
+  its place, so an earlier identical call never spends it.
 - **The call that crosses a `recordsChanged` limit runs.** A call's records changed are known only once it ran, so the
   call that takes a caller past a `recordsChanged` limit runs, and the next one is stopped; calls that start together
   can each run before any of them reports. A `toolCalls` limit holds for calls that start together, in a `parallel()`
@@ -536,7 +551,8 @@ async execute({ ids }: { ids: string[] }) {
   is `denied` (`budget-unavailable`), and once a count couldn't be kept, or a refused call couldn't be taken back off
   the count, the rest of that run is too. An approval wouldn't fix a store, so it isn't asked for. The finding names
   the tools with effects that already ran in the script and tells the agent to send only the calls that did not run,
-  in a new script, once the store answers; a call stopped as it starts carries the same advice in its error.
+  in a new script, once the store answers, or to resume a run that paused there; a call stopped as it starts carries
+  the same advice in its error.
 
 ## Runtime and process boundary
 

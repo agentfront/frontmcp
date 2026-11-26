@@ -37,6 +37,10 @@ export interface RunReviewOptions {
   hasApprovalChannel: boolean;
   /** The tools that are not read-only and have already run in this run, in the order they first ran. */
   effectsSoFar?: () => readonly string[];
+  /** Whether the run can pause at the call asked about now: an approval then resumes it from that call. */
+  canPause?: () => boolean;
+  /** Whether the run replays a record: its script's approvals are then left to each live call, as it is made. */
+  replaysRecord?: boolean;
 }
 
 const ALLOW: ReviewDecision = { decision: 'allow' };
@@ -102,7 +106,8 @@ export class RunReview {
   readonly pre = async (input: PreReviewInput): Promise<ReviewDecision> => {
     const verdict = this.rulesVerdictOf(input);
     if (verdict?.refusal) return verdict.refusal;
-    for (const call of verdict?.approvalCalls ?? []) {
+    const asksApprovals = input.phase === 'call' || !this.options.replaysRecord;
+    for (const call of asksApprovals ? (verdict?.approvalCalls ?? []) : []) {
       const needsApproval = await this.approvalOfCall(call, input.phase === 'call');
       if (needsApproval) return needsApproval;
     }
@@ -151,28 +156,32 @@ export class RunReview {
       return { ...request, decision: 'denied', reason: `${request.reason}; ${NO_APPROVAL_CHANNEL}` };
     }
     const repeated = consume && pending.call ? (this.options.effectsSoFar?.() ?? []) : [];
-    if (pending.call && repeated.length > 0) return needsOwnScript(pending.call.toolName, repeated);
+    if (pending.call && repeated.length > 0 && !this.options.canPause?.()) {
+      return needsOwnScript(pending.call.toolName, repeated);
+    }
     this.pendingApproval = pending;
     return request;
   }
 }
 
 /**
- * The answer for a call that needs approval after tools with effects ran: approving it would run the whole script, and
- * those tools, again, until a run resumes from its journal (#1335).
+ * The answer for a call that needs approval after tools with effects ran, in a run that cannot pause: approving it
+ * would run the whole script, and those tools, again.
  */
 export function needsOwnScript(toolName: string, repeated: readonly string[]): ReviewDecision {
+  return { decision: 'needs_changes', findings: approvalAfterEffectsFindings(toolName, repeated) };
+}
+
+/** The finding {@link needsOwnScript} answers with, also for a run that stopped for an approval and could not pause. */
+export function approvalAfterEffectsFindings(toolName: string, repeated: readonly string[]): ReviewFinding[] {
   const more = repeated.length - MAX_NAMED_TOOLS;
   const earlier = `${repeated.slice(0, MAX_NAMED_TOOLS).join(', ')}${more > 0 ? ` and ${more} more` : ''}`;
-  return {
-    decision: 'needs_changes',
-    findings: [
-      {
-        rule: 'approval-after-effects',
-        message: `Tool "${toolName}" needs a person's approval, but ${earlier} already ran in this script; once approved, the whole script, ${earlier} included, would run again`,
-        suggestion: `Call ${toolName} in a script of its own, or run ${earlier} in a separate script first`,
-        toolName,
-      },
-    ],
-  };
+  return [
+    {
+      rule: 'approval-after-effects',
+      message: `Tool "${toolName}" needs a person's approval, but ${earlier} already ran in this script; once approved, the whole script, ${earlier} included, would run again`,
+      suggestion: `${earlier} already ran; send only ${toolName} and the calls after it, in a script of their own`,
+      toolName,
+    },
+  ];
 }

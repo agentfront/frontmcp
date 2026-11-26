@@ -27,6 +27,9 @@ const SUGGESTION_BY_DECISION: Record<CodeCallBudget['onExceeded'], string> = {
     'Once the window resets, send this call and the ones after it in a new script, not the calls that already ran',
 };
 
+/** What a suggestion adds where the run can pause at the call: resuming it stands in for a new script. */
+const IF_PAUSED = '; if the result has "paused", codecall:resume the run then instead of sending a script';
+
 /** A script can name any string as a tool; a finding shows at most this much of it. */
 const MAX_TOOL_NAME_CHARS = 128;
 /** How many tools that already ran a finding names. */
@@ -71,7 +74,8 @@ export function budgetCallerOf(context: ReviewCallerContext): string {
 function exceededDecision(
   { budget, resetsInSeconds }: ExceededBudget,
   toolName: string,
-  deniedBecause?: string,
+  deniedBecause: string | undefined,
+  pausable: boolean,
 ): BudgetDecision {
   const shownName = toolName.slice(0, MAX_TOOL_NAME_CHARS);
   const decision = deniedBecause ? 'denied' : budget.onExceeded;
@@ -79,7 +83,7 @@ function exceededDecision(
     `Budget "${budget.name}" is used up: this caller reached ${budget.limit} ${UNIT_BY_COUNT[budget.counts]} ` +
     `in its ${budget.windowSeconds}-second window, which resets in ${resetsInSeconds} seconds, ` +
     `so the call to ${shownName} did not run${deniedBecause ? `; ${deniedBecause}` : ''}`;
-  const suggestion = SUGGESTION_BY_DECISION[decision];
+  const suggestion = `${SUGGESTION_BY_DECISION[decision]}${pausable ? IF_PAUSED : ''}`;
   return {
     decision,
     reason,
@@ -88,7 +92,7 @@ function exceededDecision(
 }
 
 /** Once the store answers, only the calls that did not run may be sent again: the ones before may have had effects. */
-function unavailableDecision(toolName: string, ranBefore: readonly string[]): BudgetDecision {
+function unavailableDecision(toolName: string, ranBefore: readonly string[], pausable: boolean): BudgetDecision {
   const ran =
     ranBefore.length > 0 ? `${ranBefore.slice(0, MAX_NAMED_TOOLS).join(', ')} already ran in this script` : '';
   const before = ran || 'Calls before this one in the script may already have run';
@@ -99,7 +103,7 @@ function unavailableDecision(toolName: string, ranBefore: readonly string[]): Bu
       {
         rule: BUDGET_UNAVAILABLE_RULE,
         message: UNAVAILABLE_REASON,
-        suggestion: `${before}; once the budget store answers, send only the calls that did not run, in a new script`,
+        suggestion: `${before}; once the budget store answers, send only the calls that did not run, in a new script${pausable ? IF_PAUSED : ''}`,
         toolName: toolName.slice(0, MAX_TOOL_NAME_CHARS),
       },
     ],
@@ -115,6 +119,8 @@ export interface BudgetApprovals {
   canApprove: boolean;
   /** The tools with effects that already ran in this run, which approving a later call would run again. */
   effectsSoFar?: (starting?: JournaledCall) => readonly string[];
+  /** Whether the run can pause at the call at `callIndex`, so `codecall:resume` runs it without the calls before it. */
+  canPause?: (callIndex?: number) => boolean;
 }
 
 /** Gives a spent grant back. */
@@ -226,40 +232,49 @@ export class BudgetMeter {
   private async verdictFor(call: BudgetCall, exceeded: ExceededBudget[], claimed?: Release[]): Promise<BudgetVerdict> {
     this.pendingByCallIndex.delete(call.callIndex);
     if (exceeded.length === 0) return { decision: ALLOW };
+    const pausable = this.canPauseAt(call);
     const denying = exceeded.find(({ budget }) => budget.onExceeded === 'denied');
-    if (denying) return { decision: exceededDecision(denying, call.toolName) };
+    if (denying) return { decision: exceededDecision(denying, call.toolName, undefined, pausable) };
     if (!this.approval.canApprove) {
-      return { decision: exceededDecision(exceeded[0], call.toolName, NO_APPROVAL_CHANNEL) };
+      return { decision: exceededDecision(exceeded[0], call.toolName, NO_APPROVAL_CHANNEL, pausable) };
     }
     const grants: Array<{ over: ExceededBudget; reference: CodeCallApprovalReference; claim: GrantClaim }> = [];
     for (const over of exceeded) {
       const reference = this.approval.approvals.budgetReferenceFor(call, over.budget.name);
       const claim = await this.unspentGrantOf(reference);
-      if (claim === 'denied') return { decision: exceededDecision(over, call.toolName, REFUSED_BY_PERSON) };
-      if (!claim) return this.waitForApproval(over, reference, call, claimed !== undefined);
+      if (claim === 'denied') return { decision: exceededDecision(over, call.toolName, REFUSED_BY_PERSON, pausable) };
+      if (!claim) return this.waitForApproval(over, reference, call, claimed !== undefined, pausable);
       grants.push({ over, reference, claim });
     }
     if (!claimed) return { decision: ALLOW };
     for (const { over, reference, claim } of grants) {
       const release = await claim();
-      if (!release) return this.waitForApproval(over, reference, call, true);
+      if (!release) return this.waitForApproval(over, reference, call, true, pausable);
       claimed.push(release);
     }
     return { decision: ALLOW };
   }
 
-  /** A `needs_approval`, unless tools with effects already ran: approving would run them again, as review answers. */
+  /**
+   * A `needs_approval`, unless tools with effects already ran in a run that cannot pause there: approving would run
+   * them again, as review answers. A run that can pause resumes from the call once a person approves it.
+   */
   private waitForApproval(
     over: ExceededBudget,
     reference: CodeCallApprovalReference,
     call: BudgetCall,
     atDispatch: boolean,
+    pausable: boolean,
   ): BudgetVerdict {
-    const repeated = this.approval.effectsSoFar?.(atDispatch ? call : undefined) ?? [];
+    const repeated = pausable ? [] : (this.approval.effectsSoFar?.(atDispatch ? call : undefined) ?? []);
     if (repeated.length > 0) return { decision: needsOwnScript(call.toolName, repeated) };
     const pending = { reference, call: { toolName: call.toolName, args: call.args } };
     this.pendingByCallIndex.set(call.callIndex, pending);
-    return { decision: exceededDecision(over, call.toolName), pending };
+    return { decision: exceededDecision(over, call.toolName, undefined, pausable), pending };
+  }
+
+  private canPauseAt(call: BudgetCall): boolean {
+    return this.approval.canPause?.(call.callIndex) === true;
   }
 
   /** A claim on a grant of the reference no call spent yet, `denied` when a person refused it, else undefined. */
@@ -286,7 +301,7 @@ export class BudgetMeter {
   /** The answer when the budgets cannot be checked, naming the tools with effects that already ran in the run. */
   private unavailable(call: BudgetCall, atDispatch: boolean): BudgetVerdict {
     const ranBefore = this.approval.effectsSoFar?.(atDispatch ? call : undefined) ?? [];
-    return { decision: unavailableDecision(call.toolName, ranBefore) };
+    return { decision: unavailableDecision(call.toolName, ranBefore, this.canPauseAt(call)) };
   }
 
   /** Gives back what an admission took; one that cannot be given back closes the rest of the run. */

@@ -20,6 +20,7 @@ import {
 
 import CodeCallPlugin from '../codecall.plugin';
 import type { CodeCallPluginOptionsInput, CodeCallVmRuntime } from '../codecall.types';
+import { CodeCallRunStore } from '../runs/run-record.store';
 import { CodeCallRunStoreToken, type CodeCallRunRecord } from '../runs/run-record.types';
 
 jest.setTimeout(30000);
@@ -141,6 +142,7 @@ interface ExecuteOutcome {
   error?: { message: string };
   findings?: Array<{ rule: string; message: string; location?: unknown; suggestion?: string; toolName?: string }>;
   approval?: { id: string; toolName?: string; argumentsHash?: string; anyArgumentsId?: string };
+  paused?: { call: { position: number; tool: string } };
 }
 
 function structuredOf<T>(result: CallToolResult): T {
@@ -213,6 +215,7 @@ describe.each(RUNTIMES)('CodeCall review on the %s runtime', (runtime) => {
       const client = await open(setup);
 
       expect(await executeDescriptionOf(client)).toContain('| needs_changes | needs_approval | denied | review_failed');
+      expect(await executeDescriptionOf(client)).toContain('then codecall:resume { runId, arguments? }');
     });
 
     it('asks for changes to a literal argument of the wrong type, with its place, and runs nothing', async () => {
@@ -333,8 +336,47 @@ describe.each(RUNTIMES)('CodeCall review on the %s runtime', (runtime) => {
       expect(await execute(client, script)).toMatchObject({ status: 'ok', result: 'closed' });
     });
 
-    it('asks for its own script, not an approval, when a call that is not read-only ran before it', async () => {
+    it('pauses for an approval after a call that is not read-only ran, and resumes from that call once approved', async () => {
       const client = await open(setup);
+      const script =
+        "await callTool('mail.send', { to: 'ops@example.com' });\n" +
+        "const page = await callTool('users.list', { limit: 1 });\n" +
+        "await callTool('users.close', { id: page.items[0].id });\nreturn 'closed';";
+
+      const asked = await execute(client, script);
+      expect(asked).toMatchObject({
+        status: 'needs_approval',
+        runId: expect.any(String),
+        approval: { toolName: 'users.close' },
+        paused: { call: { position: 3, tool: 'users.close' } },
+      });
+
+      await grant(client, asked.approval?.id as string);
+      const resumed = structuredOf<ExecuteOutcome>(
+        (await client.callTool('codecall:resume', { runId: asked.runId })) as CallToolResult,
+      );
+      expect(resumed).toMatchObject({ status: 'ok', result: 'closed', runId: asked.runId });
+      expect(executed).toEqual(['mail.send:ops@example.com', 'users.list', 'users.close:u1']);
+    });
+
+    it('asks for its own script when the paused run could not be kept, since an approval would run it all again', async () => {
+      jest.spyOn(CodeCallRunStore.prototype, 'keep').mockRejectedValue(new Error('storage down'));
+      const client = await open(setup);
+      const script =
+        "await callTool('mail.send', { to: 'ops@example.com' });\n" +
+        "const page = await callTool('users.list', { limit: 1 });\n" +
+        "await callTool('users.close', { id: page.items[0].id });\nreturn 'closed';";
+
+      const outcome = await execute(client, script);
+
+      expect(outcome).toMatchObject({ status: 'needs_changes', findings: [{ rule: 'approval-after-effects' }] });
+      expect(outcome).not.toHaveProperty('runId');
+      expect(outcome).not.toHaveProperty('paused');
+      jest.restoreAllMocks();
+    });
+
+    it('asks for its own script, not an approval, after a call that is not read-only in a run that cannot pause', async () => {
+      const client = await open({ ...setup, codecall: { ...setup.codecall, runs: { resume: false } } });
       const script =
         "await callTool('mail.send', { to: 'ops@example.com' });\n" +
         "const page = await callTool('users.list', { limit: 1 });\n" +
@@ -349,7 +391,7 @@ describe.each(RUNTIMES)('CodeCall review on the %s runtime', (runtime) => {
             rule: 'approval-after-effects',
             toolName: 'users.close',
             message: expect.stringContaining('but mail.send already ran in this script'),
-            suggestion: 'Call users.close in a script of its own, or run mail.send in a separate script first',
+            suggestion: 'mail.send already ran; send only users.close and the calls after it, in a script of their own',
           },
         ],
       });
@@ -380,14 +422,64 @@ describe.each(RUNTIMES)('CodeCall review on the %s runtime', (runtime) => {
         executed.length = 0;
         const limited = await execute(client, script);
         expect(limited).toMatchObject({
-          status: 'needs_changes',
-          findings: [
-            { rule: 'approval-after-effects', message: expect.stringContaining('but users.close already ran') },
-          ],
+          status: 'needs_approval',
+          paused: { call: { position: 4, tool: 'users.close' } },
         });
+        expect(executed).toEqual(['users.list', 'users.close:u1', 'users.close:u2']);
+
+        const resumed = structuredOf<ExecuteOutcome>(
+          (await client.callTool('codecall:resume', { runId: limited.runId })) as CallToolResult,
+        );
+        expect(resumed).toMatchObject({ status: 'needs_approval', paused: { call: { position: 4 } } });
         expect(executed).toEqual(['users.list', 'users.close:u1', 'users.close:u2']);
       },
     );
+
+    it('resumes a run whose literal calls a grant with limits covered, and still asks for the call past them', async () => {
+      const client = await open(setup);
+      const script =
+        "await callTool('users.close', { id: 'u1' });\nawait callTool('users.close', { id: 'u2' });\n" +
+        "await callTool('users.close', { id: 'u3' });\nreturn 'closed';";
+      const asked = await execute(client, script);
+      await grant(client, asked.approval?.anyArgumentsId as string, 2);
+      const limited = await execute(client, script);
+      expect(limited).toMatchObject({ status: 'needs_approval', paused: { call: { position: 3 } } });
+      const resume = async () =>
+        structuredOf<ExecuteOutcome>(
+          (await client.callTool('codecall:resume', { runId: limited.runId as string })) as CallToolResult,
+        );
+
+      const third = await resume();
+      expect(third).toMatchObject({ status: 'needs_approval', paused: { call: { position: 3, tool: 'users.close' } } });
+      await grant(client, third.approval?.id as string);
+
+      expect(await resume()).toMatchObject({ status: 'ok', result: 'closed' });
+      expect(executed).toEqual(['users.close:u1', 'users.close:u2', 'users.close:u3']);
+    });
+
+    it('runs the corrected arguments a person approved after the run paused again for them, never the first ones', async () => {
+      const client = await open(setup);
+      const script =
+        "const page = await callTool('users.list', { limit: 1 });\n" +
+        "await callTool('users.close', { id: page.items[0].id });\nreturn 'closed';";
+      const asked = await execute(client, script);
+      expect(asked).toMatchObject({ status: 'needs_approval', paused: { call: { position: 2 } } });
+
+      const corrected = structuredOf<ExecuteOutcome>(
+        (await client.callTool('codecall:resume', {
+          runId: asked.runId as string,
+          arguments: { id: 'u3' },
+        })) as CallToolResult,
+      );
+      expect(corrected).toMatchObject({ status: 'needs_approval', paused: { call: { position: 2 } } });
+      await grant(client, corrected.approval?.id as string);
+
+      const resumed = structuredOf<ExecuteOutcome>(
+        (await client.callTool('codecall:resume', { runId: asked.runId as string })) as CallToolResult,
+      );
+      expect(resumed).toMatchObject({ status: 'ok', result: 'closed' });
+      expect(executed).toEqual(['users.list', 'users.close:u3']);
+    });
   });
 
   describe('without an approval channel', () => {
@@ -422,7 +514,7 @@ describe.each(RUNTIMES)('CodeCall review on the %s runtime', (runtime) => {
       expect(executed).toEqual(['users.close:u3']);
     });
 
-    it('does not ask the person when a call that is not read-only ran before the one that needs approval', async () => {
+    it('asks the person after a call that is not read-only ran, and resumes from the call it stopped at', async () => {
       const onElicitation = jest.fn(async () => ({ action: 'accept' as const, content: { approve: true } }));
       const client = await open(setup, { onElicitation });
 
@@ -431,9 +523,9 @@ describe.each(RUNTIMES)('CodeCall review on the %s runtime', (runtime) => {
         "await callTool('mail.send', { to: 'ops@example.com' });\nconst id = 'u' + '3';\nawait callTool('users.close', { id });\nreturn 'closed';",
       );
 
-      expect(outcome.status).toBe('needs_changes');
-      expect(onElicitation).not.toHaveBeenCalled();
-      expect(executed).toEqual(['mail.send:ops@example.com']);
+      expect(outcome).toMatchObject({ status: 'ok', result: 'closed' });
+      expect(onElicitation).toHaveBeenCalledTimes(1);
+      expect(executed).toEqual(['mail.send:ops@example.com', 'users.close:u3']);
     });
 
     it('denies the call when the person declines', async () => {

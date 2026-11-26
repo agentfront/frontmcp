@@ -31,7 +31,9 @@ function reviewWith(options: {
   rules?: boolean;
   timeoutMs?: number;
   effectsSoFar?: () => readonly string[];
+  canPause?: () => boolean;
   hasApprovalChannel?: boolean;
+  replaysRecord?: boolean;
 }): RunReview {
   const rules = options.rules
     ? new ReviewRules({
@@ -47,6 +49,8 @@ function reviewWith(options: {
     timeoutMs: options.timeoutMs,
     hasApprovalChannel: options.hasApprovalChannel ?? true,
     effectsSoFar: options.effectsSoFar,
+    canPause: options.canPause,
+    replaysRecord: options.replaysRecord,
   });
 }
 
@@ -228,11 +232,27 @@ describe('RunReview', () => {
         expect.objectContaining({
           rule: 'approval-after-effects',
           toolName: 'users.close',
-          suggestion: 'Call users.close in a script of its own, or run mail.send, crm.note in a separate script first',
+          suggestion:
+            'mail.send, crm.note already ran; send only users.close and the calls after it, in a script of their own',
         }),
       ],
     });
     expect(review.pendingApproval).toBeUndefined();
+  });
+
+  it('asks for the approval after tools with effects ran in a run that can pause there', async () => {
+    const review = reviewWith({ rules: true, effectsSoFar: () => ['mail.send'], canPause: () => true });
+
+    const decision = await review.pre({
+      phase: 'call',
+      toolName: 'users.close',
+      args: { id: 'u1' },
+      callIndex: 1,
+      analysis: analyzeScript('return 1;'),
+    });
+
+    expect(decision.decision).toBe('needs_approval');
+    expect(review.pendingApproval).toMatchObject({ call: { toolName: 'users.close', args: { id: 'u1' } } });
   });
 
   it('names at most ten earlier tools', async () => {
@@ -248,7 +268,7 @@ describe('RunReview', () => {
     });
 
     expect(decision.decision === 'needs_changes' && decision.findings[0]?.suggestion).toBe(
-      `Call users.close in a script of its own, or run ${tools.slice(0, 10).join(', ')} and 2 more in a separate script first`,
+      `${tools.slice(0, 10).join(', ')} and 2 more already ran; send only users.close and the calls after it, in a script of their own`,
     );
   });
 
@@ -258,5 +278,21 @@ describe('RunReview', () => {
     const decision = await review.pre(scriptInput("return await callTool('users.close', { id: 'u1' });"));
 
     expect(decision.decision).toBe('needs_approval');
+  });
+
+  it('leaves the approvals of a script it replays to each live call, which it still asks', async () => {
+    const review = reviewWith({ rules: true, replaysRecord: true });
+
+    const script = await review.pre(scriptInput("return await callTool('users.close', { id: 'u1' });"));
+    const call = await review.pre({
+      phase: 'call',
+      toolName: 'users.close',
+      args: { id: 'u1' },
+      callIndex: 0,
+      analysis: analyzeScript('return 1;'),
+    });
+
+    expect(script.decision).toBe('allow');
+    expect(call.decision).toBe('needs_approval');
   });
 });
