@@ -19,7 +19,7 @@ import {
 } from '../../errors';
 import { supportsElicitation, type ClientCapabilities } from '../../notification';
 import { DEFAULT_ELICIT_TTL, type ElicitOptions, type ElicitResult } from '../elicitation.types';
-import { type QuestionStore } from '../questions/question.store';
+import { type PersistentQuestions } from '../questions/question-scope.helper';
 import { checkedElicitAnswer } from './checked-elicit-answer';
 
 /**
@@ -61,7 +61,7 @@ export interface ElicitHelperDeps {
   elicitationEnabled?: boolean;
 
   /** The scope's persistent questions (`elicitation.persistent`), with their default TTL. */
-  questions?: { store: QuestionStore; ttlMs: number };
+  questions?: Pick<PersistentQuestions, 'store' | 'ttlMs' | 'sessionEndCheck'>;
 
   /** Aborts when the call stops; a persistent question then stops waiting. */
   signal?: AbortSignal;

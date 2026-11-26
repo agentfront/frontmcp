@@ -214,6 +214,65 @@ describe('askPersistentQuestion', () => {
     await expectAnswerKept(question.expiresAt);
   });
 
+  it('keeps the answer for the next call when the waiting call outlived its session (#1446)', async () => {
+    let ended = false;
+    const call = askPersistentQuestion(
+      { store, subject: SUBJECT, sessionEnded: async () => ended },
+      'Deploy v2?',
+      schema,
+      { key: 'deploy', ttlMs: DAY_MS, waitMs: 10_000 },
+    );
+    const [question] = await waitFor(async () => {
+      const questions = await store.list(SUBJECT);
+      return questions.length > 0 ? questions : undefined;
+    });
+
+    ended = true;
+    await store.answer(SUBJECT, question.id, { status: 'accept', content: { approve: true } });
+
+    await expect(call).rejects.toThrow(QuestionPendingError);
+    await expectAnswerKept(question.expiresAt);
+  });
+
+  it('hands the answer over while the session lives', async () => {
+    await answeredQuestion();
+    const sessionEnded = jest.fn(async () => false);
+
+    await expect(
+      askPersistentQuestion({ store, subject: SUBJECT, sessionEnded }, 'Deploy v2?', schema, {
+        key: 'deploy',
+        ttlMs: DAY_MS,
+        waitMs: 10_000,
+      }),
+    ).resolves.toEqual({ status: 'accept', content: { approve: true } });
+    expect(sessionEnded).toHaveBeenCalledTimes(1);
+    expect(await store.list(SUBJECT)).toEqual([]);
+  });
+
+  it('leaves a waiting answer for the next call when its call is cancelled while its session is checked', async () => {
+    const question = await answeredQuestion();
+    const controller = new AbortController();
+    const sessionEnded = async () => {
+      controller.abort();
+      return false;
+    };
+
+    await expect(
+      askPersistentQuestion(
+        { store, subject: SUBJECT, signal: controller.signal, sessionEnded },
+        'Deploy v2?',
+        schema,
+        {
+          key: 'deploy',
+          ttlMs: DAY_MS,
+          waitMs: 10_000,
+        },
+      ),
+    ).rejects.toThrow(QuestionPendingError);
+
+    await expectAnswerKept(question.expiresAt);
+  });
+
   it('does not wait at all for a call already aborted', async () => {
     const controller = new AbortController();
     controller.abort();
@@ -301,6 +360,20 @@ describe('performElicit with persist', () => {
     await store.answer(SUBJECT, id, { status: 'accept', content: { approve: true } });
 
     await expect(call).resolves.toEqual({ status: 'accept', content: { approve: true } });
+  });
+
+  it("checks the caller's session before it hands an answer over", async () => {
+    const sessionEndCheck = jest.fn(() => async () => true);
+    const call = performElicit(deps({ questions: { store, ttlMs: DAY_MS, sessionEndCheck } }), 'Deploy?', schema, {
+      persist: { key: 'deploy' },
+      ttl: 10_000,
+    });
+    const id = await waitFor(async () => (await store.list(SUBJECT))[0]?.id);
+    await store.answer(SUBJECT, id, { status: 'accept', content: { approve: true } });
+
+    await expect(call).rejects.toThrow(QuestionPendingError);
+    expect(sessionEndCheck).toHaveBeenCalledWith('s-1');
+    expect(await store.list(SUBJECT)).toEqual([expect.objectContaining({ key: 'deploy', answered: true })]);
   });
 
   it('is refused while elicitation is off', async () => {

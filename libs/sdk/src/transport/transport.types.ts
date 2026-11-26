@@ -55,7 +55,7 @@ export interface TransportBus {
     response: ServerResponse,
   ): Promise<void>;
 
-  /** Ask the owning node to destroy its transport for the session. */
+  /** Ask the owning node to destroy its transport for the session; resolves once it did, or after a bounded wait. */
   destroyRemote(key: TransportKey, reason?: string): Promise<void>;
 }
 

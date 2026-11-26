@@ -22,8 +22,8 @@ import {
 
 const BUDGETS: Array<{ entry: string; label: string; maxBytes: number }> = [
   // +12 bytes each (#1335): a call dispatched in process keeps the request's elicitation route
-  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_344_753 },
-  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_351_984 },
+  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_344_825 },
+  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_352_056 },
 ];
 
 // +372 bytes (#1315): the task index never shortens a TTL (an atomic extendTtl in the storage adapters) and jumps runs of gone tasks
