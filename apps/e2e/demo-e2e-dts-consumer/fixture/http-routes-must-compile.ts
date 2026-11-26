@@ -41,6 +41,14 @@ export class BoardEvents extends HttpRouteContext {
   }
 }
 
+@HttpRoute({ method: 'GET', path: '/api/boards/:id', auth: 'bearer', authorities: { roles: { any: ['admin'] } } })
+export class BoardApi extends HttpRouteContext {
+  handle() {
+    const sub: string = this.auth.user.sub;
+    return { id: this.params['id'], sub };
+  }
+}
+
 @Tool({ name: 'sign-in-link', inputSchema: {} })
 export class SignInLinkTool extends ToolContext {
   async execute() {
@@ -56,7 +64,7 @@ export class AuditRoutes {
   }
 }
 
-@App({ name: 'board', tools: [SignInLinkTool], routes: [BoardPage, BoardHtml, BoardEvents] })
+@App({ name: 'board', tools: [SignInLinkTool], routes: [BoardPage, BoardHtml, BoardEvents, BoardApi] })
 class BoardApp {}
 
 @FrontMcp({
@@ -80,6 +88,6 @@ export class RouteWithoutHandle {}
 export class InvalidRoutes {
   // @ts-expect-error method is GET, POST, PUT, PATCH or DELETE
   static readonly method: HttpRouteMetadata = { method: 'TRACE', path: '/x' };
-  // @ts-expect-error auth is 'people' or 'public'
+  // @ts-expect-error auth is 'people', 'subject', 'bearer' or 'public'
   static readonly auth: HttpRouteMetadata = { method: 'GET', path: '/x', auth: 'mcp' };
 }

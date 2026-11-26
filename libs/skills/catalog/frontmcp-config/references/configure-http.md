@@ -405,6 +405,11 @@ case-sensitively), not other Express path syntax.
 Up to 1.9.4 `createFetchHandler()` logged each route as registered and
 answered 404.
 
+A route that needs DI or `authorities` is an `@HttpRoute` class instead:
+`@HttpRoute({ auth: 'bearer', authorities })` runs the same `session:verify`
+check as `auth: true`, gives `handle()` the caller as `this.auth`, and checks
+the route's `authorities` as a tool's are checked (`create-http-route`).
+
 ### `auth` opt-in
 
 Routes are **public by default**. Set `auth: true` to run the request through

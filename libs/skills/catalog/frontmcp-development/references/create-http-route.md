@@ -1,6 +1,6 @@
 ---
 name: create-http-route
-description: Serve pages, APIs and live SSE views for people beside the MCP endpoint with @HttpRoute classes that share the app's providers, behind people auth and a same-origin check
+description: Serve pages, APIs and live SSE views beside the MCP endpoint with @HttpRoute classes that share the app's providers, behind people auth or the server's bearer auth and authorities, and a same-origin check
 ---
 
 # HTTP Routes: Pages and APIs for People
@@ -8,7 +8,8 @@ description: Serve pages, APIs and live SSE views for people beside the MCP endp
 An `@HttpRoute` class serves an HTTP request beside the MCP endpoint, on the same port. It gets the providers of its app
 (`this.get()`), the same instances the app's tools get, so an agent and a person look at one state. Every route runs
 through the hookable `http:route` flow, on the Node server and on `createFetchHandler()` alike: the IP filter, the
-global rate limit, a same-origin check on mutations, people auth, then `handle()`.
+global rate limit, a same-origin check on mutations, people or bearer auth, the route's `authorities`, then
+`handle()`.
 
 ## When to Use This Skill
 
@@ -17,6 +18,7 @@ global rate limit, a same-origin check on mutations, people auth, then `handle()
 - A web page, a JSON API or a live view for a person, next to the tools an agent calls
 - A page that shows what the agent changed (a board, a queue, a report) while it changes
 - Signing a person in to such pages on a local server, without an identity provider
+- A JSON API for the clients that call your tools, with the same token and the same `authorities` policy
 
 ### Recommended
 
@@ -67,7 +69,8 @@ export class HomePage extends HttpRouteContext {
 
 `this.request` holds the method, path, headers, query and parsed body (with `bodyBytes`, its bytes as received, for a
 digest or a signature over the exact body); `this.params` the path parameters;
-`this.person` the signed-in person on a `'people'` or `'subject'` route. `this.get()`, `this.tryGet()`, `this.scope`,
+`this.person` the signed-in person on a `'people'` or `'subject'` route; `this.auth` the verified caller on a
+`'bearer'` route (Step 3b). `this.get()`, `this.tryGet()`, `this.scope`,
 `this.fetch()` and `this.context` work as in a tool.
 
 What `handle()` returns becomes the response:
@@ -131,6 +134,32 @@ a person signed in with a code made by `createCode({ subject })`, and `this.pers
 of sign-in opens only its own routes: a subject's session gets `401` on a `'people'` route, and a session from the
 startup token gets `401` on a `'subject'` route, so a code sent to one person for their questions opens nothing else.
 
+### Step 3b (optional): Require the server's bearer auth, and check authorities
+
+```typescript
+@HttpRoute({ method: 'GET', path: '/api/projects/:projectId', auth: 'bearer', authorities: 'projectMember' })
+export class ProjectApi extends HttpRouteContext {
+  async handle() {
+    return this.get(Projects).find(this.params['projectId'], this.auth.user.sub);
+  }
+}
+```
+
+`auth: 'bearer'` admits the callers the MCP endpoint's `auth` admits, with the same `session:verify` check: a token
+the server doesn't accept (or none) gets the endpoint's `401` and `WWW-Authenticate` challenge, one without a
+`requiredScopes` scope its `403`. It needs no `http.auth.people`. `this.auth` is the verified caller, as in a tool
+(roles, permissions and claims through `authorities.claimsMapping`, and `authorities.pipes`). In `public` mode the
+endpoint admits every caller as anonymous, so the route does too, and the server warns at startup.
+
+`authorities` is a tool's `authorities` (a profile name, a list of names, or a policy), checked after the token and
+before `handle()`. Its `input` is the request body's fields and the path's parameters, which win, so
+`{ fromInput: 'projectId' }` reads `/api/projects/:projectId`, and one profile covers a route and the tool that takes
+`projectId`. A denied caller gets `403` `{ "error": "Forbidden" }` (the reason is logged at verbose). `authorities`
+needs `auth: 'bearer'` (`InvalidDecoratorMetadataError` otherwise), and a server without `@FrontMcp({ authorities })`,
+or a rule that names an unknown profile, fails startup with `AuthConfigurationError`. On an SSE route the stream ends
+when the token expires. Up to 1.13.1 a route could take only `'people'`, `'subject'` or `'public'`, and only an
+`http.routes` entry could require the token.
+
 ### Step 4 (optional): Serve a live view over SSE
 
 ```typescript
@@ -161,7 +190,8 @@ down, and on a people route when the person's session expires or ends (checked b
 | ----------------- | ------------------------------------------------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `method`          | `'GET' \| 'POST' \| 'PUT' \| 'PATCH' \| 'DELETE'` | Required                                            |                                                                                                                                                                                   |
 | `path`            | `string` or `() => string`                        | Required                                            | Literal segments and `:name` parameters (`/board/:id`); Express wildcards and groups (`*`, `()`, `{}`) are refused. A function is called once at startup, for a path from options |
-| `auth`            | `'people' \| 'public'`                            | `'people'` with `http.auth.people`, else `'public'` |                                                                                                                                                                                   |
+| `auth`            | `'people' \| 'subject' \| 'bearer' \| 'public'`   | `'people'` with `http.auth.people`, else `'public'` | `'bearer'`: the MCP endpoint's auth (Step 3b)                                                                                                                                     |
+| `authorities`     | a profile name, a list of names or a policy       | None                                                | With `auth: 'bearer'` only; input is the body's fields and the path's parameters                                                                                                  |
 | `sse.store`       | anything with `subscribe(topic, listener)`        | Required with `sse`                                 | A `resourceStore()`; a key's topic is its name                                                                                                                                    |
 | `sse.topics`      | `string[]`                                        | Required with `sse`, at least one                   |                                                                                                                                                                                   |
 | `sse.coalesceMs`  | `number`                                          | `50`                                                |                                                                                                                                                                                   |
@@ -260,7 +290,7 @@ loopback. The session cookie is host-only, so a rebound page never carries it to
 ## Hooks
 
 Each stage of `http:route` is hookable: `checkIpFilter`, `findRoute`, `acquireQuota`, `checkSameOrigin`,
-`authenticatePerson`, `handle`.
+`authenticatePerson`, `authenticateBearer`, `checkAuthorities`, `handle`.
 
 ```typescript
 import { HttpRouteHook, Plugin } from '@frontmcp/sdk';
@@ -281,7 +311,8 @@ export class RouteAuditPlugin {
 | Declared in       | `@App({ routes })`                           | `@FrontMcp({ http: { routes } })`      |
 | Handler           | A class with `handle()`, the app's providers | `(req, res, next)`, no DI              |
 | Runs through      | The `http:route` flow (hookable)             | The `http:ip-filter` flow              |
-| Auth              | People auth                                  | `auth: true`: the MCP `session:verify` |
+| Auth              | People auth, or `auth: 'bearer'`             | `auth: true`: the MCP `session:verify` |
+| Authorities       | `authorities`, with `auth: 'bearer'`         | None                                   |
 | Same-origin check | On mutations                                 | None                                   |
 | SSE from a store  | `sse: { store, topics }`                     | Write it yourself                      |
 
@@ -311,6 +342,7 @@ export class RouteAuditPlugin {
 | `403 Cross-origin requests may not change …` | The page posting is on another origin        | Serve it from the server, or list its origin in `http.cors.origin`       |
 | `429` from the sign-in route                 | Too many bad codes from this client          | Wait `lockoutMs`, then use a fresh code                                  |
 | `ReservedRouteCollisionError` at startup     | The path is one the MCP endpoint serves      | Move the route                                                           |
+| `403 Forbidden` on a bearer route            | The route's `authorities` denied the caller  | Check the token's claims and `claimsMapping`; the reason logs at verbose |
 | SSE events stop behind a proxy               | The proxy buffers or times out idle streams  | Lower `sse.heartbeatMs`; the route already sends `X-Accel-Buffering: no` |
 
 ## Reference

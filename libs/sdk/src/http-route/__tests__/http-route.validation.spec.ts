@@ -3,7 +3,12 @@ import 'reflect-metadata';
 
 import { App, HttpRoute, LogLevel, type FrontMcpConfigInput, type HttpRouteMetadata } from '../../common';
 import { HttpRouteContext } from '../../common/interfaces/http-route.interface';
-import { InvalidDecoratorMetadataError, InvalidHttpRouteError, InvalidPeopleAuthOptionsError } from '../../errors';
+import {
+  AuthConfigurationError,
+  InvalidDecoratorMetadataError,
+  InvalidHttpRouteError,
+  InvalidPeopleAuthOptionsError,
+} from '../../errors';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { ReservedRouteCollisionError } from '../../server/custom-routes.helper';
 
@@ -58,6 +63,21 @@ describe('@HttpRoute', () => {
     );
   });
 
+  it('refuses authorities on a route that is not a bearer route (#1362)', () => {
+    expect(() => routeClass({ method: 'GET', path: '/x', authorities: 'admin' })).toThrow(
+      expect.objectContaining({
+        constructor: InvalidDecoratorMetadataError,
+        message: expect.stringContaining("authorities need auth: 'bearer'"),
+      }),
+    );
+  });
+
+  it('takes a bearer route with authorities (#1362)', () => {
+    expect(() =>
+      routeClass({ method: 'GET', path: '/x', auth: 'bearer', authorities: { roles: { any: ['admin'] } } }),
+    ).not.toThrow();
+  });
+
   it('refuses a class without handle()', () => {
     expect(() => HttpRoute({ method: 'GET', path: '/x' })(class NoHandle {} as never)).toThrow(
       InvalidDecoratorMetadataError,
@@ -80,6 +100,70 @@ describe('the routes of a server', () => {
 
   it.each(['people', 'subject'] as const)('refuse a %s route when http.auth.people is not set', async (auth) => {
     await expect(boot([routeClass({ method: 'GET', path: '/x', auth })])).rejects.toThrow(InvalidHttpRouteError);
+  });
+
+  describe("with auth: 'bearer' (#1362)", () => {
+    const transparent = {
+      auth: { mode: 'transparent', provider: 'https://idp.example.com', expectedAudience: 'https://mcp.example.com' },
+    } as Partial<FrontMcpConfigInput>;
+    const authorities = { claimsMapping: { roles: 'roles' }, profiles: { admin: { roles: { any: ['admin'] } } } };
+
+    it('need no http.auth.people', async () => {
+      const instance = await boot([routeClass({ method: 'GET', path: '/x', auth: 'bearer' })], transparent);
+
+      expect(instance.getScopes()[0].httpRouteTable?.routes.map((route) => route.auth)).toEqual(['bearer']);
+    });
+
+    it('refuse authorities when no authorities engine enforces them', async () => {
+      const route = routeClass({ method: 'GET', path: '/x', auth: 'bearer', authorities: 'admin' });
+
+      await expect(boot([route], transparent)).rejects.toThrow(AuthConfigurationError);
+    });
+
+    it('refuse authorities that name a profile the server does not have', async () => {
+      const route = routeClass({ method: 'GET', path: '/x', auth: 'bearer', authorities: 'owner' });
+
+      await expect(boot([route], { ...transparent, authorities })).rejects.toThrow(
+        expect.objectContaining({
+          constructor: AuthConfigurationError,
+          message: expect.stringContaining('HTTP route "GET /x": authorities'),
+        }),
+      );
+    });
+
+    it('keep the authorities a server enforces', async () => {
+      const route = routeClass({ method: 'GET', path: '/x', auth: 'bearer', authorities: 'admin' });
+      const instance = await boot([route], { ...transparent, authorities });
+
+      expect(instance.getScopes()[0].httpRouteTable?.routes[0].authorities).toBe('admin');
+    });
+
+    it("warn that the server's public mode admits every caller", async () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      try {
+        await boot([routeClass({ method: 'GET', path: '/x', auth: 'bearer' })], { logging: { level: LogLevel.Warn } });
+
+        expect(warn.mock.calls.flat().join('\n')).toContain(
+          "HTTP route GET /x has auth: 'bearer', but the server's auth is in public mode",
+        );
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it('do not warn when the server verifies tokens', async () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      try {
+        await boot([routeClass({ method: 'GET', path: '/x', auth: 'bearer' })], {
+          ...transparent,
+          logging: { level: LogLevel.Warn },
+        });
+
+        expect(warn.mock.calls.flat().join('\n')).not.toContain("has auth: 'bearer'");
+      } finally {
+        warn.mockRestore();
+      }
+    });
   });
 
   it('refuse an http.auth.people the server cannot use', async () => {

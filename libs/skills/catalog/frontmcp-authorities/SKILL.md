@@ -24,6 +24,7 @@ Built-in RBAC/ABAC/ReBAC authorization system for FrontMCP entry types. Each flo
 - Restricting MCP entry visibility based on the caller's JWT claims
 - Enforcing tenant isolation (ABAC) or relationship checks (ReBAC) on entries
 - Gating which skills a caller can discover and load (`@Skill({ authorities })`)
+- Protecting an HTTP API beside the MCP endpoint with the same policy (`@HttpRoute({ auth: 'bearer', authorities })`)
 
 ### Recommended
 
@@ -331,6 +332,23 @@ Boot-time fail-fast covers skills too: a `@Skill` with `authorities` but no conf
 authorities engine fails server startup with `AuthConfigurationError`, exactly like a
 tool, resource, resource template, prompt, agent, or a tool declared inside an agent
 (hidden entries included).
+
+### HTTP Route Authorities (`@HttpRoute({ auth: 'bearer', authorities })`)
+
+An `@HttpRoute` with `auth: 'bearer'` admits the callers the MCP endpoint's `auth` admits, and its `authorities` are
+checked as a tool's, after the token and before `handle()`. Their `input` is the request body's fields and the path's
+parameters (which win), so a profile that reads `{ fromInput: 'tenantId' }` covers a tool that takes `tenantId` and
+`GET /tenants/:tenantId/report` alike. A denied caller gets `403` `{ "error": "Forbidden" }`. `authorities` need
+`auth: 'bearer'`, and the startup checks above cover routes too (`AuthConfigurationError`). See `create-http-route`.
+
+```typescript
+@HttpRoute({ method: 'GET', path: '/tenants/:tenantId/report', auth: 'bearer', authorities: 'matchTenant' })
+export class TenantReport extends HttpRouteContext {
+  handle() {
+    return { tenant: this.params['tenantId'], by: this.auth.user.sub };
+  }
+}
+```
 
 ### Rules that check nothing are refused
 
