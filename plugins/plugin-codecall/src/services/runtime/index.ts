@@ -11,7 +11,7 @@ export * from './runtime.types';
 /** The runtimes CodeCall executes scripts in, by name. */
 export type CodeCallScriptRuntimes = Readonly<Record<CodeCallRuntimeName, CodeCallScriptRuntime>>;
 
-/** The runtimes as shipped: both load their Enclave entry point only when first used. */
+/** The runtimes as shipped: each loads its Enclave entry point when first used, or when `node-vm` is preloaded. */
 export function createDefaultRuntimes(): CodeCallScriptRuntimes {
   return { interpreter: createInterpreterRuntime(), 'node-vm': createNodeVmRuntime() };
 }

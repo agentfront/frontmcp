@@ -17,6 +17,8 @@
 
 import type { CreateEnclaveOptions, Enclave, EnclaveRunOptions } from '@enclave-vm/core';
 
+import { getRuntimeContext } from '@frontmcp/utils';
+
 import { CodeCallRuntimeError } from './runtime.errors';
 import {
   CODECALL_ENCLAVE_SECURITY_LEVEL,
@@ -137,11 +139,24 @@ export function runFeaturesOf(module: Pick<NodeVmModule, 'ENCLAVE_RUN_FEATURES'>
 
 /** The `node-vm` runtime. */
 export function createNodeVmRuntime(loader: NodeVmModuleLoader = loadNodeVmModule): CodeCallScriptRuntime {
+  let loading: Promise<NodeVmModule> | undefined;
+  const load = (): Promise<NodeVmModule> => {
+    // A load that failed is tried again by the next caller, as every run did before the preload.
+    loading ??= loader().catch((error: unknown) => {
+      loading = undefined;
+      throw error;
+    });
+    return loading;
+  };
   return {
     name: 'node-vm',
+    preload(): void {
+      if (isCloudflareWorkersRuntime() || getRuntimeContext().runtime !== 'node') return;
+      setImmediate(() => void load().catch(() => undefined)).unref();
+    },
     async replaysCallTimes(): Promise<boolean> {
       return (
-        !isCloudflareWorkersRuntime() && runFeaturesOf(await loader().catch(() => undefined)).includes('replayed-calls')
+        !isCloudflareWorkersRuntime() && runFeaturesOf(await load().catch(() => undefined)).includes('replayed-calls')
       );
     },
     async createRunner(spec: CodeCallScriptRunSpec): Promise<CodeCallScriptRunner> {
@@ -150,7 +165,7 @@ export function createNodeVmRuntime(loader: NodeVmModuleLoader = loadNodeVmModul
       }
       let module: NodeVmModule;
       try {
-        module = await loader();
+        module = await load();
       } catch {
         throw new CodeCallRuntimeError(
           'RUNTIME_UNAVAILABLE',

@@ -254,8 +254,8 @@ export class ScriptTooLargeError extends Error {
  * - Runtime limits (timeout, iterations, tool calls, and the interpreter's own budgets)
  * - Tool call integration with FrontMCP pipeline, closed when the run returns
  *
- * It loads no Enclave entry point until a script runs, and the Node-only `@enclave-vm/core` barrel
- * only for `vm.runtime: 'node-vm'`.
+ * It loads the Node-only `@enclave-vm/core` barrel only for `vm.runtime: 'node-vm'`, starting in the
+ * background when it is created on Node; the interpreter's entry point loads when a script runs.
  */
 @Provider({
   name: 'codecall:enclave',
@@ -284,6 +284,7 @@ export default class EnclaveService {
     this.vmOptions = all.resolvedVm;
     this.sidecarOptions = all.sidecar;
     this.runtimes = runtimes;
+    if (this.vmOptions.runtime === 'node-vm') runtimes['node-vm'].preload?.();
     if (this.vmOptions.allowConsole && scriptLogger) {
       this.consoleHandler = new ScriptConsoleLog(scriptLogger).write;
     }

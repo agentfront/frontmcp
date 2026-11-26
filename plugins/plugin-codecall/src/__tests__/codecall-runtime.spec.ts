@@ -7,7 +7,7 @@ import * as path from 'node:path';
 
 import { InterpreterAdapter, type ToolHandler } from '@enclave-vm/core/worker';
 
-import { readdir, readFile } from '@frontmcp/utils';
+import { getRuntimeContext, readdir, readFile } from '@frontmcp/utils';
 
 import type { ResolvedCodeCallVmOptions } from '../codecall.symbol';
 import CodeCallConfig from '../providers/code-call.config';
@@ -195,6 +195,27 @@ describe('node-vm runtime', () => {
   it('recognizes Cloudflare Workers only by its own user agent', async () => {
     expect(isCloudflareWorkersRuntime()).toBe(false);
     await inCloudflareWorkers(async () => expect(isCloudflareWorkersRuntime()).toBe(true));
+  });
+
+  it('does not preload the Node barrel in Cloudflare Workers', async () => {
+    const loader = jest.fn();
+    await inCloudflareWorkers(async () => createNodeVmRuntime(loader).preload?.());
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(loader).not.toHaveBeenCalled();
+  });
+
+  it.each(['browser', 'edge', 'bun', 'deno'])('does not preload the Node barrel on the %s runtime', async (runtime) => {
+    const loader = jest.fn();
+    const context = getRuntimeContext();
+    const actual = context.runtime;
+    context.runtime = runtime;
+    try {
+      createNodeVmRuntime(loader).preload?.();
+    } finally {
+      context.runtime = actual;
+    }
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(loader).not.toHaveBeenCalled();
   });
 
   it('refuses when the Node barrel cannot be loaded', async () => {
