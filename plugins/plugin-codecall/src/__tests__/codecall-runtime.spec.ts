@@ -204,15 +204,21 @@ describe('node-vm runtime', () => {
     expect(loader).not.toHaveBeenCalled();
   });
 
-  it.each(['browser', 'edge', 'bun', 'deno'])('does not preload the Node barrel on the %s runtime', async (runtime) => {
+  it.each([
+    ['runtime', 'browser'],
+    ['runtime', 'edge'],
+    ['runtime', 'bun'],
+    ['runtime', 'deno'],
+    ['deployment', 'serverless'],
+  ] as const)('does not preload the Node barrel when the %s is %s', async (field, value) => {
     const loader = jest.fn();
     const context = getRuntimeContext();
-    const actual = context.runtime;
-    context.runtime = runtime;
+    const actual = context[field];
+    context[field] = value;
     try {
       createNodeVmRuntime(loader).preload?.();
     } finally {
-      context.runtime = actual;
+      context[field] = actual;
     }
     await new Promise((resolve) => setImmediate(resolve));
     expect(loader).not.toHaveBeenCalled();

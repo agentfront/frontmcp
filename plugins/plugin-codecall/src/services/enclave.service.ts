@@ -255,7 +255,8 @@ export class ScriptTooLargeError extends Error {
  * - Tool call integration with FrontMCP pipeline, closed when the run returns
  *
  * It loads the Node-only `@enclave-vm/core` barrel only for `vm.runtime: 'node-vm'`, starting in the
- * background when it is created on Node; the interpreter's entry point loads when a script runs.
+ * background when it is created on a long-running Node server (not serverless); otherwise, and for
+ * the interpreter's entry point, the load happens when a script runs.
  */
 @Provider({
   name: 'codecall:enclave',

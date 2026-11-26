@@ -151,7 +151,9 @@ export function createNodeVmRuntime(loader: NodeVmModuleLoader = loadNodeVmModul
   return {
     name: 'node-vm',
     preload(): void {
-      if (isCloudflareWorkersRuntime() || getRuntimeContext().runtime !== 'node') return;
+      if (isCloudflareWorkersRuntime()) return;
+      const { runtime, deployment } = getRuntimeContext();
+      if (runtime !== 'node' || deployment === 'serverless') return;
       setImmediate(() => void load().catch(() => undefined)).unref();
     },
     async replaysCallTimes(): Promise<boolean> {
