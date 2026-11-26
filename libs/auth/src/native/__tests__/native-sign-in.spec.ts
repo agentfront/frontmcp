@@ -8,8 +8,21 @@ import {
   getNativeTokens,
   memoryTokenStore,
   NativeSignInError,
+  signInNative,
+  signOutNative,
+  type NativeTokenOptions,
   type NativeTokenSet,
+  type NativeTokenStore,
 } from '..';
+
+// The browser half is the loopback listener's own spec: here the callback comes back at once with a code.
+jest.mock('../loopback-redirect', () => ({
+  listenForRedirect: jest.fn(async () => ({
+    redirectUri: 'http://127.0.0.1:5555/callback',
+    code: Promise.resolve('the-code'),
+    close: jest.fn(),
+  })),
+}));
 
 const ISSUER = 'https://auth.example.com/tenant';
 const RFC8414_URL = 'https://auth.example.com/.well-known/oauth-authorization-server/tenant';
@@ -140,5 +153,202 @@ describe('getNativeTokens refresh endpoint', () => {
       'insecure_url',
     );
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve: () => void = () => undefined;
+  const promise = new Promise<void>((settle) => (resolve = settle));
+  return { promise, resolve };
+}
+
+/** Lets the code under test run its next steps, which a held request then waits behind. */
+const settle = () => new Promise((resolve) => setImmediate(resolve));
+
+/**
+ * An authorization server behind `fetch`: its metadata, and a token endpoint that rotates refresh tokens, so a
+ * refresh token works once. `holdNextRefresh` keeps the next refresh's answer until released.
+ */
+function fakeIdp() {
+  let counter = 0;
+  let held: Promise<void> | undefined;
+  const idp = {
+    tokenRequests: [] as URLSearchParams[],
+    refreshTokens: new Set<string>(),
+    codeExchanged: deferred(),
+    refreshRequests: () => idp.tokenRequests.filter((params) => params.get('grant_type') === 'refresh_token'),
+    holdNextRefresh() {
+      const arrived = deferred();
+      const release = deferred();
+      held = release.promise;
+      const onArrival = arrived.resolve;
+      idp.onRefresh = () => {
+        idp.onRefresh = undefined;
+        onArrival();
+      };
+      return { arrived: arrived.promise, release: release.resolve };
+    },
+    onRefresh: undefined as (() => void) | undefined,
+  };
+  jest.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    if (url === RFC8414_URL) return json(metadata());
+    if (url !== `${ISSUER}/token`) return json({ error: 'not_found' }, 404);
+    const params = new URLSearchParams(String(init?.body));
+    idp.tokenRequests.push(params);
+    if (params.get('grant_type') === 'refresh_token') {
+      idp.onRefresh?.();
+      const wait = held;
+      held = undefined;
+      await wait;
+      if (!idp.refreshTokens.delete(params.get('refresh_token') ?? '')) return json({ error: 'invalid_grant' }, 400);
+    } else {
+      idp.codeExchanged.resolve();
+    }
+    const refreshToken = `refresh-${++counter}`;
+    idp.refreshTokens.add(refreshToken);
+    return json({
+      access_token: `access-${counter}`,
+      token_type: 'Bearer',
+      expires_in: 3600,
+      refresh_token: refreshToken,
+    });
+  });
+  return idp;
+}
+
+/** A store in memory whose `stallGet(n)` holds the n-th read, with what was stored when it was made, until released. */
+function testStore() {
+  const entries = new Map<string, NativeTokenSet>();
+  let gets = 0;
+  let stalled: { at: number; until: Promise<void> } | undefined;
+  let failSets = 0;
+  const store: NativeTokenStore = {
+    async get(key) {
+      const snapshot = entries.get(key);
+      if (++gets === stalled?.at) await stalled.until;
+      return snapshot;
+    },
+    async set(key, tokens) {
+      if (failSets > 0) {
+        failSets--;
+        throw new Error('store down');
+      }
+      entries.set(key, tokens);
+    },
+    async delete(key) {
+      entries.delete(key);
+    },
+  };
+  return {
+    store,
+    entries,
+    stallGet(at: number) {
+      const release = deferred();
+      stalled = { at, until: release.promise };
+      return release.resolve;
+    },
+    failNextSet: () => void failSets++,
+  };
+}
+
+const KEY = `${ISSUER} notes-cli`;
+
+describe('getNativeTokens, signInNative and signOutNative on one store and key', () => {
+  let idp: ReturnType<typeof fakeIdp>;
+  let kept: ReturnType<typeof testStore>;
+  let options: NativeTokenOptions;
+
+  /** Tokens about to expire, with a refresh token the server takes once. */
+  function expiring(): NativeTokenSet {
+    idp.refreshTokens.add('refresh-0');
+    return {
+      accessToken: 'access-0',
+      tokenType: 'Bearer',
+      refreshToken: 'refresh-0',
+      expiresAt: Date.now() + 30_000,
+      issuer: ISSUER,
+      tokenEndpoint: `${ISSUER}/token`,
+      clientId: 'notes-cli',
+    };
+  }
+
+  beforeEach(() => {
+    idp = fakeIdp();
+    kept = testStore();
+    options = { issuer: ISSUER, clientId: 'notes-cli', store: kept.store };
+  });
+
+  it('shares one read and refresh between callers, even a caller whose read the store answers late', async () => {
+    kept.entries.set(KEY, expiring());
+    const releaseRead = kept.stallGet(2);
+
+    const first = getNativeTokens(options);
+    const second = getNativeTokens(options);
+    const refreshed = await first;
+    releaseRead();
+
+    expect(await second).toEqual(refreshed);
+    expect(refreshed?.refreshToken).toBe('refresh-1');
+    expect(await getNativeTokens(options)).toEqual(refreshed);
+    expect(idp.refreshRequests()).toHaveLength(1);
+  });
+
+  it('lets a sign-out during a refresh win: the refresh does not sign the caller back in', async () => {
+    kept.entries.set(KEY, expiring());
+    const refresh = idp.holdNextRefresh();
+
+    const reading = getNativeTokens(options);
+    await refresh.arrived;
+    const signingOut = signOutNative(options);
+    await settle();
+    refresh.release();
+    await Promise.all([reading, signingOut]);
+
+    expect(kept.entries.get(KEY)).toBeUndefined();
+    expect(await getNativeTokens(options)).toBeUndefined();
+  });
+
+  it.each([
+    ['new tokens', false],
+    ['invalid_grant', true],
+  ])('keeps a newer sign-in when the refresh before it answers with %s', async (_answer, refused) => {
+    kept.entries.set(KEY, expiring());
+    const refresh = idp.holdNextRefresh();
+
+    const reading = getNativeTokens(options);
+    await refresh.arrived;
+    if (refused) idp.refreshTokens.clear();
+    const signingIn = signInNative({ ...options, openBrowser: () => undefined });
+    await idp.codeExchanged.promise;
+    await settle();
+    refresh.release();
+    const [, signedIn] = await Promise.all([reading, signingIn]);
+
+    expect(kept.entries.get(KEY)?.accessToken).toBe(signedIn.accessToken);
+    expect(await getNativeTokens(options)).toEqual(signedIn);
+  });
+
+  it('keeps refreshed tokens the store could not save, and saves them before it refreshes again', async () => {
+    kept.entries.set(KEY, expiring());
+    kept.failNextSet();
+
+    await expect(getNativeTokens(options)).rejects.toThrow('store down');
+    const next = await getNativeTokens(options);
+
+    expect(next).toMatchObject({ accessToken: 'access-1', refreshToken: 'refresh-1' });
+    expect(kept.entries.get(KEY)).toEqual(next);
+    expect(idp.refreshRequests()).toHaveLength(1);
+  });
+
+  it('drops refreshed tokens the store could not save once the caller signs out', async () => {
+    kept.entries.set(KEY, expiring());
+    kept.failNextSet();
+    await expect(getNativeTokens(options)).rejects.toThrow('store down');
+
+    await signOutNative(options);
+
+    expect(await getNativeTokens(options)).toBeUndefined();
+    expect(kept.entries.get(KEY)).toBeUndefined();
   });
 });

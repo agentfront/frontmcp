@@ -43,7 +43,48 @@ export type NativeTokenOptions = Pick<
 >;
 
 const defaultStore = memoryTokenStore();
-const refreshes = new WeakMap<NativeTokenStore, Map<string, Promise<NativeTokenSet | undefined>>>();
+
+/**
+ * The token operations on one store and key, run one at a time: a read with its refresh, a sign-out, and the save
+ * that ends a sign-in. So a refresh in flight can neither undo a sign-out nor replace (or, refused, drop) the tokens
+ * of a newer sign-in.
+ */
+interface TokenLane {
+  /** The last operation queued; the next starts once it settles. */
+  tail: Promise<unknown>;
+  /** A read, with its refresh, that callers share until a sign-in or sign-out is queued behind it. */
+  reading?: Promise<NativeTokenSet | undefined>;
+  /** Refreshed tokens the store could not save: the server has spent the refresh token they replace. */
+  unsaved?: NativeTokenSet;
+}
+
+const lanes = new WeakMap<NativeTokenStore, Map<string, TokenLane>>();
+
+function laneOf(store: NativeTokenStore, key: string): TokenLane {
+  let byKey = lanes.get(store);
+  if (!byKey) lanes.set(store, (byKey = new Map()));
+  let lane = byKey.get(key);
+  if (!lane) byKey.set(key, (lane = { tail: Promise.resolve() }));
+  return lane;
+}
+
+function enqueue<T>(lane: TokenLane, operation: () => Promise<T>): Promise<T> {
+  const run = lane.tail.then(operation);
+  lane.tail = run.catch(() => undefined);
+  return run;
+}
+
+/** Replaces the kept tokens, after the operations queued before: a sign-in's save, or a sign-out's delete. */
+function replaceTokens(store: NativeTokenStore, key: string, tokens: NativeTokenSet | undefined): Promise<void> {
+  const lane = laneOf(store, key);
+  // A read from before this one must not answer for a caller that comes after it.
+  lane.reading = undefined;
+  return enqueue(lane, async () => {
+    lane.unsaved = undefined;
+    if (tokens) await store.set(key, tokens);
+    else await store.delete(key);
+  });
+}
 
 /**
  * Signs a CLI or desktop app in at an OAuth 2.1 authorization server (RFC 8252): discovers its endpoints, opens the
@@ -91,7 +132,7 @@ export async function signInNative(options: NativeSignInOptions): Promise<Native
       clientId: options.clientId,
       resource: resources.length ? resources : undefined,
     });
-    await storeOf(options).set(storeKeyOf(options), tokenSet);
+    await replaceTokens(storeOf(options), storeKeyOf(options), tokenSet);
     return tokenSet;
   } finally {
     redirect.close();
@@ -100,27 +141,26 @@ export async function signInNative(options: NativeSignInOptions): Promise<Native
 
 /**
  * The kept tokens, refreshed first when the access token has expired or is about to. `undefined` when there are
- * none, or the server refused the refresh token, which is then dropped: the app has to sign in again.
+ * none, or the server refused the refresh token, which is then dropped: the app has to sign in again. Callers at the
+ * same time share one read and refresh, which waits for a sign-in or sign-out queued before it.
  */
-export async function getNativeTokens(options: NativeTokenOptions): Promise<NativeTokenSet | undefined> {
+export function getNativeTokens(options: NativeTokenOptions): Promise<NativeTokenSet | undefined> {
   const store = storeOf(options);
   const key = storeKeyOf(options);
-  const tokens = await store.get(key);
-  if (!tokens || !isExpiring(tokens)) return tokens;
-  if (!tokens.refreshToken) return undefined;
-
-  let pending = refreshes.get(store);
-  if (!pending) refreshes.set(store, (pending = new Map()));
-  const inFlight = pending.get(key);
-  if (inFlight) return inFlight;
-  const refresh = refreshTokens(options, store, key, tokens).finally(() => pending.delete(key));
-  pending.set(key, refresh);
-  return refresh;
+  const lane = laneOf(store, key);
+  if (lane.reading) return lane.reading;
+  const reading: Promise<NativeTokenSet | undefined> = enqueue(lane, () =>
+    currentTokens(options, store, key, lane),
+  ).finally(() => {
+    if (lane.reading === reading) lane.reading = undefined;
+  });
+  lane.reading = reading;
+  return reading;
 }
 
-/** Forgets the kept tokens. */
-export async function signOutNative(options: NativeTokenOptions): Promise<void> {
-  await storeOf(options).delete(storeKeyOf(options));
+/** Forgets the kept tokens, once a refresh in flight is done, so it cannot sign the caller back in. */
+export function signOutNative(options: NativeTokenOptions): Promise<void> {
+  return replaceTokens(storeOf(options), storeKeyOf(options), undefined);
 }
 
 /** Opens a URL in the system's default browser. */
@@ -141,11 +181,32 @@ export function openSystemBrowser(url: string): Promise<void> {
   });
 }
 
+/** The kept tokens, refreshed when due; tokens a refresh could not save are saved before anything else. */
+async function currentTokens(
+  options: NativeTokenOptions,
+  store: NativeTokenStore,
+  key: string,
+  lane: TokenLane,
+): Promise<NativeTokenSet | undefined> {
+  let tokens: NativeTokenSet | undefined;
+  if (lane.unsaved) {
+    tokens = lane.unsaved;
+    await store.set(key, tokens);
+    lane.unsaved = undefined;
+  } else {
+    tokens = await store.get(key);
+  }
+  if (!tokens || !isExpiring(tokens)) return tokens;
+  if (!tokens.refreshToken) return undefined;
+  return refreshTokens(options, store, key, tokens, lane);
+}
+
 async function refreshTokens(
   options: NativeTokenOptions,
   store: NativeTokenStore,
   key: string,
   tokens: NativeTokenSet,
+  lane: TokenLane,
 ): Promise<NativeTokenSet | undefined> {
   let body: Record<string, unknown>;
   try {
@@ -161,7 +222,10 @@ async function refreshTokens(
     throw error;
   }
   const refreshed = toTokenSet(body, tokens, tokens);
+  // Kept until saved: the next read saves them rather than send the refresh token the server has spent.
+  lane.unsaved = refreshed;
   await store.set(key, refreshed);
+  lane.unsaved = undefined;
   return refreshed;
 }
 
