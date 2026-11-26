@@ -136,8 +136,18 @@ function valueAt(result: unknown, path: string): unknown {
   return node.value;
 }
 
-function fieldPath(field: string | undefined): PathSegment[] {
-  return field === undefined ? [] : parseResultPath(field);
+/**
+ * The steps of a field in each item, which `option` names. A malformed one is a bad view (`INVALID_INPUT`), not a
+ * `path` that names nothing in the answer.
+ */
+function fieldPath(field: string | undefined, option: string): PathSegment[] {
+  if (field === undefined) return [];
+  try {
+    return parseResultPath(field);
+  } catch (error) {
+    if (!(error instanceof ResultPathNotFoundError)) throw error;
+    throw new InvalidInputError(`${option} ${JSON.stringify(field)} is not a dot path or a JSON pointer`);
+  }
 }
 
 function project(value: unknown, fields: string[] | undefined): unknown {
@@ -221,7 +231,7 @@ function meets(field: { found: boolean; value?: unknown }, { op, value }: WhereC
 function whereTest(conditions: WhereCondition[]): (item: unknown) => boolean {
   const checks = conditions.map((condition, index) => {
     checkCondition(condition, index);
-    const segments = fieldPath(condition.field);
+    const segments = fieldPath(condition.field, `where[${index}].field`);
     return (item: unknown) => meets(lookup(item, segments), condition);
   });
   return (item) => checks.every((check) => check(item));
@@ -241,12 +251,17 @@ function hasMatch(value: unknown, matches: (text: string) => boolean): boolean {
   return false;
 }
 
-function grepped(value: unknown[] | string, grep: GrepQuery): unknown[] {
+function grepped(path: string, value: unknown[] | string, grep: GrepQuery): unknown[] {
+  if (typeof value === 'string' && grep.field !== undefined) {
+    throw new InvalidInputError(
+      `grep.field searches a field of each list item: "${path}" is a string, whose lines grep searches whole`,
+    );
+  }
   const matches = grepMatcher(grep);
   if (typeof value === 'string') {
     return value.split(/\r?\n/).flatMap((text, index) => (matches(text) ? [{ line: index + 1, text }] : []));
   }
-  const segments = fieldPath(grep.field);
+  const segments = fieldPath(grep.field, 'grep.field');
   return value.filter((item) => {
     const field = lookup(item, segments);
     return field.found && hasMatch(field.value, matches);
@@ -271,7 +286,10 @@ function compareFields(a: { found: boolean; value?: unknown }, b: { found: boole
 }
 
 function sorted(items: unknown[], keys: SortKey[]): unknown[] {
-  const fields = keys.map((key) => ({ segments: fieldPath(key.field), sign: key.order === 'desc' ? -1 : 1 }));
+  const fields = keys.map((key, index) => ({
+    segments: fieldPath(key.field, `sort[${index}].field`),
+    sign: key.order === 'desc' ? -1 : 1,
+  }));
   return items
     .map((item, index) => ({ item, index, values: fields.map(({ segments }) => lookup(item, segments)) }))
     .sort((a, b) => {
@@ -298,8 +316,17 @@ function viewOf(path: string, value: unknown, query: ResultQuery): ResultSlice {
       `where, sort and count read a list, and grep a list or the lines of a string: "${path}" is ${kindOf(value)}`,
     );
   }
-  let items = query.grep ? grepped(value as unknown[] | string, query.grep) : (value as unknown[]);
-  if (query.where) items = items.filter(whereTest(query.where));
+  let items: unknown[];
+  if (typeof value === 'string') {
+    // A string's grep makes the { line, text } items that where then reads.
+    items = grepped(path, value, query.grep as GrepQuery);
+    if (query.where) items = items.filter(whereTest(query.where));
+  } else {
+    // A list's where runs first, so grep spends its steps on the items where keeps.
+    items = value as unknown[];
+    if (query.where) items = items.filter(whereTest(query.where));
+    if (query.grep) items = grepped(path, items, query.grep);
+  }
   if (query.sort) items = sorted(items, query.sort);
   if (query.count) return { path, value: items.length };
   const { offset, limit } = rangeOf(query, DEFAULT_ITEM_LIMIT);

@@ -167,7 +167,9 @@ itself when it's left out. No code is run: `op` is one of these comparisons.
 | `startsWith`, `endsWith` | is a string starting or ending with `value`                               |
 | `exists`                 | is there (`value: false`: is missing)                                     |
 
-`grep` searches each item's strings, numbers and booleans (16 levels deep), or the value at `field`. Its `pattern` is
+`where` runs before `grep` on a list, so a grep spends its steps on the items `where` keeps; on a string, `where` reads
+the `{ line, text }` items the grep makes. `grep` searches each item's strings, numbers and booleans (16 levels deep),
+or the value at `field`, which only a list takes. Its `pattern` is
 literal unless `regex: true`. A regex runs on a matcher with no backtracking, so its time grows with the text, not with
 the pattern's shape, and one query stops after 20,000,000 steps. It takes literals, `.`, classes (`[a-z]`, `[^0-9]`),
 `\d \w \s` and their negations, `\b`, `^` and `$` (the start and end of each string or line), groups, `|`, and the
@@ -175,13 +177,13 @@ quantifiers `* + ? {m} {m,} {m,n}` (counts up to 100; a larger one is refused); 
 refused. `ignoreCase` folds case as a JavaScript RegExp's `i` flag does, for a literal pattern too (`σ` finds `ς`). Its errors carry a
 remedy for the model:
 
-| Code                           | When                                                                                                 |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------- |
-| `RESULT_HANDLE_NOT_FOUND`      | The handle expired, was never issued, or belongs to another session or caller.                       |
-| `RESULT_HANDLE_OWNER_REQUIRED` | The call has neither a verified session nor an authenticated caller, so no answer was folded for it. |
-| `RESULT_PATH_NOT_FOUND`        | The path isn't a dot path or a JSON pointer, or names nothing in the answer.                         |
-| `RESULT_SLICE_TOO_LARGE`       | The slice is larger than `thresholdBytes`: read fewer items, fewer fields or a deeper path.          |
-| `INVALID_INPUT`                | Both `page` and `offset`, a view of a value that isn't a list, a bad condition or grep pattern.      |
+| Code                           | When                                                                                                   |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| `RESULT_HANDLE_NOT_FOUND`      | The handle expired, was never issued, or belongs to another session or caller.                         |
+| `RESULT_HANDLE_OWNER_REQUIRED` | The call has neither a verified session nor an authenticated caller, so no answer was folded for it.   |
+| `RESULT_PATH_NOT_FOUND`        | The path isn't a dot path or a JSON pointer, or names nothing in the answer.                           |
+| `RESULT_SLICE_TOO_LARGE`       | The slice is larger than `thresholdBytes`: read fewer items, fewer fields or a deeper path.            |
+| `INVALID_INPUT`                | Both `page` and `offset`, a view of a value that isn't a list, a bad condition, field or grep pattern. |
 
 ## Who can read a handle
 

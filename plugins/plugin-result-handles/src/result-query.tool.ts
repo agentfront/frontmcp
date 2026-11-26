@@ -75,7 +75,9 @@ export const resultQueryInputSchema = {
         .optional()
         .describe('A regular expression (no backreferences or lookarounds), not a literal; false by default'),
       ignoreCase: z.boolean().optional(),
-      field: fieldPath.optional().describe('A path in each item to search; the whole item if left out'),
+      field: fieldPath
+        .optional()
+        .describe('A path in each list item to search, for a list only; the whole item if left out'),
     })
     .strict()
     .optional()
