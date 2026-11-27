@@ -17,7 +17,7 @@ export const DEFAULT_MEMORY_MAX_ENTRIES = 1000;
 export interface FoldContext {
   /** The answer's size: UTF-8 bytes of its JSON. */
   bytes: number;
-  /** The tool's full name, its app's id first (`reports:export_rows`). */
+  /** The tool's or the resource's full name, its app's id first (`reports:export_rows`). */
   fullName: string;
   /** The request the answer goes back to: its session, client and headers. */
   request: FlowRequestInfo;
@@ -25,6 +25,9 @@ export interface FoldContext {
 
 /** Whether an answer over the threshold folds; `answer` is its `structuredContent`, or its text. */
 export type FoldPolicy = (toolName: string, answer: unknown, context: FoldContext) => boolean;
+
+/** Whether a resource read over the threshold folds; `answer` is its one text, parsed when it is JSON. */
+export type ResourceFoldPolicy = (uri: string, answer: unknown, context: FoldContext) => boolean;
 
 export interface ResultHandlesPluginOptionsInput {
   /** Answers whose data is larger than this, as UTF-8 JSON, fold (16384 by default, at least 1024). */
@@ -39,6 +42,12 @@ export interface ResultHandlesPluginOptionsInput {
   storage?: StorageConfig;
   /** The key prefix of folded answers in the storage ('result-handles'). */
   namespace?: string;
+  /** Fold `resources/read` answers too: `true`, or which ones (off by default). */
+  resources?: boolean | ResourceFoldPolicy;
+  /** Each read of a handle starts its TTL again (off by default). */
+  slidingTtl?: boolean;
+  /** The most bytes of folded answers a store keeps; past it the least recently read go first (no limit by default). */
+  maxStoredBytes?: number;
 }
 
 export interface ResultHandlesPluginOptions {
@@ -48,6 +57,9 @@ export interface ResultHandlesPluginOptions {
   foldPolicy: FoldPolicy;
   storage: StorageConfig;
   namespace: string;
+  resources?: boolean | ResourceFoldPolicy;
+  slidingTtl?: boolean;
+  maxStoredBytes?: number;
 }
 
 const foldEverything: FoldPolicy = () => true;
@@ -85,8 +97,19 @@ const resultHandlesOptionsSchema = z
       .default({ type: 'auto' })
       .transform((storage) => ({ ...storage, memory: { maxEntries: DEFAULT_MEMORY_MAX_ENTRIES, ...storage.memory } })),
     namespace: z.string().min(1, { message: 'must not be empty' }).default('result-handles'),
+    resources: z
+      .custom<boolean | ResourceFoldPolicy>((value) => typeof value === 'boolean' || typeof value === 'function', {
+        message: 'must be true, false or a function (uri, answer, context) => boolean',
+      })
+      .optional(),
+    slidingTtl: z.boolean({ message: 'must be true or false' }).optional(),
+    maxStoredBytes: z.number().int({ message: 'must be a whole number of bytes, at least thresholdBytes' }).optional(),
   })
-  .strict();
+  .strict()
+  .refine((options) => options.maxStoredBytes === undefined || options.maxStoredBytes >= options.thresholdBytes, {
+    path: ['maxStoredBytes'],
+    message: 'must be a whole number of bytes, at least thresholdBytes',
+  });
 
 /** The plugin's options with their defaults, or a {@link ResultHandlesConfigurationError} naming each problem. */
 export function parseResultHandlesOptions(input: ResultHandlesPluginOptionsInput): ResultHandlesPluginOptions {
