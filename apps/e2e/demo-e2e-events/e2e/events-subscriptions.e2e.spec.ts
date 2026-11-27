@@ -278,6 +278,29 @@ describe('Events subscriptions E2E', () => {
       expect(refused.error?.code).toBe(-32024);
       expect(receiver.requests).toHaveLength(0);
     });
+
+    it('lists the subscription to a tool, with the host of its callback and none of its secrets', async () => {
+      const client = await connectAs('pia');
+      const created = await rpc(client, 'events/subscribe', subscription('listed'));
+      const id = created.result?.['id'];
+
+      const audit = await client.tools.call('subscription-audit', {});
+      const { subscriptions } = audit.json<{ subscriptions: Array<Record<string, unknown>> }>();
+
+      expect(subscriptions.filter((entry) => entry['id'] === id)).toEqual([
+        expect.objectContaining({
+          eventName: 'order.created',
+          mode: 'webhook',
+          subscriber: expect.objectContaining({ sub: 'pia' }),
+          arguments: { status: 'listed' },
+          active: true,
+          delivery: { host: new URL(receiver.url).host, failures: 0 },
+        }),
+      ]);
+      const serialized = JSON.stringify(subscriptions);
+      expect(serialized).not.toContain(secret);
+      expect(serialized).not.toContain(receiver.url);
+    });
   });
 
   describe('dialects', () => {

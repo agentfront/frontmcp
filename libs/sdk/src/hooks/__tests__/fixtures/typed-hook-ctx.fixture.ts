@@ -27,6 +27,7 @@ import {
   OAuthTokenHook,
   PromptHook,
   ResourceHook,
+  ScopeEntry,
   Tool,
   ToolContext,
   ToolHook,
@@ -279,6 +280,12 @@ export class HooksThatCompile {
   endedSubscription(ctx: FlowCtxOf<'events:ended'>) {
     const { record, subscription, reason } = ctx.state.required;
     return [record.id, subscription.mode, reason, ctx.state.termination?.data];
+  }
+
+  @EventEndedHook.Did('buildResult')
+  async listedSubscriptions(ctx: FlowCtxOf<'events:ended'>) {
+    const listed = (await ctx.get(ScopeEntry).events?.listSubscriptions()) ?? [];
+    return listed.map((entry) => (entry.mode === 'webhook' ? entry.delivery.host : entry.mode));
   }
 }
 

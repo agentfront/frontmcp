@@ -21,6 +21,7 @@ import type ProviderRegistry from '../provider/provider.registry';
 import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
 import { type EventMetrics } from './delivery/event-metrics';
 import { type EventOutbox } from './delivery/event-outbox';
+import { webhookSubscriptionInfoOf, type EventSubscriptionInfo } from './event-subscription-info';
 import { EventInstance } from './event.instance';
 import { normalizeEvent } from './event.utils';
 import { type EventBuffer } from './poll/event-buffer';
@@ -214,6 +215,24 @@ export default class EventRegistry
   /** The events whose occurrences are sent to Claude Code sessions as channel notifications. */
   getChannelEvents(): EventInstance[] {
     return this.getEvents().filter((event) => this.sendsToChannelSessions(event));
+  }
+
+  /**
+   * The subscriptions of every registered event, or of one: webhook subscriptions from the store every process
+   * shares, and the poll leases and streams this process holds. Read only: nothing is swept or changed. Each one has
+   * no webhook secret or signing key, no callback URL (only its host), and none of its owner's claims.
+   */
+  async listSubscriptions(eventName?: string): Promise<EventSubscriptionInfo[]> {
+    const listed: EventSubscriptionInfo[] = [];
+    const store = this.subscriptions?.store;
+    if (store) {
+      const eventNames = eventName === undefined ? this.getEvents().map((event) => event.name) : [eventName];
+      for (const name of eventNames) {
+        for (const record of await store.listByEvent(name)) listed.push(webhookSubscriptionInfoOf(record));
+      }
+    }
+    listed.push(...(this.pollLeases?.list(eventName) ?? []), ...(this.streams?.list(eventName) ?? []));
+    return listed;
   }
 
   /** The capability to advertise: both forms once an event is served, nothing otherwise. */
