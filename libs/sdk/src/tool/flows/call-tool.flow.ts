@@ -1299,9 +1299,9 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     const keyPaths = findUndeclaredArguments(tool.inputSchema ?? {}, sent, parsed);
     if (keyPaths.length === 0) return;
     const messages = await import('../undeclared-arguments-message.js');
-    const declaredKeys = Object.keys(tool.inputSchema ?? {});
-    if (policy === 'fail') throw new InvalidInputError(messages.undeclaredArgumentsRefusal(keyPaths, declaredKeys));
-    this.state.set('undeclaredArgumentsNote', messages.undeclaredArgumentsNote(keyPaths, declaredKeys));
+    const shape = tool.inputSchema ?? {};
+    if (policy === 'fail') throw new InvalidInputError(messages.undeclaredArgumentsRefusal(keyPaths, shape));
+    this.state.set('undeclaredArgumentsNote', messages.undeclaredArgumentsNote(keyPaths, shape));
     const newKeyPaths = unreportedKeyPaths(reportedUndeclaredArguments, tool, keyPaths.map(formatKeyPath));
     if (newKeyPaths.length > 0) this.logger.warn(messages.undeclaredArgumentsWarning(tool.metadata.name, newKeyPaths));
   }
