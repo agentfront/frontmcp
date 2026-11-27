@@ -122,6 +122,19 @@ async function parseCliConfig(
   return parsedConfig;
 }
 
+/** `http.userContent` is a listener of its own, which only a Node HTTP server opens. */
+function warnUserContentIgnored(
+  log: FrontMcpLogger | undefined,
+  http: { userContent?: unknown } | undefined,
+  entry: string,
+): void {
+  if (!http?.userContent) return;
+  log?.warn(
+    `http.userContent is ignored: ${entry} opens no listener of its own. ` +
+      'Only a Node HTTP server (bootstrap, runUnixSocket) serves it.',
+  );
+}
+
 /** A detached job runner runs the server's entry again: it runs its one run instead of serving, then exits. */
 async function exitAfterDetachedRun(config: FrontMcpConfigInput | FrontMcpConfigType, runId: string): Promise<void> {
   const { runDetachedJob } = await import('../job/runner/detached-job.worker.js');
@@ -478,6 +491,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
 
     server.prepare();
     await frontMcp.emitProvidersReady();
+    warnUserContentIgnored(frontMcp.log, frontMcp.config.http, 'a serverless handler (createHandler)');
     frontMcp.log?.info('FrontMCP handler created (serverless mode)');
     return server.getHandler();
   }
@@ -536,6 +550,11 @@ export class FrontMcpInstance implements FrontMcpInterface {
       const metricsService = await frontMcp.createMetricsService();
       const metricsConfig = frontMcp.config.metrics;
       await frontMcp.emitProvidersReady();
+      warnUserContentIgnored(
+        frontMcp.log,
+        frontMcp.config.http,
+        'a fetch handler for Workers and edge runtimes (createFetchHandler)',
+      );
       frontMcp.log?.info('FrontMCP fetch handler created (web-standard transport)');
       return createServerFetchHandler(
         scope,
@@ -920,6 +939,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
       // Scopes are now live (sqlite/redis/channels/jobs) — shut them down if a
       // later startup step throws.
       startupCleanups.push(() => frontMcp.releaseWithin(STDIO_SHUTDOWN_DEADLINE_MS));
+      warnUserContentIgnored(frontMcp.log, options.http, 'a stdio server (runStdio)');
 
       // The scope holding the server's own apps, not a standalone app's
       const primaryScope = frontMcp.getPrimaryScope();

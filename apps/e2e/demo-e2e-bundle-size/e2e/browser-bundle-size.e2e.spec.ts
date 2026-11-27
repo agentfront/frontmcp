@@ -21,9 +21,9 @@ import {
 } from './helpers/browser-bundle';
 
 const BUDGETS: Array<{ entry: string; label: string; maxBytes: number }> = [
-  // +12 bytes each (#1335): a call dispatched in process keeps the request's elicitation route
-  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_344_825 },
-  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_352_056 },
+  // +943 and +944 bytes (#1364): the http.userContent option's schema, and the warning the no-listener entries log for it
+  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_345_768 },
+  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_353_000 },
 ];
 
 // +372 bytes (#1315): the task index never shortens a TTL (an atomic extendTtl in the storage adapters) and jumps runs of gone tasks

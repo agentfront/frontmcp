@@ -606,6 +606,7 @@
   "UnsupportedTransportTypeError": "class",
   "UpdateJobTool": "class",
   "UpdateWorkflowTool": "class",
+  "UserContentConfigurationError": "class",
   "VaultLoadError": "class",
   "VaultNotFoundError": "class",
   "VercelKvAsyncInitRequiredError": "class",

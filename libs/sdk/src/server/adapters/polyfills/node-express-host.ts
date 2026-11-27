@@ -3,3 +3,4 @@ export {
   ExpressHostAdapter,
   type ExpressHostAdapterOptions,
 } from '../express.host.adapter';
+export { UserContentListener } from '../user-content.listener';

@@ -288,6 +288,7 @@ export {
   SocketInUseError,
   SocketPathConflictError,
   SocketPermissionError,
+  UserContentConfigurationError,
 } from './transport.errors';
 
 // Export auth internal errors
