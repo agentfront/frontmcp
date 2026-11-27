@@ -8,6 +8,7 @@
 
 import { StorageConfigError, StorageConnectionError } from '../errors';
 import { deleteRedisKeys, getRedisKeys, isRedisClusterClient, scanRedisKeys } from '../redis-client/cluster-ops';
+import { hasRedisClusterNodes } from '../redis-client/config';
 import { adoptRedisClient, createRedisConnection, urlConnectionOptions } from '../redis-client/connection';
 import type { FrontMcpRedisClient, RedisConnectionSettings } from '../redis-client/types';
 import { attachRedisErrorListener, type RedisErrorListenerOptions } from '../redis-error-listener';
@@ -449,9 +450,7 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
     const { url: _configUrl, ...fields } = config;
     if (this.connectionUrl) return { ...fields, url: this.connectionUrl };
 
-    const hasSeedNodes =
-      typeof fields.cluster === 'object' && fields.cluster !== null && (fields.cluster.nodes?.length ?? 0) > 0;
-    if (!this.options.config || (fields.host === undefined && !hasSeedNodes)) {
+    if (!this.options.config || (fields.host === undefined && !hasRedisClusterNodes(fields.cluster))) {
       throw new StorageConfigError('redis', 'Redis config is required when URL is not provided');
     }
     return { ...fields, port: fields.port ?? 6379, db: fields.db ?? 0 };
@@ -569,6 +568,10 @@ export interface CreateRedisClientOptions {
  *
  * With a `url`, the other connection fields fill in only what the URL leaves out (port,
  * password, db, tls), and one that contradicts it throws a `StorageConfigError`.
+ *
+ * @deprecated since 1.14: use `createRedisConnection()`, which takes the same settings plus
+ *   `cluster` (a Redis Cluster) and `client` (a client you made), and says who owns the client.
+ *   This keeps opening a single-node ioredis `Redis`.
  */
 export function createRedisClient(options: CreateRedisClientOptions): Redis {
   const { url, host, port, password, db, tls, label, logger } = options;

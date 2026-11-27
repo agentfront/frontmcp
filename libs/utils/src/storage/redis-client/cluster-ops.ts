@@ -50,13 +50,6 @@ export async function scanRedisKeys(client: FrontMcpRedisClient, pattern: string
   return [...new Set(perMaster.flat())];
 }
 
-/** The keys matching `pattern`, by KEYS: one call on a single node, as before; one per master on a cluster. */
-export async function redisKeys(client: FrontMcpRedisClient, pattern: string): Promise<string[]> {
-  if (!isRedisClusterClient(client)) return client.keys(pattern);
-  const perMaster = await Promise.all((await redisMasterNodes(client)).map((node) => node.keys(pattern)));
-  return [...new Set(perMaster.flat())];
-}
-
 /** Delete `keys`: one DEL on a single node, as before; one DEL per key on a cluster. Resolves how many existed. */
 export async function deleteRedisKeys(client: FrontMcpRedisClient, keys: string[]): Promise<number> {
   if (keys.length === 0) return 0;

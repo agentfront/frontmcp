@@ -245,10 +245,6 @@ export class NodeRedisClientAdapter implements FrontMcpRedisClient {
     return [String(next), Array.isArray(keys) ? keys.map(String) : []];
   }
 
-  async keys(pattern: string): Promise<string[]> {
-    return ((await this.send(['KEYS', pattern], undefined, true)) as unknown[]).map(String);
-  }
-
   // ---- sets, hashes, streams ----------------------------------------------------------------
 
   async sadd(key: string, ...members: string[]): Promise<number> {

@@ -63,7 +63,6 @@ describe('NodeRedisClientAdapter on a client', () => {
     ['incrby', ['a', 5], ['INCRBY', 'a', '5'], 5],
     ['mget', ['a', 'b'], ['MGET', 'a', 'b'], ['1', null]],
     ['eval', ['return 1', 1, 'k', 'arg'], ['EVAL', 'return 1', '1', 'k', 'arg'], 1],
-    ['keys', ['p*'], ['KEYS', 'p*'], ['p1']],
     ['sadd', ['s', 'm'], ['SADD', 's', 'm'], 1],
     ['srem', ['s', 'm'], ['SREM', 's', 'm'], 1],
     ['smembers', ['s'], ['SMEMBERS', 's'], ['m']],

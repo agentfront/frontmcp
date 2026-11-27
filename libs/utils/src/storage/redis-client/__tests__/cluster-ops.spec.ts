@@ -2,14 +2,8 @@
  * The cluster-aware helpers: today's call on a single node, per-key or per-master on a cluster (#1503).
  */
 import { borrowRedisClient, isBorrowedRedisClient } from '../borrow';
-import {
-  deleteRedisKeys,
-  getRedisKeys,
-  isRedisClusterClient,
-  redisKeys,
-  redisMasterNodes,
-  scanRedisKeys,
-} from '../cluster-ops';
+import { deleteRedisKeys, getRedisKeys, isRedisClusterClient, redisMasterNodes, scanRedisKeys } from '../cluster-ops';
+import { isRedisConnection, redisConnectionOf } from '../config';
 import { detectRedisClientKind, isRedisClientInput } from '../detect';
 import type { FrontMcpRedisClient } from '../types';
 
@@ -21,7 +15,6 @@ function node(keys: string[]) {
       const next = start + 2 >= keys.length ? '0' : String(start + 2);
       return [next, keys.slice(start, start + 2)] as [string, string[]];
     }),
-    keys: jest.fn(async () => keys),
     del: jest.fn(async (...names: string[]) => names.length),
     mget: jest.fn(async (...names: string[]) => names.map((name) => `v:${name}`)),
     get: jest.fn(async (name: string) => `v:${name}`),
@@ -64,19 +57,6 @@ describe('scanRedisKeys', () => {
     const client = cluster([node(['a'])], { emptyUntilPing: true });
     await expect(scanRedisKeys(asClient(client), '*')).resolves.toEqual(['a']);
     expect(client.ping).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe('redisKeys', () => {
-  it('sends one KEYS to a single node', async () => {
-    const single = node(['a']);
-    await expect(redisKeys(asClient(single), 'p*')).resolves.toEqual(['a']);
-    expect(single.keys).toHaveBeenCalledWith('p*');
-  });
-
-  it('sends KEYS to every master of a cluster', async () => {
-    const masters = [node(['a', 'x']), node(['b', 'x'])];
-    await expect(redisKeys(asClient(cluster(masters)), 'p*')).resolves.toEqual(['a', 'x', 'b']);
   });
 });
 
@@ -195,5 +175,44 @@ describe('borrowRedisClient', () => {
   it('leaves a closing method the client lacks undefined', () => {
     const borrowed = borrowRedisClient({ get() {} }) as { quit?: unknown };
     expect(borrowed.quit).toBeUndefined();
+  });
+});
+
+describe('isRedisConnection', () => {
+  it.each([
+    ['a host', { host: 'cache' }, true],
+    ['a host with provider redis', { provider: 'redis', host: 'cache', port: 6379 }, true],
+    ['a url', { url: 'redis://cache' }, true],
+    ['cluster seed nodes', { cluster: { nodes: ['a:1'] } }, true],
+    ['a client', { client: { get() {} } }, true],
+    ['Vercel KV', { provider: 'vercel-kv', url: 'https://kv' }, false],
+    ['cluster: true alone', { cluster: true }, false],
+    ['empty cluster nodes', { cluster: { nodes: [] } }, false],
+    ['an empty host', { host: '' }, false],
+    ['a client that is a string', { client: 'redis://x' }, false],
+    ['nothing', {}, false],
+    ['null', null, false],
+  ])('%s -> %p', (_label, value, expected) => {
+    expect(isRedisConnection(value)).toBe(expected);
+  });
+});
+
+describe('redisConnectionOf', () => {
+  it('keeps the connection fields only', () => {
+    expect(
+      redisConnectionOf({
+        provider: 'redis',
+        host: 'cache',
+        port: 6379,
+        tls: false,
+        cluster: true,
+        keyPrefix: 'mcp:',
+      } as never),
+    ).toEqual({ host: 'cache', port: 6379, tls: false, cluster: true });
+  });
+
+  it('gives a client alone', () => {
+    const client = { get() {} };
+    expect(redisConnectionOf({ client, keyPrefix: 'x' } as never)).toEqual({ client });
   });
 });
