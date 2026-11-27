@@ -1,7 +1,10 @@
 /**
  * Templates Tests
  */
+import { AUTH_PAGE_CSS } from '../auth-page-styles';
 import {
+  buildConnectPage,
+  buildConnectSuccessPage,
   buildConsentPage,
   buildErrorPage,
   buildFederatedLoginPage,
@@ -1012,4 +1015,36 @@ describe('buildFederatedStepPage', () => {
     expect(html).not.toContain('authorized later');
     expect(html).toContain('Unknown &lt;account&gt;');
   });
+});
+
+describe('built-in pages load nothing from a third party (#1480)', () => {
+  const app: AppAuthCard = { appId: 'notes', appName: 'Notes', requiredScopes: ['notes:read'] };
+  const provider: ProviderCard = { providerId: 'github', providerName: 'GitHub', mode: 'remote', appIds: ['notes'] };
+  const tool: ToolCard = { toolId: 'create-note', toolName: 'create-note', appId: 'notes', appName: 'Notes' };
+  const common = { clientName: 'Claude', pendingAuthId: 'pa', callbackPath: '/oauth/callback', csrfToken: 'c' };
+  const pages: Record<string, string> = {
+    login: buildLoginPage({ ...common, scope: 'read' }),
+    consent: buildConsentPage({ ...common, apps: [app] }),
+    incremental: buildIncrementalAuthPage({ app, toolId: 't', sessionHint: 'pa', callbackPath: '/oauth/callback' }),
+    federated: buildFederatedLoginPage({ ...common, providers: [provider] }),
+    'federated step': buildFederatedStepPage({
+      ...common,
+      provider,
+      step: { index: 0, count: 1, last: true, canGoBack: false, canSkip: true },
+    }),
+    'tool consent': buildToolConsentPage({ ...common, tools: [tool] }),
+    connect: buildConnectPage({ token: 't', field: { name: 'apiKey', type: 'password' }, action: '/oauth/connect' }),
+    'connect success': buildConnectSuccessPage({ key: 'jira' }),
+    error: buildErrorPage({ error: 'invalid_request', description: 'Bad request' }),
+  };
+
+  it.each(Object.entries(pages))(
+    'the %s page inlines its stylesheet and references no external host',
+    (_name, html) => {
+      expect(html).toContain(`<style>${AUTH_PAGE_CSS}</style>`);
+      expect(html).not.toMatch(/<script[^>]+src=|<link|@import/);
+      // The stylesheet's license banner names tailwindcss.com; nothing else names a host.
+      expect(html.replace(/\/\*![^*]*\*\//g, '')).not.toMatch(/https?:\/\//);
+    },
+  );
 });

@@ -115,7 +115,7 @@ export function buildConsentPage(params: {
       Skipped apps can be authorized later when you try to use their tools (progressive authorization).
     </div>`;
 
-  return wideLayout(content, { title: `Authorize ${clientName}` });
+  return wideLayout(content, { title: `Authorize ${clientName}`, inlineStyles: true });
 }
 
 /**
@@ -239,7 +239,7 @@ export function buildIncrementalAuthPage(params: {
       )}.
     </div>`;
 
-  return centeredCardLayout(content, { title: `Authorize ${app.appName}` });
+  return centeredCardLayout(content, { title: `Authorize ${app.appName}`, inlineStyles: true });
 }
 
 /**
@@ -341,7 +341,7 @@ export function buildFederatedLoginPage(params: {
     </form>
     ${skipNote}`;
 
-  return wideLayout(content, { title: 'Select Providers' });
+  return wideLayout(content, { title: 'Select Providers', inlineStyles: true });
 }
 
 /**
@@ -444,7 +444,7 @@ export function buildFederatedStepPage(params: {
     </form>
     ${skipNote}`;
 
-  return wideLayout(content, { title: `Authorize ${provider.providerName}` });
+  return wideLayout(content, { title: `Authorize ${provider.providerName}`, inlineStyles: true });
 }
 
 /**
@@ -683,7 +683,7 @@ export function buildToolConsentPage(params: {
     </form>
     ${updateCountScript}`;
 
-  return extraWideLayout(content, { title: 'Select Tools' });
+  return extraWideLayout(content, { title: 'Select Tools', inlineStyles: true });
 }
 
 /**
@@ -849,7 +849,7 @@ ${fieldsHtml}
       <p class="text-center text-sm text-gray-500 mt-6">Client: ${escapeHtml(clientName)}</p>
     </div>`;
 
-  return centeredCardLayout(content, { title: title ?? 'Sign In' });
+  return centeredCardLayout(content, { title: title ?? 'Sign In', inlineStyles: true });
 }
 
 /**
@@ -907,7 +907,7 @@ ${buildLoginFieldHtml(field)}
       </form>
     </div>`;
 
-  return centeredCardLayout(content, { title: title ?? 'Connect credential' });
+  return centeredCardLayout(content, { title: title ?? 'Connect credential', inlineStyles: true });
 }
 
 /**
@@ -928,7 +928,7 @@ export function buildConnectSuccessPage(params: { key: string; message?: string 
       <h1 class="text-2xl font-bold text-gray-900 mb-4">Credential connected</h1>
       <p class="text-gray-600">${escapeHtml(message ?? `"${key}" is now connected. You can return to your session.`)}</p>
     </div>`;
-  return centeredCardLayout(content, { title: 'Connected' });
+  return centeredCardLayout(content, { title: 'Connected', inlineStyles: true });
 }
 
 /**
@@ -955,7 +955,7 @@ export function buildErrorPage(params: { error: string; description: string }): 
       <p class="text-gray-600">${escapeHtml(description)}</p>
     </div>`;
 
-  return centeredCardLayout(content, { title: 'Error' });
+  return centeredCardLayout(content, { title: 'Error', inlineStyles: true });
 }
 
 // ============================================
