@@ -117,6 +117,14 @@ export function registerSkillsCommands(program: Command): void {
       '-p, --provider <providers>',
       'With --from-entry: claude, codex, or both comma-separated (default: skills.provider from frontmcp.config, else claude)',
     )
+    .option(
+      '--skills-dir <directories>',
+      "With --from-entry: skills folders that get each skill as <dir>/<name>, comma-separated (a plugin's skills/, another agent's); with it, only a --provider given is written too",
+    )
+    .option(
+      '--all-folders',
+      "With --from-entry: copy every folder beside a skill's SKILL.md (rules/, say), not only references, examples, scripts and assets",
+    )
     .option('--check', 'With --from-entry: write nothing, and exit 1 when an exported copy drifted from the source')
     .action(
       async (options: {
@@ -126,6 +134,8 @@ export function registerSkillsCommands(program: Command): void {
         out?: string;
         fromEntry?: string;
         provider?: string;
+        skillsDir?: string;
+        allFolders?: boolean;
         check?: boolean;
       }) => {
         const { loadSkillsDefaults } = await import('./config-defaults.js');
@@ -137,7 +147,13 @@ export function registerSkillsCommands(program: Command): void {
           }
           const validProviders = ['claude', 'codex'] as const;
           type Provider = (typeof validProviders)[number];
-          const providers = (options.provider ?? defaults.provider ?? 'claude').split(',').map((p) => p.trim());
+          const dirs = (options.skillsDir ?? '')
+            .split(',')
+            .map((dir) => dir.trim())
+            .filter(Boolean);
+          const skillsDirs = dirs.length > 0 ? [...new Set(dirs)] : undefined;
+          const provider = options.provider ?? (skillsDirs ? undefined : (defaults.provider ?? 'claude'));
+          const providers = provider ? provider.split(',').map((p) => p.trim()) : [];
           const invalid = providers.filter((p) => !validProviders.includes(p as Provider));
           if (invalid.length > 0) {
             console.error(`Invalid provider "${invalid.join(', ')}". Valid providers: ${validProviders.join(', ')}`);
@@ -147,6 +163,8 @@ export function registerSkillsCommands(program: Command): void {
           await exportSkillsFromEntry({
             entry: options.fromEntry,
             providers: [...new Set(providers)] as Provider[],
+            ...(skillsDirs && { skillsDirs }),
+            ...(options.allFolders && { allFolders: true }),
             name: options.name,
             all: options.all,
             outDir: options.out,
@@ -156,6 +174,10 @@ export function registerSkillsCommands(program: Command): void {
         }
         if (options.provider || options.check) {
           console.error('--provider and --check apply to --from-entry exports.');
+          process.exit(1);
+        }
+        if (options.skillsDir || options.allFolders) {
+          console.error('--skills-dir and --all-folders apply to --from-entry exports.');
           process.exit(1);
         }
         const validTargets = ['cursor', 'windsurf', 'copilot'] as const;
