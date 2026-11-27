@@ -12,9 +12,16 @@
  *   - allowedClientIds        → authorize rejects an unlisted client_id
  *   - pre-registered client   → authorize accepts it WITHOUT a DCR round-trip
  *   - default (no dcr)        → register still works (control)
+ *   - SQLite tokenStorage     → a registered client is known after a restart (#1478)
  */
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { expect, TestServer } from '@frontmcp/testing';
 import { generateCodeVerifier, sha256Base64url } from '@frontmcp/utils';
+
+import { browserFetch } from './browser-fetch';
 
 const SERVER_ENTRY = 'apps/e2e/demo-e2e-local-auth/src/main.dcr.ts';
 
@@ -275,4 +282,103 @@ describe('#462 local-AS DCR — default behavior preserved (no dcr config)', () 
     const meta = await asMetadata(baseUrl);
     expect(meta['registration_endpoint']).toBe(`${baseUrl}/oauth/register`);
   });
+});
+
+describe('#1478 local-AS DCR — registered clients survive a restart on a SQLite tokenStorage', () => {
+  const REDIRECT = 'http://127.0.0.1:9876/callback';
+  let directory: string;
+
+  beforeAll(() => {
+    directory = mkdtempSync(join(tmpdir(), 'frontmcp-dcr-clients-'));
+  });
+
+  afterAll(() => {
+    rmSync(directory, { recursive: true, force: true });
+  });
+
+  function startServer(sqlitePath: string, port?: number): Promise<TestServer> {
+    return TestServer.start({
+      command: `npx tsx ${SERVER_ENTRY}`,
+      project: 'demo-e2e-local-auth',
+      port,
+      startupTimeout: 60000,
+      env: {
+        TOKEN_STORAGE_SQLITE_PATH: sqlitePath,
+        REQUIRE_REGISTERED_CLIENTS: 'true',
+        JWT_SECRET: 'dcr-clients-e2e-jwt-secret-32-bytes-min',
+      },
+      debug: process.env['DEBUG'] === '1',
+    });
+  }
+
+  /** Sign in on the login page and redeem the code with `clientSecret`; returns the token endpoint's status. */
+  async function signIn(baseUrl: string, clientId: string, clientSecret: string): Promise<number> {
+    const verifier = generateCodeVerifier();
+    const url = new URL(`${baseUrl}/oauth/authorize`);
+    url.search = new URLSearchParams({
+      response_type: 'code',
+      client_id: clientId,
+      redirect_uri: REDIRECT,
+      code_challenge: sha256Base64url(verifier),
+      code_challenge_method: 'S256',
+    }).toString();
+    const page = await browserFetch(url.toString(), { redirect: 'manual' });
+    expect(page.status).toBe(200);
+    const pendingAuthId = (await page.text()).match(/name="pending_auth_id"\s+value="([^"]+)"/)?.[1] ?? '';
+    const callback = await browserFetch(`${baseUrl}/oauth/callback?pending_auth_id=${pendingAuthId}`, {
+      redirect: 'manual',
+    });
+    expect([302, 303]).toContain(callback.status);
+    const code = new URL(callback.headers.get('location') ?? baseUrl).searchParams.get('code') ?? '';
+    const token = await browserFetch(`${baseUrl}/oauth/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: REDIRECT,
+        client_id: clientId,
+        client_secret: clientSecret,
+        code_verifier: verifier,
+      }).toString(),
+    });
+    return token.status;
+  }
+
+  it('authorizes a public and a confidential client registered before the restart', async () => {
+    const sqlitePath = join(directory, 'tokens.sqlite');
+    const first = await startServer(sqlitePath);
+    const port = first.info.port;
+    let publicClient: { client_id: string };
+    let confidentialClient: { client_id: string; client_secret: string };
+    try {
+      publicClient = (await (await postRegister(first.info.baseUrl, { redirect_uris: [REDIRECT] })).json()) as {
+        client_id: string;
+      };
+      confidentialClient = (await (
+        await postRegister(first.info.baseUrl, {
+          redirect_uris: [REDIRECT],
+          token_endpoint_auth_method: 'client_secret_post',
+        })
+      ).json()) as { client_id: string; client_secret: string };
+    } finally {
+      await first.stop();
+    }
+
+    const second = await startServer(sqlitePath, port);
+    const baseUrl = second.info.baseUrl;
+    try {
+      const page = await fetch(authorizeUrl(baseUrl, { clientId: publicClient.client_id, redirectUri: REDIRECT }));
+      expect(page.status).toBe(200);
+      expect(await page.text()).toContain('Sign In');
+
+      expect(await signIn(baseUrl, confidentialClient.client_id, 'not-its-secret')).toBe(400);
+      expect(await signIn(baseUrl, confidentialClient.client_id, confidentialClient.client_secret)).toBe(200);
+
+      const unknown = await fetch(authorizeUrl(baseUrl, { clientId: 'never-registered', redirectUri: REDIRECT }));
+      expect(unknown.status).toBe(400);
+    } finally {
+      await second.stop();
+    }
+  }, 180000);
 });
