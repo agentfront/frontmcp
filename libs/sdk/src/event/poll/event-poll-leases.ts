@@ -6,6 +6,7 @@ import {
   type EventUnsubscribeReason,
   type FrontMcpLogger,
 } from '../../common';
+import { heldSubscriptionInfoOf, type EventPollSubscriptionInfo } from '../event-subscription-info';
 
 /** A poll subscription the server keeps alive while its key keeps polling. */
 interface PollLease {
@@ -83,6 +84,17 @@ export class EventPollLeases {
   /** Whether the subscription already has a lease, or is getting one. */
   has(subscriptionId: string): boolean {
     return this.leases.has(subscriptionId) || this.starting.has(subscriptionId);
+  }
+
+  /** The leases this process holds, of every event or of one, with when each lapses unless a poll renews it. */
+  list(eventName?: string): EventPollSubscriptionInfo[] {
+    const listed: EventPollSubscriptionInfo[] = [];
+    for (const lease of this.leases.values()) {
+      if (eventName !== undefined && lease.subscription.name !== eventName) continue;
+      const held = heldSubscriptionInfoOf(lease.subscription, lease.principalKey, lease.arguments);
+      listed.push({ ...held, mode: 'poll', expiresAt: lease.expiresAt });
+    }
+    return listed;
   }
 
   /** Renew the lease of a poll, or start it: a new lease calls the event's `onSubscribe` first. */

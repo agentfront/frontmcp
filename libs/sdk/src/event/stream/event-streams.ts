@@ -2,6 +2,7 @@ import { EventOccurrenceSchema, type EventOccurrence } from '@frontmcp/protocol'
 import { randomUUID, type NamespacedStorage } from '@frontmcp/utils';
 
 import { type EventAudience, type FrontMcpLogger } from '../../common';
+import { heldSubscriptionInfoOf, type EventStreamSubscriptionInfo } from '../event-subscription-info';
 import { type BufferedEvent, type EventBuffer } from '../poll/event-buffer';
 import { type EventStream } from './event-stream';
 
@@ -51,6 +52,19 @@ export class EventStreams {
   /** How many streams are open or opening. */
   get size(): number {
     return this.held.size;
+  }
+
+  /** The streams this process holds open or is opening, of every event or of one. */
+  list(eventName?: string): EventStreamSubscriptionInfo[] {
+    const listed: EventStreamSubscriptionInfo[] = [];
+    for (const stream of this.held) {
+      if (stream.isClosed || (eventName !== undefined && stream.eventName !== eventName)) continue;
+      listed.push({
+        ...heldSubscriptionInfoOf(stream.subscription, stream.principalKey, stream.arguments),
+        mode: 'push',
+      });
+    }
+    return listed;
   }
 
   /** Listen for the occurrences other processes publish, when the storage can carry them. */

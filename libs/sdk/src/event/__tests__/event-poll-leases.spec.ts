@@ -62,6 +62,39 @@ describe('EventPollLeases', () => {
     jest.mocked(getRuntimeContext).mockImplementation(jest.requireActual('@frontmcp/utils').getRuntimeContext);
   });
 
+  it('lists the leases it holds, of every event or one, and forgets a lease once it lapses', async () => {
+    const { leases, request } = harness();
+    const shipped = { ...subscriptionRef('sub_2'), name: 'order.shipped' };
+    await leases.renew(request('sub_1'));
+    await leases.renew(request('sub_2', { subscription: shipped, principalKey: undefined, leaseMs: 2 * LEASE_MS }));
+
+    expect(leases.list()).toEqual([
+      {
+        id: 'sub_1',
+        eventName: 'order.created',
+        mode: 'poll',
+        principalKey: 'principal:ada',
+        subscriber: { sub: 'ada' },
+        arguments: { status: 'paid' },
+        expiresAt: NOW + LEASE_MS,
+      },
+      {
+        id: 'sub_2',
+        eventName: 'order.shipped',
+        mode: 'poll',
+        principalKey: undefined,
+        subscriber: { sub: 'ada' },
+        arguments: { status: 'paid' },
+        expiresAt: NOW + 2 * LEASE_MS,
+      },
+    ]);
+    expect(leases.list('order.shipped').map((lease) => lease.id)).toEqual(['sub_2']);
+
+    await leases.sweep(NOW + LEASE_MS);
+
+    expect(leases.list().map((lease) => lease.id)).toEqual(['sub_2']);
+  });
+
   it('calls onSubscribe at the first poll of a subscription, and not at the next ones', async () => {
     const { leases, onSubscribe, request } = harness();
 

@@ -400,7 +400,19 @@ export type {
 } from './channel';
 
 // Event exports - MCP Events (SEP-3415): event types clients list and subscribe to
-export { EventInstance, EventRegistry } from './subsystems';
+export {
+  EventInstance,
+  EventRegistry,
+  // The limits of subscriptions: how long a poll lease lasts, how often lapsed ones are swept, how many are held
+  MAX_OPEN_STREAMS,
+  MAX_POLL_LEASES,
+  POLL_LEASE_INTERVALS,
+  POLL_LEASE_MIN_MS,
+  POLL_LEASE_SWEEP_INTERVAL_MS,
+  SUBSCRIPTION_SWEEP_INTERVAL_MS,
+  SUSPEND_AFTER_FAILURES,
+  pollLeaseMs,
+} from './subsystems';
 export type {
   EventCapabilities,
   EventRegistryInterface,
@@ -430,6 +442,13 @@ export type {
   EventReplays,
   EventReplayState,
   EventTerminationError,
+  EventPollSubscriptionInfo,
+  EventStreamSubscriptionInfo,
+  EventSubscriberSummary,
+  EventSubscriptionInfo,
+  EventSubscriptionInfoBase,
+  EventWebhookSubscriptionDelivery,
+  EventWebhookSubscriptionInfo,
 } from './event';
 export { EVENTS_EXTENSION_ID } from '@frontmcp/protocol';
 export type { EventDefinition, EventDeliveryMode, EventOccurrence } from '@frontmcp/protocol';
