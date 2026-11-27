@@ -381,8 +381,12 @@ export class DcrClientRegistry {
    * client was effectively public. This restores confidential-client
    * authentication with a timing-safe comparison.
    */
-  verifyClientSecret(clientId: string, presentedSecret: string | undefined): 'unknown' | 'ok' | 'invalid' {
-    const client = this.get(clientId);
+  verifyClientSecret(
+    clientId: string,
+    presentedSecret: string | undefined,
+    // The registration a caller already read with {@link load}: a load for another client can drop it from memory.
+    client: RegisteredClient | undefined = this.get(clientId),
+  ): 'unknown' | 'ok' | 'invalid' {
     if (!client) return 'unknown';
     const method = client.token_endpoint_auth_method;
     const isConfidential = method === 'client_secret_basic' || method === 'client_secret_post';
