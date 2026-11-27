@@ -96,10 +96,6 @@ class PatternParser {
     return true;
   }
 
-  private fold(test: CharTest): CharTest {
-    return this.ignoreCase ? (char) => test(char) || test(char.toLowerCase()) || test(char.toUpperCase()) : test;
-  }
-
   /** One character, which with `ignoreCase` is any character RegExp folds to the same one. */
   private literal(char: string): CharTest {
     if (!this.ignoreCase) return (next) => next === char;
@@ -212,13 +208,26 @@ class PatternParser {
         this.at++;
         const high = this.classMember();
         if (typeof high !== 'string' || high < low) refuse(this.source, 'a range out of order');
-        tests.push((char) => char >= low && char <= high);
+        tests.push(this.range(low, high));
       } else {
+        // A literal folds as RegExp does once, so it is not folded again; \d \w \s hold no character case changes.
         tests.push(typeof low === 'string' ? this.literal(low) : low);
       }
     }
-    const matches = this.fold((char) => tests.some((test) => test(char)));
+    const matches: CharTest = (char) => tests.some((test) => test(char));
     return { kind: 'char', test: negated ? (char) => !matches(char) : matches };
+  }
+
+  /** The characters from `low` to `high`; with `ignoreCase`, any character RegExp folds to the same one as one of them. */
+  private range(low: string, high: string): CharTest {
+    const within: CharTest = (char) => char >= low && char <= high;
+    if (!this.ignoreCase) return within;
+    return (char) => {
+      const folded = canonicalize(char);
+      return [char, folded, folded.toLowerCase(), char.toLowerCase()].some(
+        (member) => member.length === 1 && within(member) && canonicalize(member) === folded,
+      );
+    };
   }
 
   private classMember(): string | CharTest {
