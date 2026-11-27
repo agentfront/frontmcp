@@ -22,6 +22,7 @@ import type {
   ProtocolPreset,
   SessionModeOption,
   TransportOptionsInterface,
+  TransportSseOptions,
 } from './interfaces';
 
 // Re-export transport-specific types (not duplicated from session.options.ts)
@@ -319,6 +320,14 @@ export const transportOptionsSchema = z.object({
   // ============================================
 
   eventStore: eventStoreConfigSchema.optional(),
+
+  sse: z
+    .object({
+      heartbeatMs: z
+        .union([z.number().int().nonnegative('transport.sse.heartbeatMs must be 0 or more'), z.literal(false)])
+        .optional(),
+    } satisfies RawZodShape<TransportSseOptions>)
+    .optional(),
 } satisfies RawZodShape<TransportOptionsInterface>);
 
 // ============================================

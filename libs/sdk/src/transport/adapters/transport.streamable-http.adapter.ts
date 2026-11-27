@@ -6,6 +6,7 @@ import { type ElicitOptions, type ElicitResult } from '../../elicitation';
 import { ElicitationTimeoutError, InternalMcpError } from '../../errors';
 import { type AuthenticatedServerRequest } from '../../server/server.types';
 import { createSessionScopedEventStore } from '../event-stores/session-scoped.event-store';
+import { streamHeartbeatMs } from '../stream-keep-alive';
 import { rpcRequest } from '../transport.error';
 import { STATELESS_SESSION_ID, type TransportType } from '../transport.types';
 import type { RecreateableStreamableHTTPServerTransport } from './streamable-http-transport';
@@ -74,6 +75,7 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Recrea
       // The priming event has empty data with no `event:` type, which violates MCP spec
       // ("Event types MUST be message") and confuses some clients
       eventStore,
+      keepAliveMs: streamHeartbeatMs(this.scope.metadata.transport),
     });
   }
 

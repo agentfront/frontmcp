@@ -8,11 +8,11 @@ jest.mock('../sse-transport', () => ({
   RecreateableSSEServerTransport: jest.fn().mockImplementation(() => ({})),
 }));
 
-function makeAdapter(): TransportSSEAdapter {
+function makeAdapter(metadata: Record<string, unknown> = {}): TransportSSEAdapter {
   const adapter = Object.create(TransportSSEAdapter.prototype) as TransportSSEAdapter;
   Object.assign(adapter, {
     logger: { info: jest.fn(), verbose: jest.fn() },
-    scope: { fullPath: '/mcp' },
+    scope: { fullPath: '/mcp', metadata },
   });
   return adapter;
 }
@@ -32,10 +32,24 @@ describe('TransportSSEAdapter loads its transport class on demand', () => {
 
     expect(RecreateableSSEServerTransport).toHaveBeenNthCalledWith(1, '/mcp/message', response, {
       sessionId: 'session-1',
+      heartbeatMs: 15_000,
     });
     expect(RecreateableSSEServerTransport).toHaveBeenNthCalledWith(2, '/mcp/message', response, {
       sessionId: 'session-2',
       initialEventId: 41,
+      heartbeatMs: 15_000,
+    });
+  });
+
+  it('gives the stream the keep-alive interval of transport.sse.heartbeatMs', async () => {
+    await loadSseTransport();
+    const response = {} as never;
+
+    makeAdapter({ transport: { sse: { heartbeatMs: false } } }).createTransport('session-3', response);
+
+    expect(RecreateableSSEServerTransport).toHaveBeenLastCalledWith('/mcp/message', response, {
+      sessionId: 'session-3',
+      heartbeatMs: 0,
     });
   });
 });
