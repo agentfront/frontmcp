@@ -334,6 +334,18 @@
                         "additionalItems": false,
                         "minItems": 2,
                         "maxItems": 2
+                      },
+                      "nativeSignIn": {
+                        "description": "Sign in with @frontmcp/auth/native's signInNative: endpoints from the issuer's metadata, resource, and refresh of expired tokens.",
+                        "type": "boolean"
+                      },
+                      "issuer": {
+                        "description": "With nativeSignIn, the authorization server to sign in at. Defaults to the server URL.",
+                        "type": "string"
+                      },
+                      "resource": {
+                        "description": "With nativeSignIn, the resource (RFC 8707) the token is for.",
+                        "type": "string"
                       }
                     },
                     "additionalProperties": false

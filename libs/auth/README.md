@@ -93,6 +93,24 @@ import { DeskApp } from './desk.app';
 export default class Server {}
 ```
 
+### Signing a CLI or desktop app in
+
+`@frontmcp/auth/native` is the client's half: `signInNative` signs the user in at an authorization server (RFC 8252). It finds the endpoints in the issuer's RFC 8414 or OpenID metadata, opens the browser with S256 PKCE and a loopback redirect on a free port (`http://127.0.0.1:<port>/callback`), sends `resource` (RFC 8707), and keeps the tokens in a store. `getNativeTokens` returns them, refreshed when they are about to expire.
+
+```ts
+import { fileTokenStore, getNativeTokens, signInNative } from '@frontmcp/auth/native';
+
+const options = {
+  issuer: 'https://auth.example.com',
+  clientId: 'desk-cli',
+  scopes: ['openid', 'desk:read'],
+  resource: 'https://desk.example.com/mcp',
+  store: fileTokenStore(`${process.env.HOME}/.desk-cli/tokens.json`), // default: in memory
+};
+
+const tokens = (await getNativeTokens(options)) ?? (await signInNative(options));
+```
+
 ## What's in it
 
 - **Auth modes**: `authOptionsSchema` and the option types of each mode. See [Auth modes](https://frontmcp.dev/reference/auth/modes).
@@ -104,6 +122,7 @@ export default class Server {}
 - **Authorities**: rules on tools, resources, prompts, skills and agents, from roles, permissions, token claims, the call's arguments or your own code (`AuthorityDeniedError`). See [Authorities](https://frontmcp.dev/reference/auth/authorities).
 - **Credential vault**: per-user credentials that tools read with `this.credentials`, and that users can add to mid-session. See [Progressive auth](https://frontmcp.dev/reference/auth/progressive).
 - **Sign-in pages**: the built-in sign-in, consent and error pages, and `escapeHtml`, `buildLoginPage` and `baseLayout` for your own. See [Custom login UI](https://frontmcp.dev/reference/auth/login-ui).
+- **Native sign-in** (`@frontmcp/auth/native`): `signInNative`, `getNativeTokens` and `signOutNative` for a CLI or desktop client, with `memoryTokenStore`, `fileTokenStore` or your own `NativeTokenStore`.
 - **Storage**: memory, Redis, Vercel KV and SQLite stores for sessions, authorization codes and tokens, and encrypted storage for secrets (`EncryptedTypedStorage`, `TokenVault`). See [Local auth storage](https://frontmcp.dev/reference/auth/local#storage).
 
 ## Docs

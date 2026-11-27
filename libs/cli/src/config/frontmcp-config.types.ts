@@ -168,6 +168,16 @@ export interface CliTargetConfig {
     clientId?: string;
     defaultScope?: string;
     portRange?: [number, number];
+    /**
+     * Sign in with `signInNative` from `@frontmcp/auth/native`: the endpoints come from the issuer's metadata, the
+     * token names `resource`, and an expired token is refreshed. Off, `login` posts to `<serverUrl>/oauth/authorize`
+     * and `/oauth/token`. @default false
+     */
+    nativeSignIn?: boolean;
+    /** With `nativeSignIn`, the authorization server to sign in at. @default the server URL */
+    issuer?: string;
+    /** With `nativeSignIn`, the resource (RFC 8707) the token is for. */
+    resource?: string;
   };
 }
 
