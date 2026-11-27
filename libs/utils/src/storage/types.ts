@@ -5,6 +5,8 @@
  * Supports Memory (dev), Redis (prod), Vercel KV (edge), and Upstash (edge + pub/sub).
  */
 
+import type { RedisClusterConfig, RedisClusterNode, RedisClusterOption } from './redis-client/types';
+
 // ============================================
 // Core Types
 // ============================================
@@ -453,7 +455,20 @@ export interface RedisHostConnectionConfig {
   password?: string;
   db?: number;
   tls?: boolean;
+  /**
+   * The host (or url) is a Redis Cluster endpoint, such as an AWS ElastiCache configuration
+   * endpoint: `true`, or `{ nodes, options }` to name the seed nodes or tune the ioredis Cluster.
+   */
+  cluster?: RedisClusterOption;
   /** Unset for a host config (a config built from optional settings may carry `url: undefined`). */
+  url?: undefined;
+}
+
+/**
+ * A Redis Cluster reached through the seed nodes it names: no `host` needed.
+ */
+export interface RedisClusterConnectionConfig extends Partial<Omit<RedisHostConnectionConfig, 'url' | 'cluster'>> {
+  cluster: RedisClusterConfig & { nodes: RedisClusterNode[] };
   url?: undefined;
 }
 
@@ -477,10 +492,11 @@ export interface RedisUrlFillInConfig extends Partial<Omit<RedisHostConnectionCo
  */
 export interface RedisAdapterOptions {
   /**
-   * Use an existing Redis client (we won't close it).
+   * Use an existing Redis client (we won't close it): an ioredis `Redis` or `Cluster`, a node-redis
+   * client or cluster (`createClient()` / `createCluster()`), or a `FrontMcpRedisClient`.
    * Mutually exclusive with `config` and `url`.
    */
-  client?: unknown; // Redis type from ioredis
+  client?: unknown; // a RedisClientInput
 
   /**
    * Redis connection configuration — `host`, or a `url` like the top-level
@@ -488,7 +504,7 @@ export interface RedisAdapterOptions {
    * leaves out; a contradicting field is rejected.
    * Mutually exclusive with `client`.
    */
-  config?: RedisHostConnectionConfig | RedisUrlConnectionConfig | RedisUrlFillInConfig;
+  config?: RedisHostConnectionConfig | RedisUrlConnectionConfig | RedisUrlFillInConfig | RedisClusterConnectionConfig;
 
   /**
    * Redis connection URI.
