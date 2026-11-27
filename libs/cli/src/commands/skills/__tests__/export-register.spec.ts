@@ -70,6 +70,49 @@ describe('frontmcp skills export --from-entry options', () => {
     expect(mockExportFromEntry).toHaveBeenLastCalledWith(expect.objectContaining({ providers: ['codex'] }));
   });
 
+  it('exports to --skills-dir folders alone, even with skills.provider in frontmcp.config, or beside --provider', async () => {
+    await writeFile(
+      path.join(dir, 'frontmcp.config.json'),
+      JSON.stringify({ name: 'demo', deployments: [{ target: 'node' }], skills: { provider: 'codex' } }),
+    );
+
+    await run(
+      '--from-entry',
+      'src/main.ts',
+      '--all',
+      '--skills-dir',
+      'plugins/lens/skills, .github/skills,plugins/lens/skills',
+    );
+    expect(mockExportFromEntry).toHaveBeenLastCalledWith(
+      expect.objectContaining({ providers: [], skillsDirs: ['plugins/lens/skills', '.github/skills'] }),
+    );
+
+    await run('--from-entry', 'src/main.ts', '--all', '--skills-dir', 'skills', '-p', 'claude', '--all-folders');
+    expect(mockExportFromEntry).toHaveBeenLastCalledWith(
+      expect.objectContaining({ providers: ['claude'], skillsDirs: ['skills'], allFolders: true }),
+    );
+  });
+
+  it('passes no skills folder and no --all-folders unless asked', async () => {
+    await run('--from-entry', 'src/main.ts', '--all');
+
+    const [options] = mockExportFromEntry.mock.calls[0] as [Record<string, unknown>];
+    expect(Object.keys(options)).not.toContain('skillsDirs');
+    expect(Object.keys(options)).not.toContain('allFolders');
+  });
+
+  it('refuses --skills-dir and --all-folders without --from-entry', async () => {
+    await expect(run('--all', '--skills-dir', 'skills')).rejects.toThrow('process.exit(1)');
+    await expect(run('--all', '--all-folders')).rejects.toThrow('process.exit(1)');
+
+    const errors = (console.error as jest.Mock).mock.calls.map((call) => String(call[0]));
+    expect(errors).toEqual([
+      '--skills-dir and --all-folders apply to --from-entry exports.',
+      '--skills-dir and --all-folders apply to --from-entry exports.',
+    ]);
+    expect(mockExportSkills).not.toHaveBeenCalled();
+  });
+
   it('refuses --target with --from-entry, an unknown provider, and --provider or --check without it', async () => {
     await expect(run('--from-entry', 'src/main.ts', '--target', 'cursor')).rejects.toThrow('process.exit(1)');
     await expect(run('--from-entry', 'src/main.ts', '--provider', 'vim')).rejects.toThrow('process.exit(1)');
