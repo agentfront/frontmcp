@@ -62,6 +62,8 @@ are kept in memory: once the cap is reached, further DCR registrations are **rej
 clients — including confidential ones — are preserved. Pre-registered `dcr.clients` never
 count toward it, and `0` disables dynamic registration entirely. This bounds memory growth
 from unauthenticated DCR (pair it with `initialAccessToken` for authenticated admission).
+With a Redis or SQLite `tokenStorage`, registered clients are kept there too, so a restart
+or another instance knows them; the cap counts the clients each process registered.
 
 ## What This Demonstrates
 

@@ -583,6 +583,9 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       return;
     }
 
+    // A client registered before a restart or on another instance is read from the token storage (#1478)
+    if (!isCimdClientId) await registry?.load?.(client_id);
+
     // A CIMD client id on a server with CIMD off has no metadata document to validate it, and no
     // registration either: refuse it (CimdDisabledError) rather than treat the URL as a plain id.
     if (cimdService && !cimdService.enabled && cimdService.isCimdClientId(client_id) && !registry?.get?.(client_id)) {

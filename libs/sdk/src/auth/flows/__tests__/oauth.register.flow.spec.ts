@@ -7,10 +7,12 @@
  * - `dcr.initialAccessToken` → 401 without/with-wrong bearer, 201 with the right one
  * - `dcr.allowedRedirectUris` → 400 invalid_redirect_uri when unlisted
  * - registering writes the client into the per-instance DcrClientRegistry
+ * - and into its token storage, and hands the accepted registration to hooks (#1478)
  */
 import 'reflect-metadata';
 
 import { DcrClientRegistry, type DcrRegistryConfig } from '@frontmcp/auth';
+import { MemoryStorageAdapter } from '@frontmcp/utils';
 
 import { createMockHttpRequest, createMockScopeEntry, runFlowStages } from '../../../__test-utils__';
 import { httpInputSchema, HttpJsonSchema, type FlowMetadata } from '../../../common';
@@ -277,6 +279,61 @@ describe('OAuth Register Flow (#462 DCR)', () => {
       const { output } = await runFlowStages(flow, STAGES);
       expect(output.status).toBe(400);
       expect(output.body.error).toBe('access_denied');
+    });
+  });
+
+  describe('the accepted registration (#1478)', () => {
+    function registerFlow(scope: ReturnType<typeof createDcrScope>['scope'], body: Record<string, unknown>) {
+      return new OauthRegisterFlow(createRegisterMetadata(), registerInput(body), scope, jest.fn(), new Map());
+    }
+
+    it('is in state.registered for the hooks after registerClient, secret included', async () => {
+      const { scope } = createDcrScope();
+      const flow = registerFlow(scope, {
+        redirect_uris: ['http://localhost:8080/cb'],
+        token_endpoint_auth_method: 'client_secret_post',
+      });
+
+      const { output, state } = await runFlowStages(flow, STAGES);
+      expect(state['registered']).toEqual(
+        expect.objectContaining({
+          client_id: output.body.client_id,
+          client_secret: output.body.client_secret,
+          redirect_uris: ['http://localhost:8080/cb'],
+          dev: true,
+        }),
+      );
+    });
+
+    it('is kept in the token storage, where the next registry on it finds it', async () => {
+      const { scope, registry } = createDcrScope();
+      const storage = new MemoryStorageAdapter();
+      await storage.connect();
+      registry.useStore(storage);
+
+      const { output } = await runFlowStages(
+        registerFlow(scope, { redirect_uris: ['http://localhost:8080/cb'] }),
+        STAGES,
+      );
+
+      const restarted = new DcrClientRegistry();
+      restarted.useStore(storage);
+      expect((await restarted.load(output.body.client_id))?.redirect_uris).toEqual(['http://localhost:8080/cb']);
+    });
+
+    it('is neither in the state nor stored when the dynamic-client cap refuses it', async () => {
+      const { scope, registry } = createDcrScope({ maxDynamicClients: 0 });
+      const storage = new MemoryStorageAdapter();
+      await storage.connect();
+      registry.useStore(storage);
+
+      const { output, state } = await runFlowStages(
+        registerFlow(scope, { redirect_uris: ['http://localhost:8080/cb'] }),
+        STAGES,
+      );
+      expect(output.status).toBe(503);
+      expect(state['registered']).toBeUndefined();
+      expect(await storage.keys()).toEqual([]);
     });
   });
 });
