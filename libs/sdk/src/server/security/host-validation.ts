@@ -75,6 +75,13 @@ export function normalizeOrigin(value: string): string {
   }
 }
 
+/** Names an opaque `Origin: null` and its usual cause, which the bare message gives no hint of. */
+function invalidOriginMessage(origin: string): string {
+  return origin.trim() === 'null'
+    ? 'Invalid Origin header: null (a form posted from a page served with Referrer-Policy: no-referrer, or from a sandboxed page, sends Origin: null)'
+    : 'Invalid Origin header';
+}
+
 /** Precompiled rules — build once per server, not per request. */
 export interface CompiledHostValidation {
   hosts?: Set<string>;
@@ -132,7 +139,7 @@ export function validateHostHeaders(
   if (compiled.origins) {
     const origin = headers.origin;
     if (origin && !compiled.origins.has(normalizeOrigin(origin))) {
-      return { status: 403, error: 'Forbidden', message: 'Invalid Origin header' };
+      return { status: 403, error: 'Forbidden', message: invalidOriginMessage(origin) };
     }
   }
 
