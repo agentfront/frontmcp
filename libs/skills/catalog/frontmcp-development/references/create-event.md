@@ -405,8 +405,10 @@ Both requests run hookable flows. `events:subscribe` (`EventSubscribeHook`) has 
 `verifyCallback`, `grantTtl`, `upsertSubscription`, `notifySubscribed`, `startReplay` (for an event with `check()`,
 see [Events with `check()` over webhook](#events-with-check-over-webhook)), `buildResult` and `finalize`.
 `events:unsubscribe` (`EventUnsubscribeHook`) has `parseInput`, `resolveDialect`, `requireSubscriber`,
-`removeSubscription`, `buildResult` and `finalize`. `finalize` runs after a success or a failure: attach a
-`Finally` hook there for work that must see refused requests too.
+`removeSubscription`, `buildResult` and `finalize`. From `removeSubscription` on, its state has `subscriptionId`, the
+id the request names, and `removed`, the subscription it removed as it was stored, or `undefined` when none matched
+(the request succeeds either way). The subscribe flow's state has the stored subscription in `record`. `finalize` runs
+after a success or a failure: attach a `Finally` hook there for work that must see refused requests too.
 
 ```typescript
 import { EventSubscribeHook, Plugin, PublicMcpError, type FlowCtxOf } from '@frontmcp/sdk';
