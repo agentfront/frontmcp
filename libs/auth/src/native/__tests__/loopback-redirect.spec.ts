@@ -4,7 +4,7 @@
  */
 import { EventEmitter } from 'node:events';
 
-import { listenForRedirect, type LoopbackRedirectOptions } from '../loopback-redirect';
+import { listenForRedirect, type LoopbackRedirect, type LoopbackRedirectOptions } from '../loopback-redirect';
 import { NativeSignInError } from '../native-sign-in.error';
 
 /** Binds like a Node server: `listen` registers its callback on `listening`, and a busy port emits `error`. */
@@ -61,14 +61,26 @@ const OPTIONS: LoopbackRedirectOptions = {
 };
 
 describe('listenForRedirect', () => {
+  // Every listener a test opens is closed after it, even one whose assertion failed, so no callback timer outlives it.
+  const opened: LoopbackRedirect[] = [];
+  const listening = async (options: LoopbackRedirectOptions): Promise<LoopbackRedirect> => {
+    const redirect = await listenForRedirect(options);
+    opened.push(redirect);
+    return redirect;
+  };
+
+  afterEach(() => {
+    for (const redirect of opened.splice(0)) redirect.close();
+    jest.restoreAllMocks();
+  });
+
   it('takes the first free port of a range', async () => {
     mockServer = new StandInServer((port) => port === 40_000);
 
-    const redirect = await listenForRedirect({ ...OPTIONS, port: [40_000, 40_001], path: '/cb' });
+    const redirect = await listening({ ...OPTIONS, port: [40_000, 40_001], path: '/cb' });
 
     expect(redirect.redirectUri).toBe('http://127.0.0.1:40001/cb');
     expect(mockServer.attempts).toEqual([40_000, 40_001]);
-    redirect.close();
   });
 
   it.each([
@@ -79,12 +91,16 @@ describe('listenForRedirect', () => {
     ['a range that ends before it starts', [3001, 3000] as const],
     ['a range with a fractional end', [3000, 3000.5] as const],
     ['a range that holds port 0', [0, 10] as const],
+    ['a list of three ports', [3000, 3001, 3002] as unknown as readonly [number, number]],
+    ['a list of one port', [3000] as unknown as readonly [number, number]],
+    ['an object', {} as unknown as number],
+    ['a port as a string', '3000' as unknown as number],
   ])(
     'refuses %s before it binds',
     async (_case, port) => {
       mockServer = new StandInServer(() => false);
 
-      const error = await listenForRedirect({ ...OPTIONS, port }).then(
+      const error = await listening({ ...OPTIONS, port }).then(
         () => undefined,
         (reason: unknown) => reason,
       );
@@ -109,12 +125,11 @@ describe('listenForRedirect', () => {
     expect(mockServer.listenerCount('listening')).toBe(0);
     expect(mockServer.listenerCount('error')).toBe(0);
     expect(warnings).not.toHaveBeenCalled();
-    warnings.mockRestore();
   });
 
   it('answers 400 to a request whose target is not a URL, and still takes the callback', async () => {
     mockServer = new StandInServer(() => false);
-    const redirect = await listenForRedirect(OPTIONS);
+    const redirect = await listening(OPTIONS);
     const respond = (url: string) => {
       const res = { status: 0, writeHead: jest.fn(), end: jest.fn((_body?: string, done?: () => void) => done?.()) };
       res.writeHead.mockImplementation((status: number) => ((res.status = status), res));
@@ -130,9 +145,8 @@ describe('listenForRedirect', () => {
   it('takes any free port by default', async () => {
     mockServer = new StandInServer(() => false);
 
-    const redirect = await listenForRedirect(OPTIONS);
+    const redirect = await listening(OPTIONS);
 
     expect(redirect.redirectUri).toBe('http://127.0.0.1:49152/callback');
-    redirect.close();
   });
 });

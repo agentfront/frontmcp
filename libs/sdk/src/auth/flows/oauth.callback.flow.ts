@@ -498,7 +498,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
           httpRespond.html(
             this.renderLoginRetryPage(pendingAuth, localOptions.login, loginFields ?? {}, result),
             200,
-            builtInAuthPageHeaders({ csp: !localOptions.login?.render }),
+            builtInAuthPageHeaders({ csp: localOptions.login?.render ? false : 'inline' }),
           ),
         );
         return;
@@ -1657,7 +1657,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
 
   /** An HTML response with the built-in auth pages' security headers (#263). */
   private htmlPage(markup: string, status = 200): ReturnType<typeof httpRespond.html> {
-    return httpRespond.html(markup, status, builtInAuthPageHeaders());
+    return httpRespond.html(markup, status, builtInAuthPageHeaders({ csp: 'inline' }));
   }
 
   /**

@@ -224,6 +224,7 @@ function testStore() {
   let gets = 0;
   let stalled: { at: number; until: Promise<void> } | undefined;
   let failSets = 0;
+  let failDeletes = 0;
   const store: NativeTokenStore = {
     async get(key) {
       const snapshot = entries.get(key);
@@ -238,6 +239,10 @@ function testStore() {
       entries.set(key, tokens);
     },
     async delete(key) {
+      if (failDeletes > 0) {
+        failDeletes--;
+        throw new Error('store down');
+      }
       entries.delete(key);
     },
   };
@@ -250,6 +255,7 @@ function testStore() {
       return release.resolve;
     },
     failNextSet: () => void failSets++,
+    failNextDelete: () => void failDeletes++,
   };
 }
 
@@ -340,6 +346,27 @@ describe('getNativeTokens, signInNative and signOutNative on one store and key',
     expect(next).toMatchObject({ accessToken: 'access-1', refreshToken: 'refresh-1' });
     expect(kept.entries.get(KEY)).toEqual(next);
     expect(idp.refreshRequests()).toHaveLength(1);
+  });
+
+  it.each([
+    ['a sign-in', 'set'],
+    ['a sign-out', 'delete'],
+  ])('keeps refreshed tokens the store could not save when %s cannot write either', async (_operation, write) => {
+    kept.entries.set(KEY, expiring());
+    kept.failNextSet();
+    await expect(getNativeTokens(options)).rejects.toThrow('store down');
+
+    if (write === 'set') {
+      kept.failNextSet();
+      await expect(signInNative({ ...options, openBrowser: () => undefined })).rejects.toThrow('store down');
+    } else {
+      kept.failNextDelete();
+      await expect(signOutNative(options)).rejects.toThrow('store down');
+    }
+
+    // The store holds the refresh token the server spent; the refreshed tokens are still the ones to keep.
+    expect(await getNativeTokens(options)).toMatchObject({ accessToken: 'access-1', refreshToken: 'refresh-1' });
+    expect(kept.entries.get(KEY)).toMatchObject({ refreshToken: 'refresh-1' });
   });
 
   it('drops refreshed tokens the store could not save once the caller signs out', async () => {

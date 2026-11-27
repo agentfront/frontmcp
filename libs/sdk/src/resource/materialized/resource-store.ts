@@ -615,13 +615,15 @@ class KeyFamily<T, Key extends ResourceKey<T>> implements ResourceKeyFamily<T, K
       member = { key, handle: this.handleOf ? this.handleOf(memberKey, { ...params }) : key };
     }
     this.members.set(memberKey, member);
-    this.forgetIdleKeys();
+    this.forgetIdleKeys(memberKey);
     return member;
   }
 
-  private forgetIdleKeys(): void {
+  /** Forgets the oldest idle keys past the limit, never `returning`: its caller is about to use it, idle as it is. */
+  private forgetIdleKeys(returning: string): void {
     for (const [memberKey, { key }] of this.members) {
       if (this.members.size <= FAMILY_KEYS_KEPT) return;
+      if (memberKey === returning) continue;
       if (!(key instanceof ProducedKey) || key.idle) this.members.delete(memberKey);
     }
   }

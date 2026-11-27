@@ -1,8 +1,16 @@
+// A sync write is the only kind that runs in an 'exit' listener, and @frontmcp/utils has none.
+import { writeFileSync } from 'node:fs';
+
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 
 import { ParentApp } from './apps/parent';
 
 const port = parseInt(process.env['PORT'] ?? '3114', 10);
+
+// The code the process exits with, for the e2e to tell a graceful shutdown (0) from a failed one; a killed process
+// writes nothing.
+const exitCodeFile = process.env['USER_CONTENT_EXIT_CODE_FILE'];
+if (exitCodeFile) process.once('exit', (code) => writeFileSync(exitCodeFile, String(code)));
 
 /**
  * E2E fixture for the user-content listener (#1364): MCP on `PORT`, static files from `USER_CONTENT_ROOT` on

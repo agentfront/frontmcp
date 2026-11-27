@@ -34,11 +34,13 @@ export function findUndeclaredArguments(
 export function declaredKeysAt(shape: Readonly<Record<string, unknown>>, parentPath: ArgumentKeyPath): string[] {
   let level: SchemaDefinition[] = [{ type: 'object', shape }];
   for (const segment of parentPath) {
-    level = level.flatMap((definition) => {
+    const next = level.flatMap((definition) => {
       if (segment === '[]') return definition['type'] === 'array' ? definitionsOf(definition['element']) : [];
       const fields = definition['type'] === 'object' ? (definition['shape'] as Record<string, unknown>) : {};
       return Object.prototype.hasOwnProperty.call(fields, segment) ? definitionsOf(fields[segment]) : [];
     });
+    // Each definition once: two options whose field holds the same schema would otherwise double it at each segment.
+    level = [...new Set(next)];
   }
   const keys = level.flatMap((definition) =>
     definition['type'] === 'object' ? Object.keys(definition['shape'] as Record<string, unknown>) : [],
@@ -57,7 +59,11 @@ function definitionsOf(schema: unknown, seen = new Set<object>()): SchemaDefinit
   seen.add(definition);
   const type = definition['type'];
   if (typeof type === 'string' && WRAPPER_TYPES.has(type)) return definitionsOf(definition['innerType'], seen);
-  if (type === 'lazy') return definitionsOf((definition['getter'] as () => unknown)(), seen);
+  if (type === 'lazy') {
+    // The schema zod keeps for it, so each time it is expanded it gives the same definitions to deduplicate.
+    const inner = (schema as { _zod: { innerType?: unknown } })._zod.innerType;
+    return definitionsOf(inner ?? (definition['getter'] as () => unknown)(), seen);
+  }
   if (type === 'union') return (definition['options'] as unknown[]).flatMap((option) => definitionsOf(option, seen));
   if (type === 'intersection') {
     return [definition['left'], definition['right']].flatMap((side) => definitionsOf(side, seen));

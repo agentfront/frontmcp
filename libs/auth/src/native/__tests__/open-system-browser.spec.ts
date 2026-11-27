@@ -28,6 +28,7 @@ describe('openSystemBrowser', () => {
     Object.defineProperty(process, 'platform', { value: platform });
     mockSpawn.mockReset();
     jest.useRealTimers();
+    jest.restoreAllMocks();
   });
 
   it.each([
@@ -63,6 +64,27 @@ describe('openSystemBrowser', () => {
 
     expect(error).toBeInstanceOf(NativeSignInError);
     expect(error).toMatchObject({ code: 'browser_launch_failed', message: expect.stringContaining('status 3') });
+  });
+
+  it('keeps the process running until it settles, for a caller with nothing else to wait on', async () => {
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+    const child = fakeChild('spawn');
+    mockSpawn.mockReturnValue(child);
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const realSetTimeout = setTimeout;
+    jest.spyOn(global, 'setTimeout').mockImplementation(((...args: Parameters<typeof setTimeout>) => {
+      const timer = realSetTimeout(...args);
+      timers.push(timer);
+      return timer;
+    }) as typeof setTimeout);
+
+    const opening = openSystemBrowser(url);
+    await new Promise((resolve) => setImmediate(resolve));
+    const referenced = timers.map((timer) => timer.hasRef());
+    child.emit('exit', 0, null);
+    await opening;
+
+    expect(referenced).toEqual([true]);
   });
 
   it('resolves for an opener still running after 2 seconds, as one that runs the browser itself is', async () => {

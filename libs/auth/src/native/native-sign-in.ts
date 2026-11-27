@@ -87,9 +87,10 @@ function replaceTokens(store: NativeTokenStore, key: string, tokens: NativeToken
   // A read from before this one must not answer for a caller that comes after it.
   lane.reading = undefined;
   return enqueue(lane, async () => {
-    lane.unsaved = undefined;
     if (tokens) await store.set(key, tokens);
     else await store.delete(key);
+    // Only once replaced: a write that fails leaves the store with the refresh token the unsaved ones replace.
+    lane.unsaved = undefined;
   });
 }
 
@@ -177,8 +178,9 @@ export function signOutNative(options: NativeTokenOptions): Promise<void> {
 /**
  * Opens a URL in the system's default browser with `open`, `xdg-open` or `rundll32`. Resolves once the launcher exits
  * with status 0, or is still running 2 seconds after it started, as a launcher that runs the browser itself is: so it
- * can take up to 2 seconds to resolve, while the browser opens. Rejects when the launcher cannot start, or exits with
- * another status first (`browser_launch_failed`), such as `xdg-open` with no browser to hand the URL to.
+ * can take up to 2 seconds to resolve, while the browser opens, and keeps the process running until then. Rejects when
+ * the launcher cannot start, or exits with another status first (`browser_launch_failed`), such as `xdg-open` with no
+ * browser to hand the URL to.
  */
 export function openSystemBrowser(url: string): Promise<void> {
   const [command, args] =
@@ -198,8 +200,8 @@ export function openSystemBrowser(url: string): Promise<void> {
     child.once('error', finish);
     child.once('spawn', () => {
       child.unref();
+      // Not unref'd: a caller with nothing else to wait on still sees the promise settle.
       settled = setTimeout(finish, LAUNCHER_SETTLE_MS);
-      settled.unref?.();
     });
     child.once('exit', (code: number | null, signal: NodeJS.Signals | null) => {
       if (code === 0) return finish();

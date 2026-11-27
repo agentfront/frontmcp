@@ -95,7 +95,8 @@ async function filesUnder(root: string): Promise<{ files: Array<{ name: string; 
 /** `copy` with the entry named `to` in its marker, where it was rendered with `from`. */
 function withMarkerSource(copy: SkillCopy, from: string, to: string): SkillCopy {
   if (from === to) return copy;
-  return { ...copy, skillMd: copy.skillMd.replace(markerLine(from, copy.hash), markerLine(to, copy.hash)) };
+  // A function, so a `$` in the entry's path is written as it is, not read as a replacement pattern (`$$`, `$&`).
+  return { ...copy, skillMd: copy.skillMd.replace(markerLine(from, copy.hash), () => markerLine(to, copy.hash)) };
 }
 
 /** Put the marker on the line after the frontmatter, where agents skip it and people see it first. */

@@ -60,6 +60,28 @@ function canonicalize(char: string): string {
   return char.charCodeAt(0) >= 128 && upper.charCodeAt(0) < 128 ? char : upper;
 }
 
+/** The characters {@link canonicalize} folds to each one, for those it folds others to; built on first use. */
+let caseForms: Map<string, string[]> | undefined;
+
+/** Every character that folds to `folded`, as RegExp folds case: `Σ` gives `Σ`, `σ` and `ς`. */
+function caseFormsOf(folded: string): readonly string[] {
+  if (!caseForms) {
+    caseForms = new Map();
+    for (let code = 0; code <= 0xffff; code++) {
+      if (code >= 0xd800 && code <= 0xdfff) continue;
+      const char = String.fromCharCode(code);
+      const canonical = canonicalize(char);
+      const forms = caseForms.get(canonical);
+      if (forms) forms.push(char);
+      else caseForms.set(canonical, [char]);
+    }
+    for (const [canonical, forms] of caseForms) {
+      if (forms.length === 1 && forms[0] === canonical) caseForms.delete(canonical);
+    }
+  }
+  return caseForms.get(folded) ?? [folded];
+}
+
 /** `text` with each character folded as {@link canonicalize} folds it, so its length stays the same. */
 function canonicalText(text: string): string {
   let folded = '';
@@ -94,10 +116,6 @@ class PatternParser {
     if (this.source[this.at] !== char) return false;
     this.at++;
     return true;
-  }
-
-  private fold(test: CharTest): CharTest {
-    return this.ignoreCase ? (char) => test(char) || test(char.toLowerCase()) || test(char.toUpperCase()) : test;
   }
 
   /** One character, which with `ignoreCase` is any character RegExp folds to the same one. */
@@ -212,13 +230,21 @@ class PatternParser {
         this.at++;
         const high = this.classMember();
         if (typeof high !== 'string' || high < low) refuse(this.source, 'a range out of order');
-        tests.push((char) => char >= low && char <= high);
+        tests.push(this.range(low, high));
       } else {
+        // A literal folds as RegExp does once, so it is not folded again; \d \w \s hold no character case changes.
         tests.push(typeof low === 'string' ? this.literal(low) : low);
       }
     }
-    const matches = this.fold((char) => tests.some((test) => test(char)));
+    const matches: CharTest = (char) => tests.some((test) => test(char));
     return { kind: 'char', test: negated ? (char) => !matches(char) : matches };
+  }
+
+  /** The characters from `low` to `high`; with `ignoreCase`, any character RegExp folds to the same one as one of them. */
+  private range(low: string, high: string): CharTest {
+    const within: CharTest = (char) => char >= low && char <= high;
+    if (!this.ignoreCase) return within;
+    return (char) => within(char) || caseFormsOf(canonicalize(char)).some(within);
   }
 
   private classMember(): string | CharTest {

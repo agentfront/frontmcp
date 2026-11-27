@@ -345,10 +345,15 @@ export class DcrClientRegistry {
     }
   }
 
-  /** After a token grant to a dynamically registered client, keep it in the token storage for another TTL. */
+  /**
+   * After a token grant to a dynamically registered client, keep it in the token storage for another TTL. That holds
+   * when this process no longer has it in memory too: a {@link load} for another client can drop it while the grant
+   * runs, and its refresh token still gets a whole lifetime.
+   */
   async touch(clientId: string): Promise<void> {
+    if (!this.store) return;
     const client = this.get(clientId);
-    if (!this.store || !client || !isDynamicClient(client)) return;
+    if (client && !isDynamicClient(client)) return;
     let extended: boolean;
     try {
       extended = await this.store.storage.expire(storedClientKey(clientId), this.store.ttlSeconds);
@@ -356,7 +361,8 @@ export class DcrClientRegistry {
       this.store.onError?.('write', error);
       return;
     }
-    if (!extended) await this.persist(client);
+    const known = this.get(clientId) ?? client;
+    if (!extended && known) await this.persist(known);
   }
 
   /**
@@ -375,8 +381,12 @@ export class DcrClientRegistry {
    * client was effectively public. This restores confidential-client
    * authentication with a timing-safe comparison.
    */
-  verifyClientSecret(clientId: string, presentedSecret: string | undefined): 'unknown' | 'ok' | 'invalid' {
-    const client = this.get(clientId);
+  verifyClientSecret(
+    clientId: string,
+    presentedSecret: string | undefined,
+    // The registration a caller already read with {@link load}: a load for another client can drop it from memory.
+    client: RegisteredClient | undefined = this.get(clientId),
+  ): 'unknown' | 'ok' | 'invalid' {
     if (!client) return 'unknown';
     const method = client.token_endpoint_auth_method;
     const isConfidential = method === 'client_secret_basic' || method === 'client_secret_post';

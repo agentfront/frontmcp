@@ -592,6 +592,27 @@ describe('resourceStore()', () => {
       await expect(held.get()).resolves.toMatchObject({ value: 'held v1' });
     });
 
+    it('keeps the key it just made for a handle when 1000 others have subscribers', async () => {
+      let version = 0;
+      const family = open().family('stats', { produce: ({ id }) => `${id} v${version}`, minIntervalMs: 0 });
+      const unsubscribes = Array.from({ length: 1_000 }, (_, id) =>
+        family.key({ id: String(id) }).subscribe(() => undefined),
+      );
+      const late = family.key({ id: 'late' });
+      const seen: string[] = [];
+      unsubscribes.push(late.subscribe((snapshot) => seen.push(snapshot.value)));
+      try {
+        await until(() => seen.length > 0, 1_000);
+        version = 1;
+        late.markDirty();
+        await until(() => seen.length > 1, 1_000);
+      } finally {
+        for (const unsubscribe of unsubscribes) unsubscribe();
+      }
+
+      expect(seen).toEqual(['late v0', 'late v1']);
+    });
+
     it('refuses a family without a name, and a producer that is not a function', () => {
       expect(() => open().family('')).toThrow(InvalidResourceStoreError);
       expect(() => open().family('stats', { produce: 1 } as never)).toThrow('produce');

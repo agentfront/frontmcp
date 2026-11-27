@@ -14,6 +14,9 @@ import * as path from 'node:path';
 
 import { expect, TestServer } from '@frontmcp/testing';
 
+// As long as TestServer waits for a server to exit (SERVER_EXIT_TIMEOUT_MS).
+const EXIT_RECORD_TIMEOUT_MS = 12_000;
+
 const SERVER_ENTRY = 'apps/e2e/demo-e2e-standalone/src/main-user-content.ts';
 
 const INITIALIZE = {
@@ -92,6 +95,7 @@ describe('User-content listener (#1364)', () => {
   let mcpUrl: string;
   let contentPort: number;
   let contentUrl: string;
+  let exitCodeFile: string;
 
   beforeAll(async () => {
     directory = fs.mkdtempSync(path.join(os.tmpdir(), 'fmcp-user-content-e2e-'));
@@ -103,12 +107,17 @@ describe('User-content listener (#1364)', () => {
     fs.writeFileSync(path.join(root, '.env'), 'SECRET=1');
     fs.writeFileSync(path.join(root, 'nested', 'note.txt'), 'nested note');
     fs.writeFileSync(path.join(directory, 'outside.txt'), 'outside the root');
+    exitCodeFile = path.join(directory, 'exit-code');
 
     contentPort = await freePort();
     server = await TestServer.start({
       command: `npx tsx ${SERVER_ENTRY}`,
       project: 'demo-e2e-standalone',
-      env: { USER_CONTENT_PORT: String(contentPort), USER_CONTENT_ROOT: root },
+      env: {
+        USER_CONTENT_PORT: String(contentPort),
+        USER_CONTENT_ROOT: root,
+        USER_CONTENT_EXIT_CODE_FILE: exitCodeFile,
+      },
       startupTimeout: 60_000,
       debug: process.env['DEBUG'] === '1',
     });
@@ -215,9 +224,17 @@ describe('User-content listener (#1364)', () => {
     });
   });
 
-  it('closes both listeners on SIGTERM', async () => {
+  it('closes both listeners on SIGTERM, shutting down gracefully', async () => {
     await server?.stop();
     server = undefined;
+
+    // TestServer.stop() resolves on any exit, a SIGKILL after 5 s included. The server writes the code it exits with:
+    // 0 once its graceful shutdown completed, 1 when a step failed or it outlasted its deadline, nothing when killed.
+    // The server writes it in its 'exit' listener, which can run after the wrapper exits and the port closes.
+    const exitCode = async () => (fs.existsSync(exitCodeFile) ? fs.readFileSync(exitCodeFile, 'utf8') : '');
+    const deadline = Date.now() + EXIT_RECORD_TIMEOUT_MS;
+    while (!(await exitCode()) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(await exitCode()).toBe('0');
 
     await expect(fetch(`${contentUrl}/frame.html`)).rejects.toThrow();
     await expect(fetch(`${mcpUrl}/healthz`)).rejects.toThrow();

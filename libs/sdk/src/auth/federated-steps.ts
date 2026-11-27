@@ -241,7 +241,7 @@ export function renderFederatedStep(
     csrfToken,
     error: options.error,
   });
-  return httpRespond.html(markup, 200, builtInAuthPageHeaders());
+  return httpRespond.html(markup, 200, builtInAuthPageHeaders({ csp: 'inline' }));
 }
 
 /** The authorization endpoints of the upstream providers among `providerIds` (others have none). */
