@@ -7,8 +7,8 @@ description: Test authenticated MCP servers with TestTokenFactory, MockOAuthServ
 
 Real API references:
 
-- `TestTokenFactory.createTestToken(opts)` — `libs/testing/src/auth/token-factory.ts:97` (plus `createAdminToken`, `createUserToken`, `createAnonymousToken`, `createExpiredToken`, `createTokenWithInvalidSignature`).
-- `new MockOAuthServer(tokenFactory, options)` + `.start()` / `.stop()` — `libs/testing/src/auth/mock-oauth-server.ts:159`.
+- `TestTokenFactory.createTestToken(opts)` — `libs/auth/src/testing/token-factory.ts:135` (plus `createAdminToken`, `createUserToken`, `createAnonymousToken`, `createExpiredToken`, `createTokenWithInvalidSignature`).
+- `new MockOAuthServer(tokenFactory, options)` + `.start()` / `.stop()` — `libs/auth/src/testing/mock-oauth-server.ts:175`.
 - `TestServer.start({ command, port })` — `libs/testing/src/server/test-server.ts:101`. Get a client with `McpTestClient.create({ baseUrl }).withToken(token).buildAndConnect()`.
 - Roles, email, and other claims go inside `claims`, not as top-level fields. `CreateTokenOptions` only declares `sub`, `iss`, `aud`, `scopes`, `exp`, `claims`.
 
@@ -142,6 +142,30 @@ describe('Mock OAuth server', () => {
 ```
 
 To run the full authorization-code-with-PKCE flow against the mock server, drive the standard OAuth endpoints (`/oauth/authorize`, `/oauth/token`) directly with `fetch` — the mock server auto-approves when `autoApprove: true` and `testUser` are set.
+
+- **PKCE:** `pkce: 'strict'` makes the mock check PKCE as an OAuth 2.1 server does. An authorization request (or the manual sign-in form) without a `code_challenge`, with `code_challenge_method=plain`, or with no method (which means plain) is redirected back with `error=invalid_request`. A `code_verifier` must be 43-128 unreserved characters. The metadata lists `code_challenge_methods_supported: ['S256']`. Unset, the mock accepts those requests as before, and warns once the first time it does; `pkce: 'lenient'` accepts them without the warning. Use strict to prove a client sends S256.
+- **`auth_time`:** access and ID tokens from the code flow carry `auth_time`, the second the test user signed in. A refresh keeps it while `iat` moves on.
+- **Resource indicators:** `resourceIndicators: true` issues the access token with `aud` set to the `resource` (RFC 8707) and `audience` values of the authorization request: one value is a string, several are an array. A token request may name a subset of them to narrow the audience. Any other value is refused with `invalid_target`, and a refresh keeps the audience. A list (`resourceIndicators: ['https://mcp.example.com/mcp']`) also refuses every value outside it: the authorization request is redirected back with `error=invalid_target`. A request naming none gets the token factory's audience. Unset, `resource` and `audience` are ignored as before, with one warning naming the option.
+- **Several users:** `users: [{ sub, email, name, claims, scopes }, ...]` lists who can sign in. The authorization request's `login_hint` (a `sub` or `email`) picks one, and an unknown hint is redirected back with `access_denied`. Without a hint, `testUser` signs in (`setTestUser()` changes it per test), else the first user. The manual sign-in form signs in the listed user whose `sub` is typed, prefilled with the hinted one. A user's `scopes` limit the granted scopes to those requested that the user has. `/userinfo` answers with the user the token names. Without `users`, `login_hint` is ignored and `testUser` signs in, as before.
+- **Lighter import:** `MockOAuthServer` and `TestTokenFactory` are also exported by `@frontmcp/auth/testing`, the same classes, for a project that needs only a mock identity provider. That subpath depends on `jose` and `@frontmcp/utils` only, so it brings no SWC, Jest preset or SDK.
+
+```typescript
+import { MockOAuthServer, TestTokenFactory } from '@frontmcp/auth/testing';
+
+const idp = new MockOAuthServer(new TestTokenFactory(), {
+  autoApprove: true,
+  users: [
+    { sub: 'ada', email: 'ada@example.com', claims: { roles: ['admin'] } },
+    { sub: 'bob', email: 'bob@example.com', scopes: ['openid', 'notes:read'] },
+  ],
+  clientId: 'my-cli',
+  validRedirectUris: ['http://127.0.0.1:*/callback'],
+  pkce: 'strict',
+  resourceIndicators: ['https://notes.example.com/mcp'],
+});
+// /oauth/authorize?...&login_hint=bob&resource=https://notes.example.com/mcp
+//   -> an access token with sub 'bob', aud 'https://notes.example.com/mcp', auth_time
+```
 
 ## Mock CIMD server
 

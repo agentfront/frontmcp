@@ -74,6 +74,17 @@
         "types": "./dist/native/index.d.ts",
         "default": "./dist/esm/native/index.mjs"
       }
+    },
+    "./testing": {
+      "development": "./src/testing/index.ts",
+      "require": {
+        "types": "./dist/testing/index.d.ts",
+        "default": "./dist/testing/index.js"
+      },
+      "import": {
+        "types": "./dist/testing/index.d.ts",
+        "default": "./dist/esm/testing/index.mjs"
+      }
     }
   },
   "engines": {

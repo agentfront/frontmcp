@@ -11,6 +11,7 @@ import { expect, McpTestClient, MockOAuthServer, TestServer, TestTokenFactory } 
 import { mkdtemp, rm } from '@frontmcp/utils';
 
 const CLIENT_ID = 'tasks-cli';
+const RESOURCE = 'https://tasks.example.test/mcp';
 
 describe('native sign-in against the identity provider of a transparent server', () => {
   let mockOAuth: MockOAuthServer;
@@ -42,12 +43,14 @@ describe('native sign-in against the identity provider of a transparent server',
       testUser: { sub: 'user-native', email: 'native@example.com' },
       clientId: CLIENT_ID,
       validRedirectUris: ['http://127.0.0.1:*/callback'],
+      pkce: 'strict',
+      resourceIndicators: [RESOURCE],
     });
     await mockOAuth.start();
 
     server = await TestServer.start({
       command: 'npx tsx apps/e2e/demo-e2e-transparent/src/main.ts',
-      env: { IDP_PROVIDER_URL: issuer, IDP_EXPECTED_AUDIENCE: issuer },
+      env: { IDP_PROVIDER_URL: issuer, IDP_EXPECTED_AUDIENCE: RESOURCE },
       startupTimeout: 30000,
     });
 
@@ -56,6 +59,7 @@ describe('native sign-in against the identity provider of a transparent server',
       issuer,
       clientId: CLIENT_ID,
       scopes: ['openid', 'tasks:read'],
+      resource: RESOURCE,
       store: fileTokenStore(path.join(dir, 'tokens.json')),
       openBrowser: async (url) => {
         const approved = await fetch(url, { redirect: 'manual' });
@@ -78,12 +82,16 @@ describe('native sign-in against the identity provider of a transparent server',
 
     expect(tokens.refreshToken).toBeDefined();
     expect(tokens.tokenEndpoint).toBe(`${options.issuer}/oauth/token`);
+    expect(JSON.parse(Buffer.from(tokens.accessToken.split('.')[1], 'base64url').toString())).toMatchObject({
+      aud: RESOURCE,
+      auth_time: expect.any(Number),
+    });
     expect(await listTools(tokens.accessToken)).toEqual(expect.arrayContaining(['create-task', 'list-tasks']));
   });
 
   it('refreshes expired tokens with the stored refresh token, from a new store on the same file', async () => {
     const stored = (await getNativeTokens(options))!;
-    await options.store!.set(`${options.issuer} ${CLIENT_ID}`, { ...stored, expiresAt: Date.now() - 1000 });
+    await options.store!.set(`${options.issuer} ${CLIENT_ID} ${RESOURCE}`, { ...stored, expiresAt: Date.now() - 1000 });
 
     const reopened = { ...options, store: fileTokenStore(path.join(dir, 'tokens.json')) };
     const refreshed = (await getNativeTokens(reopened))!;

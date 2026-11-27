@@ -12,7 +12,7 @@
       "options": {
         "outputPath": "libs/auth/dist",
         "main": "libs/auth/src/index.ts",
-        "additionalEntryPoints": ["libs/auth/src/native/index.ts"],
+        "additionalEntryPoints": ["libs/auth/src/native/index.ts", "libs/auth/src/testing/index.ts"],
         "tsConfig": "libs/auth/tsconfig.lib.json",
         "format": ["cjs"],
         "declaration": true,
@@ -37,7 +37,7 @@
       "options": {
         "outputPath": "libs/auth/dist/esm",
         "main": "libs/auth/src/index.ts",
-        "additionalEntryPoints": ["libs/auth/src/native/index.ts"],
+        "additionalEntryPoints": ["libs/auth/src/native/index.ts", "libs/auth/src/testing/index.ts"],
         "tsConfig": "libs/auth/tsconfig.lib.json",
         "format": ["esm"],
         "declaration": false,

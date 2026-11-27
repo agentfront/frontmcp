@@ -24,8 +24,8 @@ Use `MockOAuthServer` to simulate an OAuth/OIDC identity provider. The server pu
 ```typescript
 // src/__tests__/oauth-flow.e2e.spec.ts
 // Real API:
-//   libs/testing/src/auth/mock-oauth-server.ts:159 — `new MockOAuthServer(tokenFactory, options)` + `.start()` / `.stop()`
-//   libs/testing/src/auth/token-factory.ts:97 — `TestTokenFactory.createTestToken(opts)`
+//   libs/auth/src/testing/mock-oauth-server.ts:175 — `new MockOAuthServer(tokenFactory, options)` + `.start()` / `.stop()`
+//   libs/auth/src/testing/token-factory.ts:135 — `TestTokenFactory.createTestToken(opts)`
 import { MockOAuthServer, TestTokenFactory } from '@frontmcp/testing';
 
 describe('Mock OAuth Server', () => {

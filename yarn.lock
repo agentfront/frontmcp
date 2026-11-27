@@ -2914,6 +2914,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@frontmcp/testing@workspace:libs/testing"
   dependencies:
+    "@frontmcp/auth": "npm:1.13.1"
     "@frontmcp/protocol": "npm:1.13.1"
     "@frontmcp/utils": "npm:1.13.1"
     "@swc/core": "npm:~1.15.41"
