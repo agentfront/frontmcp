@@ -631,9 +631,9 @@ export interface LoginConfig {
  * Context passed to a custom {@link LoginConfig.render} function. Carries the
  * client identity (CIMD `client_name`/`logo_uri` when available), requested
  * scopes, the pending-authorization id (must be submitted back), the callback
- * path to POST/GET to, the declared {@link LoginConfig.fields}, and a previous
- * error message (set when {@link AuthenticateResult} failed and the page is
- * being re-rendered).
+ * path to POST/GET to, the client's redirect and the `form-action` sources it
+ * needs, the declared {@link LoginConfig.fields}, and a previous error message
+ * (set when {@link AuthenticateResult} failed and the page is being re-rendered).
  */
 export interface LoginRenderContext {
   /** OAuth client_id (or CIMD URL) of the requesting client. */
@@ -648,6 +648,15 @@ export interface LoginRenderContext {
   pendingAuthId: string;
   /** Path the login form should submit to (the `/oauth/callback` endpoint). */
   callbackPath: string;
+  /** The client's validated `redirect_uri`, where the callback sends a successful sign-in. Set by FrontMCP. */
+  redirectUri?: string;
+  /**
+   * The CSP sources a page with its own `form-action` must allow beside `'self'`
+   * (the `redirectUri`'s origin, or a native app's scheme). Browsers apply
+   * `form-action` to the callback's redirect too, so `'self'` alone stops the
+   * sign-in there. Set by FrontMCP.
+   */
+  formTargets?: string[];
   /** The declared custom login fields (may be empty). */
   fields: Record<string, LoginFieldConfig>;
   /** Error message to display when re-rendering after a failed authenticate(). */
