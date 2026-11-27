@@ -61,8 +61,6 @@ export interface FrontMcpRedisClient {
   eval(script: string, numKeys: number, ...keysAndArgs: RedisArgument[]): Promise<unknown>;
   /** `SCAN cursor MATCH pattern COUNT n`: resolves `[nextCursor, keys]`. Run on each master of a cluster. */
   scan(cursor: string | number, ...args: RedisArgument[]): Promise<[string, string[]]>;
-  /** `KEYS pattern`: HA, the job state store and the skills cache. Run on each master of a cluster. */
-  keys(pattern: string): Promise<string[]>;
 
   // ---- Other data types (optional: only the feature beside each needs it) --------------
   /** Sets: the job stores. */
@@ -152,6 +150,18 @@ export interface RedisConnectionSettings {
   tls?: boolean;
   /** Connect to a Redis Cluster. */
   cluster?: RedisClusterOption;
+}
+
+/**
+ * A Redis connection in any form FrontMCP takes: `host`/`port`, a `url`, a cluster (`cluster: true`
+ * on either, or `cluster: { nodes }`), or a `client` you made, alone. Shared by the server's `redis`,
+ * `transport.persistence.redis`, auth `tokenStorage`/`secureStore`, and the plugins.
+ */
+export interface RedisConnectionConfig extends RedisConnectionSettings {
+  /** `'redis'`, or left out. */
+  provider?: 'redis';
+  /** A client you created; no other connection field goes beside it. FrontMCP never closes it. */
+  client?: RedisClientInput;
 }
 
 /** Options of {@link createRedisConnection}. */

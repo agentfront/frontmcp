@@ -44,6 +44,9 @@ export type { RedisUrlConnection, RedisUrlMerge, RedisUrlSiblingFields } from '.
 // The Redis connection factory: single node, Redis Cluster, or a client you made (#1503)
 export {
   createRedisConnection,
+  isRedisConnection,
+  redisConnectionOf,
+  hasRedisClusterNodes,
   adoptRedisClient,
   wantsRedisCluster,
   detectRedisClientKind,
@@ -55,7 +58,6 @@ export {
   isRedisClusterClient,
   redisMasterNodes,
   scanRedisKeys,
-  redisKeys,
   deleteRedisKeys,
   getRedisKeys,
 } from './redis-client';
@@ -70,6 +72,7 @@ export type {
   RedisClusterNode,
   RedisClusterOption,
   RedisConnection,
+  RedisConnectionConfig,
   RedisConnectionSettings,
   RedisEventListener,
   RedisMessageListener,
