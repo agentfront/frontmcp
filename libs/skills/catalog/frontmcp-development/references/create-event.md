@@ -382,8 +382,9 @@ when no such subscription exists, so a client can repeat it. An anonymous caller
 
 - `onSubscribe(args, subscription)` runs once, when a subscription is created, never on a refresh. When it throws, the
   subscription is removed and the client gets the error.
-- `onUnsubscribe(args, subscription, reason)` runs once when it ends, with `'unsubscribed'` or `'expired'`. When it
-  throws, the error is logged.
+- `onUnsubscribe(args, subscription, reason)` runs once when it ends, with `'unsubscribed'`, `'expired'` or
+  `'terminated'` (the server ended it, see [Over a subscription's life](#over-a-subscriptions-life)). When it throws,
+  the error is logged.
 - `subscription` is `{ id, name, mode, subscriber }`.
 
 ### Where subscriptions are kept
@@ -409,6 +410,31 @@ see [Events with `check()` over webhook](#events-with-check-over-webhook)), `bui
 id the request names, and `removed`, the subscription it removed as it was stored, or `undefined` when none matched
 (the request succeeds either way). The subscribe flow's state has the stored subscription in `record`. `finalize` runs
 after a success or a failure: attach a `Finally` hook there for work that must see refused requests too.
+
+Every end of a webhook subscription runs `events:ended` (`EventEndedHook`): the client's `events/unsubscribe`
+(`'unsubscribed'`), its lifetime running out, found by the sweep or by a refresh (`'expired'`), and the server ending
+it, because its owner was refused when checked again or it stayed suspended too long (`'terminated'`). It runs right
+after the event's `onUnsubscribe`, with the stages `parseInput`, `notifyEnded`, `buildResult` and `finalize`, and its
+state has `record` (the subscription as it was stored, as `removed` above), `subscription` (what `onUnsubscribe` got),
+`reason`, and for `'terminated'` `termination`, the error its callback is told (`{ code, message, data: { reason } }`).
+
+- It runs once per subscription across every process: only the process whose store removed the subscription runs
+  it, as with `onUnsubscribe`. Like `onUnsubscribe` it is not retried: a process that stops between the two loses it.
+- What a hook throws is logged. The subscription stays ended, and `events/unsubscribe` answers `{}` as before.
+- A subscription whose `onSubscribe` threw never started, so it runs nothing. Poll leases and streams do not run it.
+
+```typescript
+import { EventEndedHook, Plugin, type FlowCtxOf } from '@frontmcp/sdk';
+
+@Plugin({ name: 'subscription-audit' })
+class SubscriptionAuditPlugin {
+  @EventEndedHook.Did('notifyEnded')
+  recordEnd(ctx: FlowCtxOf<'events:ended'>) {
+    const { record, reason } = ctx.state.required;
+    console.log(`subscription ${record.id} to ${record.eventName} ended: ${reason}`);
+  }
+}
+```
 
 ```typescript
 import { EventSubscribeHook, Plugin, PublicMcpError, type FlowCtxOf } from '@frontmcp/sdk';
@@ -1623,7 +1649,7 @@ Each example is a runnable app with a README and a smoke test in the FrontMCP re
 - [Conformance matrix](https://github.com/agentfront/frontmcp/blob/main/apps/e2e/demo-e2e-events/CONFORMANCE.md): each
   requirement of the SEP-3415 conformance suite, the test that covers it, and the known deviations
 - Related skills: `decorators-guide`, `create-plugin-hooks` (`ListEventsHook`, `EventSubscribeHook`,
-  `EventUnsubscribeHook`, `EventPublishHook`, `EventPublishHttpHook`, `EventDeliverHook`, `EventPollHook`,
-  `EventStreamHook`), `frontmcp-authorities`, `frontmcp-channels` (`channel-claude-code`, `app-event` sources),
+  `EventUnsubscribeHook`, `EventEndedHook`, `EventPublishHook`, `EventPublishHttpHook`, `EventDeliverHook`,
+  `EventPollHook`, `EventStreamHook`), `frontmcp-authorities`, `frontmcp-channels` (`channel-claude-code`, `app-event` sources),
   `create-job`, `create-duty`,
   `create-worker` (publishing, `watchFiles`), `create-workflow` (the request signature, `trigger: 'event'`)

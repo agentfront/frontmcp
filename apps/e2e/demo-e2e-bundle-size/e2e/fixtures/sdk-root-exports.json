@@ -138,6 +138,7 @@
   "EventCallbackEndpointError": "class",
   "EventContext": "class",
   "EventDeliverHook": "object",
+  "EventEndedHook": "object",
   "EventEntry": "class",
   "EventForbiddenError": "class",
   "EventInstance": "class",

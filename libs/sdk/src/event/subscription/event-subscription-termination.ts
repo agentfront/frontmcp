@@ -32,12 +32,16 @@ export function accessRevokedError(dialect: EventDialect): EventTerminationError
   };
 }
 
-/** End a subscription the server no longer serves: remove it, tell its event, and tell its callback when the dialect does. */
+/**
+ * End a subscription the server no longer serves: remove it, tell its event and the `events:ended` hooks, and tell its
+ * callback when the dialect does.
+ */
 export async function terminateEventSubscription(args: TerminateEventSubscriptionArgs): Promise<void> {
   const { subscriptions, outbox, metrics, logger, subscription, error } = args;
   const removed = await subscriptions?.store.delete(subscription.id);
   if (!removed || !subscriptions || !outbox) return;
   await subscriptions.notifyUnsubscribed(removed, 'terminated');
+  await subscriptions.notifyEnded({ record: removed, reason: 'terminated', termination: error });
   metrics?.count('terminated', removed.eventName);
   logger.warn(
     `Subscription ${removed.id} to event "${removed.eventName}" is terminated: ${error.message} ` +

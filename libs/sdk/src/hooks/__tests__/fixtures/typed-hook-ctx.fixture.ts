@@ -6,6 +6,7 @@ import {
   ChannelSendHook,
   CompletionHook,
   EventDeliverHook,
+  EventEndedHook,
   EventPollHook,
   EventPublishHook,
   EventPublishHttpHook,
@@ -176,6 +177,12 @@ export class EveryExportRejectsAParameterItsCtxDoesNotSatisfy {
   }
 
   // @ts-expect-error the ctx has no notAField
+  @EventEndedHook.Will('notifyEnded')
+  eventEnded(ctx: NotInAnyCtx) {
+    return ctx;
+  }
+
+  // @ts-expect-error the ctx has no notAField
   @EventPublishHttpHook.Will('authenticate')
   eventPublishHttp(ctx: NotInAnyCtx) {
     return ctx;
@@ -261,6 +268,17 @@ export class HooksThatCompile {
   @OAuthRegisterHook.Did('registerClient')
   registeredClient(ctx: FlowCtxOf<'oauth:register'>) {
     return [ctx.state.registered?.client_id, ctx.state.registered?.redirect_uris];
+  }
+
+  @EventUnsubscribeHook.Did('removeSubscription')
+  removedSubscription(ctx: FlowCtxOf<'events:unsubscribe'>) {
+    return [ctx.state.subscriptionId, ctx.state.removed?.id, ctx.state.removed?.eventName];
+  }
+
+  @EventEndedHook.Did('notifyEnded')
+  endedSubscription(ctx: FlowCtxOf<'events:ended'>) {
+    const { record, subscription, reason } = ctx.state.required;
+    return [record.id, subscription.mode, reason, ctx.state.termination?.data];
   }
 }
 
