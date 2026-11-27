@@ -4,6 +4,7 @@ import * as path from 'path';
 
 import type Database from 'better-sqlite3';
 
+import { openRawDatabase, sqliteError } from '../__test-utils__/raw-database';
 import { loadBetterSqlite3 } from '../better-sqlite3-loader';
 import { acquireConnection } from '../sqlite-connection';
 import { useSqliteDriver, type SqliteDatabase } from '../sqlite-driver';
@@ -13,14 +14,13 @@ import { SqliteStorageAdapter } from '../sqlite-storage.adapter';
 import { SqliteTaskStore } from '../sqlite-task.store';
 
 /** A second connection to the file, standing in for another process. */
-function openForeignConnection(dbPath: string): Database.Database {
-  const BetterSqlite3 = loadBetterSqlite3();
-  const db = new BetterSqlite3(dbPath);
+function openForeignConnection(dbPath: string): SqliteDatabase {
+  const db = openRawDatabase(dbPath);
   db.pragma('busy_timeout = 0');
   return db;
 }
 
-function holdWriteLock(db: Database.Database, holdMs: number): Promise<void> {
+function holdWriteLock(db: SqliteDatabase, holdMs: number): Promise<void> {
   db.exec('BEGIN IMMEDIATE');
   db.prepare("INSERT OR REPLACE INTO kv (key, value) VALUES ('foreign', 'x')").run();
   return new Promise((resolve) =>
@@ -118,7 +118,7 @@ describe('shared SQLite connections', () => {
     ],
   ])('releases the connection when %s fails to set up the file', (_store, open) => {
     fs.writeFileSync(dbPath, 'not a SQLite database, and long enough for SQLite to read its header');
-    expect(() => open(dbPath)).toThrow(expect.objectContaining({ code: 'SQLITE_NOTADB' }));
+    expect(() => open(dbPath)).toThrow(sqliteError('SQLITE_NOTADB', 26));
 
     fs.writeFileSync(dbPath, '');
     const kv = new SqliteKvStore({ path: dbPath, ttlCleanupIntervalMs: 0 });
@@ -395,7 +395,7 @@ describe('shared SQLite connections', () => {
         const ticks = countTicks();
         const startedAt = Date.now();
 
-        await expect(adapter.set('k', 'v')).rejects.toMatchObject({ code: 'SQLITE_BUSY' });
+        await expect(adapter.set('k', 'v')).rejects.toEqual(sqliteError('SQLITE_BUSY', 5));
 
         expect(Date.now() - startedAt).toBeGreaterThanOrEqual(140);
         expect(Date.now() - startedAt).toBeLessThan(550);

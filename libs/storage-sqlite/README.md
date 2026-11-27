@@ -10,7 +10,7 @@ SQLite storage for FrontMCP: sessions, background tasks, pending elicitations an
 npm install @frontmcp/storage-sqlite
 ```
 
-Requires Node.js 24 or later. `better-sqlite3` is a regular dependency, so it's installed with the package. It's a native module that downloads or compiles its binary at install time, so install on the platform the server runs on (in a Docker image, run `npm ci` inside the image). The peer dependency `@frontmcp/lazy-zod` comes with `@frontmcp/sdk`.
+Requires Node.js 24 or later. `better-sqlite3` is an optional dependency, so it's installed with the package. It's a native module that downloads or compiles its binary at install time, so install on the platform the server runs on (in a Docker image, run `npm ci` inside the image). When it can't be installed, the install goes on without it and the stores use Node's built-in `node:sqlite`: see [The SQLite library](#the-sqlite-library). Up to 1.13.1 it was a regular dependency, and a failed build failed the install. The peer dependency `@frontmcp/lazy-zod` comes with `@frontmcp/sdk`.
 
 `@frontmcp/sdk` loads this package only when a `sqlite` option is set, so importing the SDK never loads `better-sqlite3`. On Cloudflare Workers the stores run in a Durable Object, on its own SQLite database: see [In a Cloudflare Durable Object](#in-a-cloudflare-durable-object). Other V8-isolate runtimes have no SQLite; use Redis or Upstash there.
 
@@ -77,7 +77,7 @@ store.close();
 
 `SqliteStorageAdapter.keys(pattern)` and `SqliteKvStore.keys(pattern)` match letter case, as the memory and Redis storages do: `keys('session:*')` does not return `Session:1`. Up to 1.12.0 they ignored ASCII case, because they searched with SQL `LIKE`, and an adapter pattern lost its backslashes. In an adapter pattern a backslash makes the next character literal, as in the other storages, so `escapeGlob()` output finds the same keys everywhere; in 1.12.1 a backslash was matched as itself.
 
-The package also exports `openDatabase` and `withBusyRetry` (helpers for opening a file and retrying on `SQLITE_BUSY`), `useSqliteDriver` and `durableObjectSqlite` (a SQLite other than `better-sqlite3`, [below](#in-a-cloudflare-durable-object)), `deriveEncryptionKey`, `encryptValue`, `decryptValue` and `SqliteDecryptionError`, and `sqliteStorageOptionsSchema`, the Zod schema for the options below.
+The package also exports `openDatabase` and `withBusyRetry` (helpers for opening a file and retrying on `SQLITE_BUSY`), `useSqliteDriver`, `nodeSqlite` and `durableObjectSqlite` (a SQLite other than `better-sqlite3`, [below](#the-sqlite-library)), `deriveEncryptionKey`, `encryptValue`, `decryptValue` and `SqliteDecryptionError`, and `sqliteStorageOptionsSchema`, the Zod schema for the options below.
 
 ## Options
 
@@ -98,6 +98,24 @@ A lost `encryption.secret` loses the data, and a changed one makes stored values
 - **Back up the file.** It's an ordinary SQLite database: copy it, or use `sqlite3 .backup`.
 - **Write-ahead logging adds two files** next to it, `-wal` and `-shm`. Copy all three, or checkpoint first.
 - **One writer at a time.** Several processes can read the file; writes wait for each other, up to `busyTimeoutMs`.
+
+## The SQLite library
+
+The stores open their files with `better-sqlite3` when it is installed, and with Node's built-in `node:sqlite` when it is not. Both write the same SQLite file, so the runs, leases and sessions in it stay where they are. Every store uses the library this picks: the sessions, tasks, elicitations and events of `@FrontMcp({ sqlite })`, `jobs.store.sqlite`, the duty and worker leases in `~/.frontmcp/duties.sqlite`, and the start lock of `runShared()`. To pick one yourself:
+
+- **`FRONTMCP_SQLITE_DRIVER=node:sqlite`** opens every file with `node:sqlite`, even with `better-sqlite3` installed, in this process and in the processes it starts (job and task workers inherit it). `FRONTMCP_SQLITE_DRIVER=better-sqlite3` requires `better-sqlite3`, with no fallback. Any other value fails with an error that names both.
+- **`useSqliteDriver(nodeSqlite())`**, before the server is created, does the same in code. Job and task workers run the server's entry again, so they call it too.
+
+```ts
+import { nodeSqlite, useSqliteDriver } from '@frontmcp/storage-sqlite';
+
+useSqliteDriver(nodeSqlite());
+```
+
+So a CLI published to npm runs where `better-sqlite3` can't be built: the install skips it, or the user skips it with `npm install --omit=optional`, and the stores use `node:sqlite`.
+
+- **Processes can use different libraries on one file**: one server on `better-sqlite3` and a CLI on `node:sqlite` wait for each other's locks. In one process, open a file with one library only: two SQLite libraries in one process don't see each other's locks.
+- **On `node:sqlite`, `getDatabase()` and `openDatabase()` return a database with the members of `SqliteDatabase` only**, not `better-sqlite3`'s `Database` (no `pluck()`, `iterate()`, `backup()` or `function()`). Its errors carry `code: 'ERR_SQLITE_ERROR'` and SQLite's extended result code in `errcode`, where `better-sqlite3`'s carry `code: 'SQLITE_BUSY'` and the like; `isBusyError()` reads both.
 
 ## In a Cloudflare Durable Object
 
@@ -136,7 +154,7 @@ export class HelpDeskServer extends DurableObject {
 - **Every `path` is the same database**, the Durable Object's one. The option only names it, and no file or folder is created.
 - **Writes run in `ctx.storage.transactionSync()`**, and `walMode` and `busyTimeoutMs` do nothing: a Durable Object has one connection and refuses both pragmas.
 
-`useSqliteDriver()` takes any function from a path to a database with the part of `better-sqlite3`'s `Database` the stores call (the `SqliteDriver` and `SqliteDatabase` types), and `useSqliteDriver(undefined)` goes back to `better-sqlite3`. `currentSqliteDriver()` returns the driver that is set, if any; on an edge runtime the SDK opens a `sqlite` store only when one is.
+`useSqliteDriver()` takes any function from a path to a database with the part of `better-sqlite3`'s `Database` the stores call (the `SqliteDriver` and `SqliteDatabase` types), and `useSqliteDriver(undefined)` goes back to the default: `better-sqlite3`, or `node:sqlite` without it. `currentSqliteDriver()` returns the driver that is set, if any; on an edge runtime the SDK opens a `sqlite` store only when one is.
 
 ## Docs
 

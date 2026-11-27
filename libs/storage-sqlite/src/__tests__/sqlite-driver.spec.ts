@@ -71,14 +71,20 @@ describe('useSqliteDriver', () => {
   });
 
   it('opens with better-sqlite3 again once the driver is unset', () => {
-    useSqliteDriver(openInMemory);
-    useSqliteDriver(undefined);
+    const chosen = process.env['FRONTMCP_SQLITE_DRIVER'];
+    delete process.env['FRONTMCP_SQLITE_DRIVER'];
+    try {
+      useSqliteDriver(openInMemory);
+      useSqliteDriver(undefined);
 
-    const opened = openDatabase(dbPath, 'TestStore');
+      const opened = openDatabase(dbPath, 'TestStore');
 
-    expect(loadBetterSqlite3).toHaveBeenCalled();
-    expect(fileExistsSync(dbPath)).toBe(true);
-    opened.close();
+      expect(loadBetterSqlite3).toHaveBeenCalled();
+      expect(fileExistsSync(dbPath)).toBe(true);
+      opened.close();
+    } finally {
+      if (chosen !== undefined) process.env['FRONTMCP_SQLITE_DRIVER'] = chosen;
+    }
   });
 
   it('shares the driver with another copy of the package in the same process', () => {
