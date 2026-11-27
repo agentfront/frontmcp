@@ -92,6 +92,7 @@ describe('User-content listener (#1364)', () => {
   let mcpUrl: string;
   let contentPort: number;
   let contentUrl: string;
+  let exitCodeFile: string;
 
   beforeAll(async () => {
     directory = fs.mkdtempSync(path.join(os.tmpdir(), 'fmcp-user-content-e2e-'));
@@ -103,12 +104,17 @@ describe('User-content listener (#1364)', () => {
     fs.writeFileSync(path.join(root, '.env'), 'SECRET=1');
     fs.writeFileSync(path.join(root, 'nested', 'note.txt'), 'nested note');
     fs.writeFileSync(path.join(directory, 'outside.txt'), 'outside the root');
+    exitCodeFile = path.join(directory, 'exit-code');
 
     contentPort = await freePort();
     server = await TestServer.start({
       command: `npx tsx ${SERVER_ENTRY}`,
       project: 'demo-e2e-standalone',
-      env: { USER_CONTENT_PORT: String(contentPort), USER_CONTENT_ROOT: root },
+      env: {
+        USER_CONTENT_PORT: String(contentPort),
+        USER_CONTENT_ROOT: root,
+        USER_CONTENT_EXIT_CODE_FILE: exitCodeFile,
+      },
       startupTimeout: 60_000,
       debug: process.env['DEBUG'] === '1',
     });
@@ -216,12 +222,12 @@ describe('User-content listener (#1364)', () => {
   });
 
   it('closes both listeners on SIGTERM, shutting down gracefully', async () => {
-    const stopping = Date.now();
     await server?.stop();
-    // TestServer.stop() kills the server with SIGKILL after 5 s, without failing: a graceful shutdown ends before that.
-    expect(Date.now() - stopping).toBeLessThan(5_000);
-    expect(server?.getLogs().join('\n')).not.toContain('Graceful shutdown');
     server = undefined;
+
+    // TestServer.stop() resolves on any exit, a SIGKILL after 5 s included. The server writes the code it exits with:
+    // 0 once its graceful shutdown completed, 1 when a step failed or it outlasted its deadline, nothing when killed.
+    expect(fs.existsSync(exitCodeFile) && fs.readFileSync(exitCodeFile, 'utf8')).toBe('0');
 
     await expect(fetch(`${contentUrl}/frame.html`)).rejects.toThrow();
     await expect(fetch(`${mcpUrl}/healthz`)).rejects.toThrow();
