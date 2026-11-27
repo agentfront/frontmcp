@@ -103,6 +103,24 @@ describe('DcrClientRegistry — clients kept in the token storage', () => {
     expect(await storage.ttl('oauth:client:c1')).toBeGreaterThan(590);
   });
 
+  it('keeps a client for another lifetime after a token grant, even when a load for another client dropped it', async () => {
+    const storage = await memoryStorage();
+    const first = registryOn(storage);
+    for (const id of ['a', 'b']) await registerAndPersist(first, dynamicClient(id));
+
+    const restarted = new DcrClientRegistry({ maxDynamicClients: 1 });
+    restarted.useStore(storage, { ttlSeconds: 600 });
+    await restarted.load('a');
+    await storage.expire('oauth:client:a', 5);
+    // Another grant's load, while this grant runs, drops `a` from memory.
+    await restarted.load('b');
+    expect(restarted.has('a')).toBe(false);
+
+    await restarted.touch('a');
+
+    expect(await storage.ttl('oauth:client:a')).toBeGreaterThan(590);
+  });
+
   it('defaults the lifetime to a refresh token lifetime (30 days)', async () => {
     const storage = await memoryStorage();
     await registerAndPersist(registryOn(storage), dynamicClient('c1'));
