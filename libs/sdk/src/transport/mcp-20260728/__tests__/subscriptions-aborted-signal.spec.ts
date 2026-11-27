@@ -1,4 +1,6 @@
+import { type HttpOutput } from '../../../common/schemas/http-output.schema';
 import { type Scope } from '../../../scope';
+import { renderHttpOutputToWebResponse } from '../../web-response.renderer';
 import { createSubscriptionStream } from '../subscriptions';
 
 function scopeWithListChangingTools(release: () => void): Scope {
@@ -66,5 +68,37 @@ describe('a subscriptions/listen stream with resource subscriptions', () => {
     controller.abort();
 
     expect(resources.unwatchUri.mock.calls).toEqual([['board://status'], ['tables://']]);
+  });
+});
+
+describe('a subscriptions/listen stream with keep-alives off', () => {
+  it('releases its registry listeners as soon as a web response reader cancels, with no update to wake it', async () => {
+    const release = jest.fn();
+    const { stream } = createSubscriptionStream({
+      scope: scopeWithListChangingTools(release),
+      subscriptionId: 'listen-1',
+      requested: { toolsListChanged: true },
+      signal: new AbortController().signal,
+      keepAliveMs: 0,
+    });
+    const response = renderHttpOutputToWebResponse({
+      kind: 'sse',
+      status: 200,
+      stream,
+      contentType: 'text/event-stream',
+      disposition: 'inline',
+    } as HttpOutput);
+    const reader = (response?.body as ReadableStream<Uint8Array>).getReader();
+    expect(new TextDecoder().decode((await reader.read()).value)).toContain('notifications/subscriptions/acknowledged');
+
+    // The client reads on, so the stream is waiting for an update when it cancels.
+    const waiting = reader.read();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const cancelled = reader.cancel();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(release).toHaveBeenCalledTimes(1);
+    expect(await waiting).toEqual({ value: undefined, done: true });
+    await cancelled;
   });
 });
