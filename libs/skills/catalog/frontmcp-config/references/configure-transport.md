@@ -42,7 +42,7 @@ Configure how clients connect to your FrontMCP server — SSE, Streamable HTTP, 
       defaultTtlMs: 3600000,
     },
     distributedMode: 'auto', // boolean | 'auto'
-    sse: { heartbeatMs: 15_000 }, // keep-alive on open streams; 0 or false sends none
+    sse: { heartbeatMs: 15_000 }, // keep-alive on open streams; 0 or false sends none; at most 2_147_483_647
     eventStore: {
       enabled: true,
       provider: 'redis', // 'memory' | 'redis' | 'sqlite'
@@ -158,7 +158,7 @@ An open MCP stream sends an SSE comment while it has nothing else to send, so a 
 
 ```typescript
 transport: {
-  sse: { heartbeatMs: 20_000 }, // default 15_000; 0 or false sends none
+  sse: { heartbeatMs: 20_000 }, // default 15_000; 0 or false sends none; at most 2_147_483_647 (about 24.8 days)
 }
 ```
 
@@ -166,6 +166,7 @@ It covers the Streamable HTTP `POST` response stream and the standalone `GET` st
 
 - **Since 1.13.2.** Before it, the 2026-07-28 request stream and the legacy SSE stream sent nothing between events. The Streamable HTTP streams already sent `: keepalive` every 15 s, fixed.
 - A 2026-07-28 call that opted into no notifications is answered with one JSON object, so it has no stream to keep alive. For a long call behind a proxy, send a `progressToken`.
+- An interval above 2,147,483,647 ms, the longest delay a timer keeps (about 24.8 days), is refused when the config is read: Node would run it every millisecond.
 - `events/stream` keeps its own heartbeat: `events.push.heartbeatMs`.
 
 ## Target-Specific Recommendations
