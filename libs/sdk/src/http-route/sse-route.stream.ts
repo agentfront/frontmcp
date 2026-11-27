@@ -13,7 +13,7 @@ export interface SseRouteStreamOptions {
   onError: (error: unknown) => void;
   onClose?: () => void;
   /** Asked before each view and heartbeat; the stream ends once it answers `false` (the person's session ended). */
-  authorized?: () => boolean;
+  authorized?: () => boolean | Promise<boolean>;
 }
 
 /** One `data:` event: an object as JSON, a string as one data line per line. */
@@ -42,7 +42,7 @@ export class SseRouteStream implements AsyncIterableIterator<Uint8Array> {
 
   constructor(private readonly options: SseRouteStreamOptions) {
     this.unsubscribe = options.subscribe(() => this.schedule());
-    this.heartbeat = setInterval(() => this.beat(), options.heartbeatMs);
+    this.heartbeat = setInterval(() => void this.beat(), options.heartbeatMs);
     this.heartbeat.unref?.();
     void this.produce();
   }
@@ -90,19 +90,31 @@ export class SseRouteStream implements AsyncIterableIterator<Uint8Array> {
     }, this.options.coalesceMs);
   }
 
-  private beat(): void {
-    if (this.options.authorized?.() === false) this.close();
-    else this.offer(HEARTBEAT, false);
+  /**
+   * Whether the reader may stay. A check that answers `false` ends the stream, and so does one that fails, which is
+   * reported first: the stream cannot tell whether the reader may stay.
+   */
+  private async stillAuthorized(): Promise<boolean> {
+    let authorized: boolean | undefined;
+    try {
+      authorized = await this.options.authorized?.();
+    } catch (error) {
+      this.options.onError(error);
+      authorized = false;
+    }
+    if (authorized === false) this.close();
+    return authorized !== false;
+  }
+
+  private async beat(): Promise<void> {
+    if (await this.stillAuthorized()) this.offer(HEARTBEAT, false);
   }
 
   private async produce(): Promise<void> {
-    if (this.options.authorized?.() === false) {
-      this.close();
-      return;
-    }
     this.producing = true;
     this.dirty = false;
     try {
+      if (!(await this.stillAuthorized())) return;
       const view = await this.options.produce();
       if (view !== undefined) this.offer(encoder.encode(formatSseEvent(view)), true);
     } catch (error) {

@@ -42,7 +42,15 @@ describe('peopleAuthOptionsSchema', () => {
     });
   });
 
+  it('keeps store: false, which keeps sessions in memory', () => {
+    expect(peopleAuthOptionsSchema().parse({ mode: 'loopback-token', store: false })).toEqual({
+      ...DEFAULTS,
+      store: false,
+    });
+  });
+
   it.each([
+    ['a store that is not false', { mode: 'loopback-token', store: true }],
     ['an unknown mode', 'oidc'],
     ['an unknown setting', { mode: 'loopback-token', ttl: 5 }],
     ['a code that lives longer than 10 minutes', { mode: 'loopback-token', codeTtlMs: 600_001 }],
@@ -271,6 +279,316 @@ describe('LoopbackTokenAuth', () => {
 
       expect(auth.verifySession(session.cookieValue)).toEqual({ expiresAt: 1_000_000 + 43_200_000 });
     });
+  });
+});
+
+function mapStore() {
+  const entries = new Map<string, { value: string; ttlSeconds?: number }>();
+  return {
+    entries,
+    get: jest.fn(async (key: string) => entries.get(key)?.value ?? null),
+    set: jest.fn(async (key: string, value: string, options?: { ttlSeconds?: number }) => {
+      entries.set(key, { value, ttlSeconds: options?.ttlSeconds });
+    }),
+    delete: jest.fn(async (key: string) => entries.delete(key)),
+  };
+}
+
+describe('LoopbackTokenAuth with a session store (#1355)', () => {
+  let store: ReturnType<typeof mapStore>;
+  let auth: LoopbackTokenAuth;
+
+  beforeEach(() => {
+    jest.useFakeTimers({ now: 1_000_000 });
+    store = mapStore();
+    auth = new LoopbackTokenAuth(DEFAULTS, { store });
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  async function keptSignIn(subject?: string): Promise<string> {
+    const { code } = auth.createCode(subject ? { subject } : {});
+    const result = auth.exchangeCode(code, 'client-a');
+    if (!result.ok) throw new Error('the code was refused');
+    await auth.flush();
+    return result.cookieValue;
+  }
+
+  it('lets the next process on the same store find the session, so a restart signs no one out', async () => {
+    const cookieValue = await keptSignIn();
+    const restarted = new LoopbackTokenAuth(DEFAULTS, { store });
+
+    expect(restarted.verifySession(cookieValue)).toBeUndefined();
+    expect(await restarted.findSession(cookieValue)).toEqual({ expiresAt: 1_000_000 + 43_200_000 });
+  });
+
+  it('keeps the subject a session was signed in for', async () => {
+    const cookieValue = await keptSignIn('principal:alice');
+
+    expect(await new LoopbackTokenAuth(DEFAULTS, { store }).findSession(cookieValue)).toEqual({
+      expiresAt: 1_000_000 + 43_200_000,
+      subject: 'principal:alice',
+    });
+  });
+
+  it('keeps a digest of the cookie value, never the value, for as long as the session lasts', async () => {
+    const cookieValue = await keptSignIn();
+
+    const [[key, entry]] = [...store.entries];
+    expect(key).toMatch(/^session:[A-Za-z0-9_-]{43}$/);
+    expect(`${key} ${entry.value}`).not.toContain(cookieValue);
+    expect(entry.ttlSeconds).toBe(43_200);
+  });
+
+  it('ends the kept session when the person signs out', async () => {
+    const cookieValue = await keptSignIn();
+
+    auth.endSession(cookieValue);
+    await auth.flush();
+
+    expect(store.entries.size).toBe(0);
+    expect(await new LoopbackTokenAuth(DEFAULTS, { store }).findSession(cookieValue)).toBeUndefined();
+  });
+
+  describe('a sign-out the store cannot remove at once', () => {
+    it('refuses the session here while the store still holds it, and says so', async () => {
+      const onError = jest.fn();
+      auth = new LoopbackTokenAuth(DEFAULTS, { store, onError });
+      const cookieValue = await keptSignIn();
+      store.delete.mockRejectedValueOnce(new Error('store down'));
+
+      auth.endSession(cookieValue);
+      await auth.flush();
+
+      expect(store.entries.size).toBe(1);
+      expect(onError).toHaveBeenCalledWith(expect.stringContaining('could not be removed'), expect.any(Error));
+      expect(await auth.findSession(cookieValue)).toBeUndefined();
+    });
+
+    it('refuses the session while the removal is still on its way to the store', async () => {
+      const cookieValue = await keptSignIn();
+      let finish: () => void = () => undefined;
+      store.delete.mockImplementationOnce(
+        (key: string) => new Promise<boolean>((resolve) => (finish = () => resolve(store.entries.delete(key)))),
+      );
+
+      auth.endSession(cookieValue);
+
+      expect(await auth.findSession(cookieValue)).toBeUndefined();
+      finish();
+      await auth.flush();
+      expect(store.entries.size).toBe(0);
+    });
+
+    it('refuses a session another process made, as signed out here', async () => {
+      const cookieValue = await keptSignIn();
+      const other = new LoopbackTokenAuth(DEFAULTS, { store });
+      store.delete.mockRejectedValueOnce(new Error('store down'));
+
+      other.endSession(cookieValue);
+      await other.flush();
+
+      expect(store.entries.size).toBe(1);
+      expect(await other.findSession(cookieValue)).toBeUndefined();
+    });
+
+    it('tries the removal again when the cookie comes back', async () => {
+      const cookieValue = await keptSignIn();
+      store.delete.mockRejectedValueOnce(new Error('store down'));
+      auth.endSession(cookieValue);
+      await auth.flush();
+
+      expect(await auth.findSession(cookieValue)).toBeUndefined();
+      await auth.flush();
+
+      expect(store.delete).toHaveBeenCalledTimes(2);
+      expect(store.entries.size).toBe(0);
+    });
+
+    it('tries the removal again at the next flush, such as the next sign-in or shutdown', async () => {
+      const cookieValue = await keptSignIn();
+      store.delete.mockRejectedValueOnce(new Error('store down'));
+      auth.endSession(cookieValue);
+      await auth.flush();
+
+      await auth.flush();
+
+      expect(store.delete).toHaveBeenCalledTimes(2);
+      expect(store.entries.size).toBe(0);
+      expect(await new LoopbackTokenAuth(DEFAULTS, { store }).findSession(cookieValue)).toBeUndefined();
+    });
+
+    it('stops trying once the session would have expired, when the store has dropped it anyway', async () => {
+      const cookieValue = await keptSignIn();
+      store.delete.mockRejectedValueOnce(new Error('store down'));
+      auth.endSession(cookieValue);
+      await auth.flush();
+
+      jest.advanceTimersByTime(43_200_001);
+      await auth.flush();
+
+      expect(store.delete).toHaveBeenCalledTimes(1);
+    });
+
+    it('leaves the other sessions signed in', async () => {
+      const leaving = await keptSignIn();
+      const staying = await keptSignIn();
+      store.delete.mockRejectedValueOnce(new Error('store down'));
+
+      auth.endSession(leaving);
+      await auth.flush();
+
+      expect(await auth.findSession(staying)).toEqual({ expiresAt: 1_000_000 + 43_200_000 });
+      expect(await new LoopbackTokenAuth(DEFAULTS, { store }).findSession(staying)).toEqual({
+        expiresAt: 1_000_000 + 43_200_000,
+      });
+    });
+  });
+
+  describe('a session this process made, on a store other processes share', () => {
+    it('ends here once another process on the store signs it out', async () => {
+      const cookieValue = await keptSignIn();
+      const other = new LoopbackTokenAuth(DEFAULTS, { store });
+
+      other.endSession(cookieValue);
+      await other.flush();
+
+      expect(await auth.findSession(cookieValue)).toBeUndefined();
+      expect(auth.verifySession(cookieValue)).toBeUndefined();
+    });
+
+    it('stays signed in while the store cannot be read, and says so', async () => {
+      const onError = jest.fn();
+      auth = new LoopbackTokenAuth(DEFAULTS, { store, onError });
+      const cookieValue = await keptSignIn();
+      store.get.mockRejectedValueOnce(new Error('store down'));
+
+      expect(await auth.findSession(cookieValue)).toEqual({ expiresAt: 1_000_000 + 43_200_000 });
+      expect(onError).toHaveBeenCalledWith(expect.stringContaining('could not be read'), expect.any(Error));
+    });
+
+    /** Holds the next store read until the test answers it: with what the store held when it was made, or an error. */
+    function holdNextRead(): { answer: () => void; fail: () => void } {
+      const held = { answer: () => undefined, fail: () => undefined } as { answer: () => void; fail: () => void };
+      store.get.mockImplementationOnce(
+        (key: string) =>
+          new Promise<string | null>((resolve, reject) => {
+            const value = store.entries.get(key)?.value ?? null;
+            held.answer = () => resolve(value);
+            held.fail = () => reject(new Error('store down'));
+          }),
+      );
+      return held;
+    }
+
+    it('refuses a session signed out here while the store was read, though the read then fails', async () => {
+      const cookieValue = await keptSignIn();
+      const read = holdNextRead();
+
+      const finding = auth.findSession(cookieValue);
+      auth.endSession(cookieValue);
+      read.fail();
+
+      expect(await finding).toBeUndefined();
+    });
+
+    it('refuses a session signed out and removed here while the store answered with what it held before', async () => {
+      const cookieValue = await keptSignIn();
+      const read = holdNextRead();
+
+      const finding = auth.findSession(cookieValue);
+      auth.endSession(cookieValue);
+      await auth.flush();
+      read.answer();
+
+      expect(await finding).toBeUndefined();
+    });
+
+    it('refuses a session that expired while the store was read, though the read then fails', async () => {
+      const cookieValue = await keptSignIn();
+      const read = holdNextRead();
+
+      const finding = auth.findSession(cookieValue);
+      jest.setSystemTime(1_000_000 + 43_200_000);
+      read.fail();
+
+      expect(await finding).toBeUndefined();
+    });
+
+    it('stays signed in when the store could not keep it, as it lives only here', async () => {
+      store.set.mockRejectedValueOnce(new Error('store down'));
+      const cookieValue = await keptSignIn();
+
+      expect(await auth.findSession(cookieValue)).toEqual({ expiresAt: 1_000_000 + 43_200_000 });
+    });
+  });
+
+  it('finds no kept session once it has expired', async () => {
+    const cookieValue = await keptSignIn();
+
+    jest.advanceTimersByTime(43_200_001);
+
+    expect(await new LoopbackTokenAuth(DEFAULTS, { store }).findSession(cookieValue)).toBeUndefined();
+  });
+
+  it.each([
+    ['that is not JSON', 'not json'],
+    ['whose expiry is not a number', JSON.stringify({ expiresAt: 'later' })],
+    ['whose subject is not a string', JSON.stringify({ expiresAt: 2_000_000_000_000, subject: 7 })],
+  ])('finds no session from a kept record %s', async (_case, value) => {
+    const cookieValue = await keptSignIn();
+    for (const entry of store.entries.values()) entry.value = value;
+
+    expect(await new LoopbackTokenAuth(DEFAULTS, { store }).findSession(cookieValue)).toBeUndefined();
+  });
+
+  it('waits in flush() for the session to be kept', async () => {
+    let finish: () => void = () => undefined;
+    store.set.mockImplementationOnce(() => new Promise<void>((resolve) => (finish = resolve)));
+    const { code } = auth.createCode();
+    auth.exchangeCode(code, 'client-a');
+    let flushed = false;
+
+    const flushing = auth.flush().then(() => (flushed = true));
+    await Promise.resolve();
+    expect(flushed).toBe(false);
+    finish();
+    await flushing;
+
+    expect(flushed).toBe(true);
+  });
+
+  it('still signs the person in when the store cannot keep the session, and says so', async () => {
+    const onError = jest.fn();
+    store.set.mockRejectedValueOnce(new Error('store down'));
+    auth = new LoopbackTokenAuth(DEFAULTS, { store, onError });
+
+    const cookieValue = await keptSignIn();
+
+    expect(auth.verifySession(cookieValue)).toEqual({ expiresAt: 1_000_000 + 43_200_000 });
+    expect(onError).toHaveBeenCalledWith(expect.stringContaining('could not be kept'), expect.any(Error));
+  });
+
+  it('finds no session when the store cannot be read, and says so', async () => {
+    const onError = jest.fn();
+    store.get.mockRejectedValueOnce(new Error('store down'));
+
+    const found = await new LoopbackTokenAuth(DEFAULTS, { store, onError }).findSession('a-cookie-value');
+
+    expect(found).toBeUndefined();
+    expect(onError).toHaveBeenCalledWith(expect.stringContaining('could not be read'), expect.any(Error));
+  });
+
+  it('without a store, finds only the sessions this process made', async () => {
+    const memoryOnly = new LoopbackTokenAuth(DEFAULTS);
+    const { code } = memoryOnly.createCode();
+    const result = memoryOnly.exchangeCode(code, 'client-a');
+    if (!result.ok) throw new Error('the code was refused');
+
+    expect(await memoryOnly.findSession(result.cookieValue)).toEqual({ expiresAt: 1_000_000 + 43_200_000 });
+    expect(await new LoopbackTokenAuth(DEFAULTS).findSession(result.cookieValue)).toBeUndefined();
   });
 });
 

@@ -1001,7 +1001,7 @@
         },
         {
           "name": "configure-http",
-          "description": "Configure HTTP server port, CORS policy, unix sockets, entry path prefix, request body limits, and custom HTTP routes",
+          "description": "Configure HTTP server port, CORS policy, unix sockets, entry path prefix, request body limits, custom HTTP routes, and a user-content listener",
           "examples": [
             {
               "name": "cors-restricted-origins",
@@ -1050,6 +1050,18 @@
                 "When `socketPath` is set, the `port` field is ignored",
                 "Disabling CORS with `cors: false` since unix sockets are local-only",
                 "Suitable for CLI tools, daemons, and process manager integrations"
+              ]
+            },
+            {
+              "name": "user-content-origin",
+              "description": "Serve user content (rendered frames, uploads) from a second listener on an origin of its own, with its own Host check and CSP.",
+              "level": "intermediate",
+              "tags": ["config", "http", "user-content", "static", "csp", "origin", "security"],
+              "features": [
+                "Opening a second listener with `http.userContent` that starts and stops with the server",
+                "Serving static files from a directory, on a port the MCP endpoint never shares",
+                "Checking `Host` against the content origin with `allowedHosts`",
+                "Sending a content security policy and headers of its own, apart from the MCP listener"
               ]
             }
           ]
@@ -1937,7 +1949,7 @@
         },
         {
           "name": "create-http-route",
-          "description": "Serve pages, APIs and live SSE views for people beside the MCP endpoint with @HttpRoute classes that share the app's providers, behind people auth and a same-origin check",
+          "description": "Serve pages, APIs and live SSE views beside the MCP endpoint with @HttpRoute classes that share the app's providers, behind people auth or the server's bearer auth and authorities, and a same-origin check",
           "examples": []
         },
         {
@@ -2538,7 +2550,7 @@
         },
         {
           "name": "result-handles-plugin",
-          "description": "Fold large tool answers into a preview, a shape and a handle, and let the model read slices with result_query",
+          "description": "Fold large tool answers (and, opted in, resource reads) into a preview, a shape and a handle, and let the model read, filter, search, sort and count them with result_query",
           "examples": []
         }
       ]
@@ -3792,7 +3804,7 @@
               "level": "basic",
               "tags": ["setup", "sqlite", "session", "database", "local"],
               "features": [
-                "`@frontmcp/storage-sqlite` and `better-sqlite3` as required dependencies",
+                "`@frontmcp/storage-sqlite`, which brings `better-sqlite3` as an optional dependency and runs on `node:sqlite` without it",
                 "`sqlite` config in `@FrontMcp` with `path` and `walMode`",
                 "WAL mode creates three files (`.sqlite`, `.sqlite-wal`, `.sqlite-shm`)",
                 "Tilde-prefixed paths for stable storage across working directories"

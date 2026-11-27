@@ -220,11 +220,13 @@ With `--from-entry`, `export` writes **your project's own** `@Skill` entries
 to agent skills folders instead, and `--check` reports copies that drifted —
 see **Exporting project-defined skills to every agent** below.
 
-| Flag                         | Description                                                                           | Default                                               |
-| ---------------------------- | ------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| `--from-entry <path>`        | Export the `@Skill` entries of this entry file                                        | —                                                     |
-| `-p, --provider <providers>` | `claude`, `codex`, or both comma-separated (`claude,codex`); only with `--from-entry` | `skills.provider` in `frontmcp.config`, else `claude` |
-| `--check`                    | Write nothing; exit 1 when a copy drifted from the source; only with `--from-entry`   | `false`                                               |
+| Flag                         | Description                                                                                                                             | Default                                               |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `--from-entry <path>`        | Export the `@Skill` entries of this entry file                                                                                          | —                                                     |
+| `-p, --provider <providers>` | `claude`, `codex`, or both comma-separated (`claude,codex`); only with `--from-entry`                                                   | `skills.provider` in `frontmcp.config`, else `claude` |
+| `--skills-dir <directories>` | Skills folders that get each skill as `<dir>/<name>`, comma-separated (a plugin's `skills/`, another agent's); only with `--from-entry` | — (with it, `--provider` has no default)              |
+| `--all-folders`              | Copy every folder beside a skill's `SKILL.md` (`rules/`, say), not only the four resource folders; only with `--from-entry`             | `false`                                               |
+| `--check`                    | Write nothing; exit 1 when a copy drifted from the source; only with `--from-entry`                                                     | `false`                                               |
 
 ### `frontmcp skills publish <name>`
 
@@ -370,6 +372,29 @@ frontmcp skills export --from-entry src/main.ts --all --provider claude,codex --
   folder that holds the skill's own source: it skips that skill with
   `was not written by frontmcp skills export` or `holds the skill's own source`
   and exits 1. Move the folder away, or export with `--out` to another folder.
+- `--skills-dir` names skills folders of your own, such as the `skills/` of a
+  Claude Code or Codex plugin, or another agent's folder (`.github/skills`):
+  each skill goes straight to `<dir>/<name>/`, relative to the working
+  directory, comma-separated for several. Given alone, it writes only those
+  folders (`skills.provider` in `frontmcp.config` doesn't apply); with
+  `--provider`, the providers' folders too. `--check`, the marker and the
+  removal of orphans work the same there; the marker names the entry relative
+  to the skills folder, so projects that export entries at the same path
+  (`src/main.ts`) to one skills folder never remove each other's skills.
+- `--all-folders` copies every folder beside a skill's `SKILL.md` (a skill
+  whose `instructions: { file }` is a `SKILL.md`), `rules/` say, besides the
+  declared `references`, `examples`, `scripts` and `assets`. Files beside it
+  and hidden folders are not copied; a folder that links out of the skill's
+  folder is left out, and a folder holding another `SKILL.md` skips the skill.
+  Without it, the export prints `left out rules/ of <skill>: pass --all-folders
+...`. Pass the same flags to `--check`.
+
+```bash
+# A plugin's own skills folder, with every folder of each skill
+frontmcp skills export --from-entry src/main.ts --all --skills-dir plugin/skills --all-folders
+frontmcp skills export --from-entry src/main.ts --all --skills-dir plugin/skills --all-folders --check
+```
+
 - `--check` writes nothing and exits 1 on drift: a missing copy, a **stale** one
   (the skill changed in the source since it was exported), a **modified** one
   (a file edited, added or removed by hand, or a listed tool's description
@@ -379,8 +404,8 @@ frontmcp skills export --from-entry src/main.ts --all --provider claude,codex --
 - With `--all`, a folder an earlier export from the same entry wrote for a
   skill that no longer exists is removed. Folders without the marker, and those
   another entry exported to the same `--out` folder, are never touched.
-- `--provider` and `--check` need `--from-entry`; `--target` is for catalog
-  exports only.
+- `--provider`, `--skills-dir`, `--all-folders` and `--check` need
+  `--from-entry`; `--target` is for catalog exports only.
 
 ## Other AI clients (Cursor / Windsurf / Copilot)
 
@@ -558,18 +583,19 @@ frontmcp skills list --category guides       # End-to-end examples and best prac
 
 ## Common Patterns
 
-| Pattern                       | Correct                                                                    | Incorrect                                                  | Why                                                                                                    |
-| ----------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Installing a skill            | `frontmcp skills install frontmcp-development --provider claude`           | `cp node_modules/.../SKILL.md .claude/skills/`             | The CLI handles directory creation, naming, and reference files automatically                          |
-| Bulk install (entire catalog) | `frontmcp skills install --all --provider claude`                          | Loop over `frontmcp skills install <name>` per skill name  | `--all` resolves the manifest in a single pass and writes consistently into the provider directory     |
-| Bulk install (subset)         | `frontmcp skills install --category development --provider claude`         | `frontmcp skills install --all` followed by manual cleanup | `--category`/`--tag` filter at install time so you only ship the skills you need                       |
-| Searching skills              | `frontmcp skills search "oauth authentication"`                            | `frontmcp skills list \| grep oauth`                       | Search uses weighted text matching (description 3x, tags 2x) for better relevance                      |
-| Choosing delivery mode        | Install 2-4 core skills statically; search the rest on demand              | Install every skill statically into the project            | Static skills consume tokens on every agent invocation; keep the set small                             |
-| Updating an installed skill   | `frontmcp skills install frontmcp-development --provider claude` (re-run)  | Manually editing the installed SKILL.md file               | Re-installing overwrites with the catalog bundled in the installed CLI version and preserves structure |
-| Filtering by category         | `frontmcp skills list --category deployment`                               | `frontmcp skills search "deployment"`                      | `--category` uses the manifest taxonomy; search is for free-text queries                               |
-| Skills-unaware IDE (Cursor)   | `frontmcp skills export --name <skill> --target cursor`                    | `frontmcp skills install <skill> --provider cursor`        | Cursor / Windsurf / Copilot consume rule files; `install` only writes `SKILL.md` packages              |
-| A server's skills in agents   | `frontmcp skills export --from-entry src/main.ts --all -p claude,codex`    | Hand-copying `SKILL.md` into each agent folder             | One source, and `--check` in CI catches a copy that drifted                                            |
-| Publishing                    | `frontmcp skills publish <name> --dry-run` first, then without `--dry-run` | Submitting directly without inspecting the payload         | `--dry-run` prints the exact endpoint + body so you can audit before submitting credentials            |
+| Pattern                       | Correct                                                                                          | Incorrect                                                  | Why                                                                                                    |
+| ----------------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Installing a skill            | `frontmcp skills install frontmcp-development --provider claude`                                 | `cp node_modules/.../SKILL.md .claude/skills/`             | The CLI handles directory creation, naming, and reference files automatically                          |
+| Bulk install (entire catalog) | `frontmcp skills install --all --provider claude`                                                | Loop over `frontmcp skills install <name>` per skill name  | `--all` resolves the manifest in a single pass and writes consistently into the provider directory     |
+| Bulk install (subset)         | `frontmcp skills install --category development --provider claude`                               | `frontmcp skills install --all` followed by manual cleanup | `--category`/`--tag` filter at install time so you only ship the skills you need                       |
+| Searching skills              | `frontmcp skills search "oauth authentication"`                                                  | `frontmcp skills list \| grep oauth`                       | Search uses weighted text matching (description 3x, tags 2x) for better relevance                      |
+| Choosing delivery mode        | Install 2-4 core skills statically; search the rest on demand                                    | Install every skill statically into the project            | Static skills consume tokens on every agent invocation; keep the set small                             |
+| Updating an installed skill   | `frontmcp skills install frontmcp-development --provider claude` (re-run)                        | Manually editing the installed SKILL.md file               | Re-installing overwrites with the catalog bundled in the installed CLI version and preserves structure |
+| Filtering by category         | `frontmcp skills list --category deployment`                                                     | `frontmcp skills search "deployment"`                      | `--category` uses the manifest taxonomy; search is for free-text queries                               |
+| Skills-unaware IDE (Cursor)   | `frontmcp skills export --name <skill> --target cursor`                                          | `frontmcp skills install <skill> --provider cursor`        | Cursor / Windsurf / Copilot consume rule files; `install` only writes `SKILL.md` packages              |
+| A server's skills in agents   | `frontmcp skills export --from-entry src/main.ts --all -p claude,codex`                          | Hand-copying `SKILL.md` into each agent folder             | One source, and `--check` in CI catches a copy that drifted                                            |
+| A plugin's bundled skills     | `frontmcp skills export --from-entry src/main.ts --all --skills-dir plugin/skills --all-folders` | `--out plugin/skills` (it gets `.claude/skills` inside)    | `--skills-dir` is the skills folder itself, and `--check` guards the plugin's copies                   |
+| Publishing                    | `frontmcp skills publish <name> --dry-run` first, then without `--dry-run`                       | Submitting directly without inspecting the payload         | `--dry-run` prints the exact endpoint + body so you can audit before submitting credentials            |
 
 ## Verification Checklist
 

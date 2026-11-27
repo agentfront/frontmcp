@@ -214,6 +214,53 @@ export interface HttpOptionsInterface {
    * @example ['x-acme-*', 'x-request-source']
    */
   forwardHeaders?: string[];
+
+  /**
+   * A second listener that serves static user content from its own origin, apart from the MCP
+   * and API routes, which it never answers. It starts and stops with the server. Only a Node HTTP
+   * server opens it: serverless, fetch (Workers) and stdio servers ignore it with a startup warning.
+   * See {@link UserContentOptions}.
+   */
+  userContent?: UserContentOptions;
+}
+
+/** The user-content listener; see {@link HttpOptionsInterface.userContent}. */
+export interface UserContentOptions {
+  /** TCP port, on the main listener's bind address. Required unless `socketPath` is set; `0` lets the OS choose. */
+  port?: number;
+
+  /** Unix socket path, created like the main listener's (owner-only). When set, `port` is ignored and Host is not checked. */
+  socketPath?: string;
+
+  /**
+   * Directory the files are served from; relative paths resolve against the working directory.
+   * Dotfiles, paths outside it (a symlink pointing outside it included) and directory listings get 404;
+   * `index.html` is served for a directory.
+   */
+  root: string;
+
+  /**
+   * Allowed `Host` header values (e.g. `['content.example.com', 'localhost:3001']`). Unset: the
+   * loopback names with the bound port on a loopback bind; on a routable bind, no Host check, with
+   * a startup warning naming this option.
+   */
+  allowedHosts?: string[];
+
+  /** Response headers sent on every response, after the default `X-Content-Type-Options: nosniff`. */
+  headers?: Record<string, string>;
+
+  /** Content Security Policy sent on every response. */
+  csp?: UserContentCspOptions;
+}
+
+/** The user-content listener's Content Security Policy. */
+export interface UserContentCspOptions {
+  /** Directive name to value. Arrays are joined with a space; `''` emits a value-less directive. */
+  directives: Record<string, string | string[]>;
+  /** Appended as `report-uri`. */
+  reportUri?: string;
+  /** Send `Content-Security-Policy-Report-Only` instead of enforcing. */
+  reportOnly?: boolean;
 }
 
 /** Authentication of the `@HttpRoute` pages, apart from the MCP endpoint's `auth`. */
@@ -223,7 +270,8 @@ export interface HttpAuthOptions {
    * (`POST /_frontmcp/people/code` with `Authorization: Bearer <token>`, or `this.get(LoopbackTokenAuth).createCode()`
    * in a tool); the person opens `/_frontmcp/people/login?code=…`, whose page posts the code back and gets an
    * HttpOnly, SameSite=Strict session cookie. With it set, routes need a signed-in person unless they say
-   * `auth: 'public'`.
+   * `auth: 'public'`. Sessions are kept in the server's `redis`, else its `sqlite`, else a Redis or SQLite
+   * `auth.tokenStorage`, so a restart signs no one out; `store: false` keeps them in memory.
    */
   people?: PeopleAuthOption;
 }

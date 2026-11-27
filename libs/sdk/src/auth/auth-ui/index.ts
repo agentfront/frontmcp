@@ -41,6 +41,7 @@ export {
   authUiPageHeaders,
   authUiSecurityHeaders,
   buildAuthUiPage,
+  formActionSources,
 } from './auth-ui.render';
 export {
   buildLoginState,

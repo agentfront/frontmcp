@@ -28,6 +28,7 @@ export type {
   PublicAuthOptionsInterface,
   StaticAuthOptionsInterface,
   TransparentAuthOptionsInterface,
+  TransparentResourceMetadataOptions,
   LocalAuthOptionsInterface,
   RemoteAuthOptionsInterface,
   LocalOrRemoteAuthOptionsInterface,

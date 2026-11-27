@@ -1,6 +1,7 @@
 /**
  * Base Layout Tests
  */
+import { AUTH_PAGE_CSS } from '../auth-page-styles';
 import {
   authLayout,
   baseLayout,
@@ -12,6 +13,7 @@ import {
   DEFAULT_THEME,
   escapeHtml,
   extraWideLayout,
+  INLINE_AUTH_PAGE_CSP,
   wideLayout,
 } from '../base-layout';
 
@@ -360,6 +362,12 @@ describe('authLayout', () => {
   });
 });
 
+/** The sources a CSP directive allows. */
+function sourcesOf(csp: string, directive: string): string[] {
+  const entry = csp.split('; ').find((part) => part.startsWith(`${directive} `));
+  return entry ? entry.split(' ').slice(1) : [];
+}
+
 describe('builtInAuthPageHeaders (#263)', () => {
   it('sends CSP, anti-framing, nosniff, referrer and no-store headers', () => {
     expect(builtInAuthPageHeaders()).toEqual({
@@ -371,16 +379,66 @@ describe('builtInAuthPageHeaders (#263)', () => {
     });
   });
 
-  it('allows the CDN resources the built-in pages load, and forbids framing', () => {
-    expect(BUILT_IN_AUTH_PAGE_CSP).toContain(`script-src 'self' 'unsafe-inline' ${new URL(CDN.tailwind).origin}`);
-    expect(BUILT_IN_AUTH_PAGE_CSP).toContain('https://fonts.googleapis.com');
-    expect(BUILT_IN_AUTH_PAGE_CSP).toContain('https://fonts.gstatic.com');
-    expect(BUILT_IN_AUTH_PAGE_CSP).toContain("frame-ancestors 'none'");
+  it('still allows what a baseLayout page without inlineStyles loads, as in 1.13.1, so a page that sends it keeps its styles', () => {
+    const csp = builtInAuthPageHeaders()['Content-Security-Policy'];
+    const html = baseLayout('<div class="bg-white">x</div>', { title: 'Custom' });
+
+    expect(html).toContain(CDN.tailwind);
+    expect(sourcesOf(csp, 'script-src')).toContain(new URL(CDN.tailwind).origin);
+    expect(sourcesOf(csp, 'style-src')).toContain(new URL(CDN.fonts.stylesheet).origin);
+    expect(sourcesOf(csp, 'font-src')).toContain('https://fonts.gstatic.com');
+  });
+
+  it("sends the built-in pages' policy with csp: 'inline': no third-party script, style or font (#1480)", () => {
+    const headers = builtInAuthPageHeaders({ csp: 'inline' });
+
+    expect(headers['Content-Security-Policy']).toBe(INLINE_AUTH_PAGE_CSP);
+    expect(INLINE_AUTH_PAGE_CSP).toContain("script-src 'self' 'unsafe-inline';");
+    expect(INLINE_AUTH_PAGE_CSP).toContain("style-src 'self' 'unsafe-inline';");
+    expect(INLINE_AUTH_PAGE_CSP).not.toContain('font-src');
+    expect(INLINE_AUTH_PAGE_CSP).not.toMatch(/https?:\/\//);
+    expect(INLINE_AUTH_PAGE_CSP).toContain("frame-ancestors 'none'");
+    expect(headers['X-Frame-Options']).toBe('DENY');
   });
 
   it('leaves out the CSP for markup the server did not write', () => {
     const headers = builtInAuthPageHeaders({ csp: false });
     expect(headers['Content-Security-Policy']).toBeUndefined();
     expect(headers['X-Frame-Options']).toBe('DENY');
+  });
+});
+
+describe('baseLayout inlineStyles (#1480)', () => {
+  it('inlines the stylesheet and loads nothing from a third party', () => {
+    const html = baseLayout('<div class="bg-white">x</div>', { title: 'Sign In', inlineStyles: true });
+
+    expect(html).toContain(`<style>${AUTH_PAGE_CSS}</style>`);
+    expect(html).not.toContain('<script');
+    expect(html).not.toContain('<link');
+    expect(html).not.toContain(CDN.tailwind);
+    expect(html).not.toContain('fonts.googleapis.com');
+  });
+
+  it("sets only the caller's theme over the stylesheet's defaults, and keeps its CSS as written", () => {
+    const html = baseLayout('x', {
+      title: 'Sign In',
+      inlineStyles: true,
+      theme: { colors: { primary: '#ff0000' }, fonts: { sans: 'Georgia, serif' }, customCss: '.brand{color:red}' },
+    });
+
+    expect(html).toContain(
+      ':root{--color-primary: #ff0000;\n        --font-sans: Georgia, serif;}.brand{color:red}</style>',
+    );
+    expect(html).not.toContain('Inter');
+    expect(AUTH_PAGE_CSS).toContain(`var(--color-primary, ${DEFAULT_THEME.colors?.primary})`);
+    expect(AUTH_PAGE_CSS).toContain(`var(--color-secondary, ${DEFAULT_THEME.colors?.secondary})`);
+  });
+
+  it('still loads the CDN without it', () => {
+    const html = baseLayout('x', { title: 'Page' });
+
+    expect(html).toContain(`<script src="${CDN.tailwind}"></script>`);
+    expect(html).toContain(CDN.fonts.stylesheet);
+    expect(html).not.toContain(AUTH_PAGE_CSS);
   });
 });

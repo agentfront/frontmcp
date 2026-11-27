@@ -1,5 +1,5 @@
-// `frontmcp skills export --from-entry <entry> --provider claude,codex [--check]`: write a server's own `@Skill`
-// entries to each agent's skills folder from one source, or report the copies that drifted from it.
+// `frontmcp skills export --from-entry <entry> --provider claude,codex [--skills-dir <dir>] [--check]`: write a
+// server's own `@Skill` entries to each agent's skills folder from one source, or report the copies that drifted from it.
 
 import * as path from 'path';
 
@@ -31,6 +31,10 @@ export interface ExportFromEntryOptions {
   /** The `--from-entry` path; the project's default entry when empty. */
   entry?: string;
   providers: SkillProvider[];
+  /** Skills folders that get each skill straight in (`<dir>/<name>`), such as a plugin's `skills/`, relative to cwd. */
+  skillsDirs?: string[];
+  /** Copy every folder beside a skill's SKILL.md, not only its references, examples, scripts and assets. */
+  allFolders?: boolean;
   name?: string;
   all?: boolean;
   /** The folder that gets each provider's skills folder (default: cwd). */
@@ -51,6 +55,8 @@ interface SkillCopy {
   files: Map<string, string>;
   /** Resource paths left out: links that lead outside their folder, or nowhere. */
   leftOut: string[];
+  /** The folders beside its SKILL.md that only `--all-folders` copies. */
+  unlisted: string[];
 }
 
 const RESOURCE_KINDS = ['references', 'examples', 'scripts', 'assets'] as const;
@@ -86,6 +92,13 @@ async function filesUnder(root: string): Promise<{ files: Array<{ name: string; 
   return { files, outside };
 }
 
+/** `copy` with the entry named `to` in its marker, where it was rendered with `from`. */
+function withMarkerSource(copy: SkillCopy, from: string, to: string): SkillCopy {
+  if (from === to) return copy;
+  // A function, so a `$` in the entry's path is written as it is, not read as a replacement pattern (`$$`, `$&`).
+  return { ...copy, skillMd: copy.skillMd.replace(markerLine(from, copy.hash), () => markerLine(to, copy.hash)) };
+}
+
 /** Put the marker on the line after the frontmatter, where agents skip it and people see it first. */
 function withMarker(skillMd: string, marker: string): string {
   const frontmatterEnd = skillMd.indexOf('\n---', 3);
@@ -105,11 +118,29 @@ function toolsSection(skill: ManifestSkill, manifest: ExtractedManifest): string
   return `\n\n## Tools\n\n${lines.join('\n')}`;
 }
 
+/**
+ * The folders beside a SKILL.md besides hidden ones and the resource folders the skill declares (`declared`, real
+ * paths), and the links among them that lead out of its folder.
+ */
+async function otherFoldersOf(skillDir: string, declared: string[]): Promise<{ folders: string[]; outside: string[] }> {
+  const realSkillDir = await realpath(skillDir);
+  const folders: string[] = [];
+  const outside: string[] = [];
+  for (const name of (await readdir(skillDir)).sort()) {
+    if (name.startsWith('.') || (RESOURCE_KINDS as readonly string[]).includes(name)) continue;
+    const real = await realpath(path.join(skillDir, name)).catch(() => undefined);
+    if (!real || !isWithin(real, realSkillDir)) outside.push(`${name}/`);
+    else if ((await stat(real)).isDirectory() && !declared.includes(real)) folders.push(name);
+  }
+  return { folders, outside };
+}
+
 async function renderCopy(
   skill: ManifestSkill,
   asset: ExtractedSkillAsset | undefined,
   manifest: ExtractedManifest,
   source: string,
+  allFolders: boolean,
 ): Promise<SkillCopy | { skipReason: string }> {
   if (!skill.hash || !asset) return { skipReason: 'its instructions could not be loaded' };
   const instructions = await readSkillInstructions(asset);
@@ -122,13 +153,35 @@ async function renderCopy(
   if (asset.instructionFile && (await fileExists(asset.instructionFile))) sources.push(asset.instructionFile);
   const files = new Map<string, string>();
   const leftOut: string[] = [];
+  const copyFolder = async (folder: string, dir: string): Promise<string[]> => {
+    sources.push(dir);
+    const listed = await filesUnder(dir);
+    for (const file of listed.files) files.set(`${folder}/${file.name}`, file.real);
+    leftOut.push(...listed.outside.map((name) => `${folder}/${name}`));
+    return listed.files.map((file) => `${folder}/${file.name}`);
+  };
+  const declared: string[] = [];
   for (const kind of RESOURCE_KINDS) {
     const dir = asset.resourceDirs?.[kind];
     if (!dir || !(await fileExists(dir))) continue;
-    sources.push(dir);
-    const listed = await filesUnder(dir);
-    for (const file of listed.files) files.set(`${kind}/${file.name}`, file.real);
-    leftOut.push(...listed.outside.map((name) => `${kind}/${name}`));
+    await copyFolder(kind, dir);
+    declared.push(await realpath(dir));
+  }
+  // A SKILL.md names the folder of its skill: the folders beside it are the skill's, as in the Agent Skills layout
+  const skillDir =
+    asset.instructionFile && path.basename(asset.instructionFile) === 'SKILL.md'
+      ? path.dirname(asset.instructionFile)
+      : undefined;
+  const others = skillDir ? await otherFoldersOf(skillDir, declared) : undefined;
+  if (allFolders && skillDir && others) {
+    for (const folder of others.folders) {
+      const nested = (await copyFolder(folder, path.join(skillDir, folder))).find(
+        (name) => path.posix.basename(name) === 'SKILL.md',
+      );
+      if (nested)
+        return { skipReason: `${nested} beside its SKILL.md is another skill; move it out to copy every folder` };
+    }
+    leftOut.push(...others.outside);
   }
   return {
     name: skill.name,
@@ -137,6 +190,7 @@ async function renderCopy(
     sources,
     files,
     leftOut,
+    unlisted: allFolders || !others ? [] : others.folders.map((folder) => `${folder}/`),
   };
 }
 
@@ -253,7 +307,7 @@ export async function exportSkillsFromEntry(options: ExportFromEntryOptions): Pr
       skipped++;
       continue;
     }
-    const copy = await renderCopy(skill, assets.get(skill.name), manifest, markerSource);
+    const copy = await renderCopy(skill, assets.get(skill.name), manifest, markerSource, options.allFolders === true);
     if ('skipReason' in copy) {
       console.error(c('red', `  Skipped ${skill.name}: ${copy.skipReason}`));
       skipped++;
@@ -263,6 +317,14 @@ export async function exportSkillsFromEntry(options: ExportFromEntryOptions): Pr
       for (const file of copy.leftOut) {
         console.log(c('yellow', `  left out ${file} of ${copy.name}: it links outside the skill, or to nothing`));
       }
+      if (copy.unlisted.length > 0) {
+        console.log(
+          c(
+            'yellow',
+            `  left out ${copy.unlisted.join(', ')} of ${copy.name}: pass --all-folders to copy every folder beside its SKILL.md`,
+          ),
+        );
+      }
     }
     copies.push(copy);
   }
@@ -270,9 +332,19 @@ export async function exportSkillsFromEntry(options: ExportFromEntryOptions): Pr
   // A skill skipped above, or left out by --name, is still in the source: its earlier copy stays
   const kept = new Set(manifest.skills.map((skill) => skill.name));
   const drift: string[] = [];
+  const bases = new Map<string, { label: string; marker: string }>();
   for (const provider of options.providers) {
-    const base = path.join(outDir, PROVIDER_DIRS[provider]);
-    for (const copy of copies) {
+    bases.set(path.join(outDir, PROVIDER_DIRS[provider]), { label: provider, marker: markerSource });
+  }
+  // A skills folder can be shared by projects whose entries have the same path in each (src/main.ts): an entry
+  // there is named relative to the folder, so one project's export never takes another's copies for its orphans
+  for (const dir of options.skillsDirs ?? []) {
+    const base = path.resolve(cwd, dir);
+    bases.set(base, { label: dir, marker: path.relative(base, entry).split(path.sep).join('/') });
+  }
+  for (const [base, { marker }] of bases) {
+    for (const rendered of copies) {
+      const copy = withMarkerSource(rendered, markerSource, marker);
       const targetDir = path.join(base, copy.name);
       const label = path.relative(cwd, targetDir);
       const refusal = await refusalOf(copy, targetDir, options.check === true);
@@ -290,7 +362,7 @@ export async function exportSkillsFromEntry(options: ExportFromEntryOptions): Pr
       }
     }
     if (!options.all) continue;
-    for (const orphan of await orphansOf(base, markerSource, kept)) {
+    for (const orphan of await orphansOf(base, marker, kept)) {
       const label = path.relative(cwd, orphan);
       if (options.check) {
         drift.push(`${label}: removed from the source`);
@@ -302,7 +374,7 @@ export async function exportSkillsFromEntry(options: ExportFromEntryOptions): Pr
   }
 
   if (skipped > 0) process.exitCode = 1;
-  const providers = options.providers.join(', ');
+  const providers = [...new Set([...bases.values()].map(({ label }) => label))].join(', ');
   if (!options.check) {
     console.log(c('bold', `\n${copies.length} skill(s) exported from ${source} to ${providers}.\n`));
     return;

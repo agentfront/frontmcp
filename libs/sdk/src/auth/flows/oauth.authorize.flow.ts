@@ -38,6 +38,7 @@ import {
   type PendingAuthorizationRecord,
   type ProviderCard,
   type ProviderPkce,
+  type RegisteredClient,
 } from '@frontmcp/auth';
 import { internalZ as z, type ZodError } from '@frontmcp/lazy-zod';
 import { generateCodeVerifier, randomUUID, sha256Base64url } from '@frontmcp/utils';
@@ -72,6 +73,7 @@ import {
   buildFederatedState,
   buildIncrementalState,
   buildLoginState,
+  formActionSources,
   type AuthFlowState,
   type AuthUiRegistry,
 } from '../auth-ui';
@@ -220,6 +222,10 @@ const stateSchema = z.object({
   // CIMD (Client ID Metadata Documents)
   isCimdClient: z.boolean().default(false).describe('Whether client_id is a CIMD URL'),
   cimdMetadata: clientMetadataDocumentSchema.optional().describe('CIMD metadata document for the client'),
+  registeredClientAuthMethod: z
+    .string()
+    .optional()
+    .describe('How the registered client validated here authenticates at the token endpoint'),
 });
 
 const outputSchema = z.union([
@@ -582,9 +588,14 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       return;
     }
 
+    // A client registered before a restart or on another instance is read from the token storage (#1478). The
+    // registration load returns is the one checked below: a load for another client can drop it from memory meanwhile.
+    let loaded: RegisteredClient | undefined;
+    if (!isCimdClientId) loaded = registry?.load ? await registry.load(client_id) : registry?.get?.(client_id);
+
     // A CIMD client id on a server with CIMD off has no metadata document to validate it, and no
     // registration either: refuse it (CimdDisabledError) rather than treat the URL as a plain id.
-    if (cimdService && !cimdService.enabled && cimdService.isCimdClientId(client_id) && !registry?.get?.(client_id)) {
+    if (cimdService && !cimdService.enabled && cimdService.isCimdClientId(client_id) && !loaded) {
       const disabled = new CimdDisabledError();
       this.logger.warn(`OAuth authorize: CIMD client_id refused, CIMD is disabled: ${client_id}`);
       this.respondWithError([disabled.message], undefined, rawState);
@@ -632,7 +643,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     // (registered) client_id + the attacker's OWN redirect_uri and receive the
     // victim's code. Reject with an error PAGE (never redirect an unvalidated
     // redirect_uri — open-redirect guard).
-    const registered = isCimdClientId ? undefined : registry?.get?.(client_id);
+    const registered = loaded;
     if (registered) {
       if (!registered.redirect_uris.includes(redirect_uri)) {
         this.logger.warn(`OAuth authorize: redirect_uri "${redirect_uri}" not registered for client "${client_id}"`);
@@ -641,6 +652,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       }
       redirectVerified = true;
       declaredClientScope = registered.scope;
+      this.state.set('registeredClientAuthMethod', registered.token_endpoint_auth_method);
     }
 
     // `dcr.allowedClientIds` (#462): a client the operator didn't list may not
@@ -1088,7 +1100,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     // the other security headers still apply.
     const auth = this.scope.metadata.auth;
     const customRender = !!(auth && auth.mode === 'local' && (auth as { login?: LoginConfig }).login?.render);
-    this.respond(httpRespond.html(loginHtml, 200, builtInAuthPageHeaders({ csp: !customRender })));
+    this.respond(httpRespond.html(loginHtml, 200, builtInAuthPageHeaders({ csp: customRender ? false : 'inline' })));
   }
 
   /**
@@ -1169,6 +1181,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
   private clientAuthMethodOf(clientId: string, localAuth: LocalPrimaryAuth): string {
     return (
       this.state.cimdMetadata?.token_endpoint_auth_method ??
+      this.state.registeredClientAuthMethod ??
       localAuth.dcrClientRegistry.get(clientId)?.token_endpoint_auth_method ??
       'none'
     );
@@ -1257,7 +1270,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
 
   /** An HTML response with the built-in auth pages' security headers (#263). */
   private htmlPage(markup: string, status = 200): ReturnType<typeof httpRespond.html> {
-    return httpRespond.html(markup, status, builtInAuthPageHeaders());
+    return httpRespond.html(markup, status, builtInAuthPageHeaders({ csp: 'inline' }));
   }
 
   /**
@@ -1349,7 +1362,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     redirectUri: string;
     logoUri?: string;
   }): string {
-    const { pendingAuthId, clientId, clientName, scope, logoUri } = params;
+    const { pendingAuthId, clientId, clientName, scope, redirectUri, logoUri } = params;
     const callbackPath = `${oauthBasePath(this.scope)}/oauth/callback`;
 
     // Read the optional login customization from the local auth options.
@@ -1366,6 +1379,8 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       scopes: scope ? scope.split(' ').filter(Boolean) : [],
       pendingAuthId,
       callbackPath,
+      redirectUri,
+      formTargets: formActionSources([redirectUri]),
       fields: login?.fields ?? {},
     };
 

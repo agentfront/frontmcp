@@ -91,14 +91,14 @@ Requires Node.js 24 or later. To add FrontMCP to a project you already have, see
 Skills teach a coding agent, such as Claude Code or Codex, how to build with FrontMCP. The catalog ships in
 [`@frontmcp/skills`](https://www.npmjs.com/package/@frontmcp/skills).
 
-| Command                                         | Description                                                                              |
-| ----------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `frontmcp skills search <query>`                | Search the catalog                                                                       |
-| `frontmcp skills list`                          | List the skills in the catalog                                                           |
-| `frontmcp skills install [name]`                | Install skills into `.claude/skills` or `.codex/skills` (`--all`, `--tag`, `--category`) |
-| `frontmcp skills read <nameOrPath> [reference]` | Print a skill, one of its references, or a file in its folder                            |
-| `frontmcp skills export`                        | Turn a catalog skill into a Cursor, Windsurf or Copilot rule file                        |
-| `frontmcp skills publish <name>`                | Publish a skill to Smithery or Glama                                                     |
+| Command                                         | Description                                                                                                                                                                            |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `frontmcp skills search <query>`                | Search the catalog                                                                                                                                                                     |
+| `frontmcp skills list`                          | List the skills in the catalog                                                                                                                                                         |
+| `frontmcp skills install [name]`                | Install skills into `.claude/skills` or `.codex/skills` (`--all`, `--tag`, `--category`)                                                                                               |
+| `frontmcp skills read <nameOrPath> [reference]` | Print a skill, one of its references, or a file in its folder                                                                                                                          |
+| `frontmcp skills export`                        | Turn a catalog skill into a Cursor, Windsurf or Copilot rule file; with `--from-entry`, write the server's own skills to agent or plugin skills folders (`--provider`, `--skills-dir`) |
+| `frontmcp skills publish <name>`                | Publish a skill to Smithery or Glama                                                                                                                                                   |
 
 ### MCP Clients
 
@@ -471,6 +471,9 @@ export default defineConfig({
           clientId: 'my-app',
           defaultScope: 'read write',
           portRange: [17830, 17850], // local callback port range
+          // nativeSignIn: true, // sign in with @frontmcp/auth/native: metadata discovery, resource, token refresh
+          // issuer: 'https://idp.example.com', // with nativeSignIn; defaults to serverUrl
+          // resource: 'https://mcp.example.com/mcp', // with nativeSignIn (RFC 8707)
         },
       },
     },

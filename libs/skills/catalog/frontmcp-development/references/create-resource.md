@@ -42,7 +42,7 @@ The `@Resource` decorator accepts:
 - `description` (optional) -- human-readable description
 - `mimeType` (optional) -- MIME type of the resource content
 - `icons` (optional) -- array of Icon objects for UI representation (per MCP spec)
-- `from` (optional) -- a resource store key, `resourceStore().key(name)`, whose value the resource serves; FrontMCP sends `notifications/resources/updated` to its subscribers after the value's revision changes, from a write in any process that shares the store (writes close together may be announced once: read the latest value). See [Materialized Resources](#materialized-resources). Only on `@Resource`: a `@ResourceTemplate` with `from` fails at the decorator.
+- `from` (optional) -- a resource store key, `resourceStore().key(name)`, whose value the resource serves; FrontMCP sends `notifications/resources/updated` to its subscribers after the value's revision changes, from a write in any process that shares the store (writes close together may be announced once: read the latest value). See [Materialized Resources](#materialized-resources). On `@ResourceTemplate`, `from` is a key family, `resourceStore().family(name)`, and a URI serves the key of its parameters: see [Computed values and templates](#computed-values-and-templates). Up to 1.13.1 a `@ResourceTemplate` with `from` failed at the decorator.
 - `enabled` (optional) -- `true`/`false`, or an `EnabledSource` such as `fileSignal('./features.json', 'reports')` that turns the resource on and off while sessions are live. Off: left out of `resources/list`, and `resources/read` and `resources/subscribe` answer `FEATURE_OFF` (403, `data.status` and the source's `data.remedy`); a change sends `notifications/resources/list_changed`. See [`enabled`](../../create-tool/references/availability.md#enabled--turned-on-and-off-while-sessions-are-live).
 - `worker` (optional, Node only) -- `true` or `{ budgetMs }`: `execute()` runs in a worker thread of the server's offload pool, so a CPU-heavy read does not block other calls. The worker has no DI container, scope or request context (`this.get()`, `this.scope`, `this.auth` throw there), and the output crosses back by structured clone. Past `budgetMs` (default `offload.budgetMs`, 30000) the read is refused with `OffloadBudgetExceededError`. See [`offload-cpu-work`](./offload-cpu-work.md).
 
@@ -188,7 +188,52 @@ const { value, revision, updatedAt } = await board.get();
 - **Who can write.** The write API is code, not an MCP method: no client can write a value. A client changes one only through a tool you write, and that tool runs through `tools:call-tool` with its own `authorities`, `enabled` and hooks. Any process that can open the store's file or Redis can write, so protect them as you protect the server's data.
 - **Caching (2026-07-28).** A materialized read answers `ttlMs: 0`, since another process can change the value at any moment; `cacheScope` follows the usual rule (`public` only for an anonymous read nothing shaped per caller).
 - **Topics for other live views.** `store.subscribe(topic, listener)` and `store.publish(topic)` are the same change feed with no value attached (a key's topic is its name): a listener reads the current state. Use them for SSE routes or other views that follow the store.
-- **Lifecycle.** The server opens the stores its resources use at boot and closes them at shutdown. A script that writes calls `await store.close()` when it is done.
+- **Lifecycle.** The server opens the stores its resources use at boot and closes them at shutdown. A script that writes calls `await store.close()` when it is done. A store's next use after `close()` opens it again. A producer run still going when the store closes does not open it again to store its output: the read that waited for it fails with `ResourceStoreClosedError` (`RESOURCE_STORE_CLOSED`), which is not reported to `onError`. After a close, each computed key counts as dirty, since a reopened `memory` store holds none of its values, so its next read runs `produce` again.
+
+### Computed values and templates
+
+A key can be computed instead of written: `key(name, { produce })` takes a producer, and code that knows the inputs changed calls `markDirty()`. A key family serves a `@ResourceTemplate`: each URI reads the key of its parameters.
+
+```typescript
+// src/lens.store.ts
+import { resourceStore } from '@frontmcp/sdk';
+
+export const lens = resourceStore();
+
+// Computed in this process: runs on a read of a dirty key, and after markDirty() only while someone subscribes.
+export const slowQueries = lens.key('slow-queries', {
+  produce: () => db.slowQueries(),
+  minIntervalMs: 200, // at least 200 ms from the end of one run to the start of the next
+  costFactor: 2, // and at least twice as long as the last run took
+});
+db.on('query', () => slowQueries.markDirty());
+
+// One key per table: written by any process, or computed with `produce: ({ table }) => ...`.
+export const tableStats = lens.family('table-stats', { produce: ({ table }) => db.stats(table) });
+db.on('write', (table) => tableStats.key({ table }).markDirty());
+```
+
+```typescript
+import { MaterializedResourceContext, Resource, ResourceTemplate } from '@frontmcp/sdk';
+
+import { slowQueries, tableStats } from '../../../lens.store';
+
+@Resource({ name: 'slow-queries', uri: 'db://slow-queries', mimeType: 'application/json', from: slowQueries })
+export class SlowQueriesResource extends MaterializedResourceContext {}
+
+@ResourceTemplate({
+  name: 'table-stats',
+  uriTemplate: 'db://tables/{table}/stats',
+  mimeType: 'application/json',
+  from: tableStats,
+})
+export class TableStatsResource extends MaterializedResourceContext {}
+```
+
+- **`key(name, { produce, minIntervalMs?, costFactor? })`** -- returns a key with `markDirty()`. It is dirty until it first runs in this process, and after each `markDirty()`. A read of a dirty key runs `produce` and waits for it; reads meanwhile share that run. While someone subscribes (a session's `resources/subscribe` or a `subscriptions/listen` stream on its URI, or your own `subscribe()`), a dirty key runs `produce` on a timer. The timer waits at least `minIntervalMs` (50) after the last run and `costFactor` (1) times as long as the last run took, so a burst of dirty marks makes one run and a costly producer runs less often. While no one subscribes, `markDirty()` only marks it, and nothing runs until the next read. A run stores the output as JSON, and the revision moves only when the JSON changed, so subscribers aren't told of an output that stayed the same. A failed run is passed to the store's `onError`, fails the read that started it, and leaves the key dirty, without a rerun until the next dirty mark or read. `set()` and `update()` still write the key directly. The producer runs in the process that declares the key, and `markDirty()` marks it there. On a shared store, the output it writes reaches subscribers in every process.
+- **`family(name, { initial? })` and `family(name, { produce, minIntervalMs?, costFactor? })`** -- `family.key(params)` is the key of one parameter set (the same parameters, in any order, give the same key), written or computed as a key is; `produce` gets the parameters. A family keeps the keys of up to 1000 parameter sets, and past that forgets the ones no one subscribes to (a forgotten computed key runs again on its next read). A computed key you keep stays the family's key for its parameters after that: its `markDirty()`, reads and subscriptions reach the key the family serves now.
+- **`@ResourceTemplate({ from: family })`** -- a URI reads the key of its parameters through `MaterializedResourceContext`. A session subscribed to a URI is told when that key's revision changes. A template's URIs are followed only while they have a subscriber, on the URI as subscribed: a `subscriptions/listen` prefix covers the static resources under it, not a template's URIs. A `from` that is not a key family fails at the decorator.
+- **Written keys are unchanged.** A `key(name, { initial? })` that a static resource serves is followed from boot to shutdown, as before. Computed keys and template keys are followed only while their URI has a subscriber.
 
 ## Resource Templates with @ResourceTemplate
 
@@ -205,6 +250,7 @@ The `@ResourceTemplate` decorator accepts:
 - `annotations` (optional) -- MCP annotations (`audience`, `priority`, `lastModified`), listed with the template in `resources/templates/list` (a `clients` profile with `annotations: 'no-numbers'` drops `priority`, as for resources)
 - `_meta` (optional) -- free-form metadata listed with the template in `resources/templates/list`; use reverse-DNS prefixed keys
 - `enabled` (optional) -- as on `@Resource`: a template that is off is left out of `resources/templates/list`, a read of any URI it matches answers `FEATURE_OFF`, and its completers complete nothing
+- `from` (optional) -- a resource store key family, `resourceStore().family(name)`: a URI serves the key of its parameters, and a session subscribed to the URI is told when that key changes. See [Computed values and templates](#computed-values-and-templates)
 
 When a template returns a plain value (an object, a string, or an array of items), each content item's `uri` is based on the URI that was read: `users://42/profile`, or `users://42/profile#0`, `#1` for array items without their own `uri`.
 
@@ -632,6 +678,8 @@ When a client requests completions for the `userId` parameter with a partial str
 
 - [ ] The store is declared once, in a module the server and every writer import
 - [ ] A materialized `@Resource` has `from: store.key(...)` and extends `MaterializedResourceContext` (or reads the key itself)
+- [ ] A materialized `@ResourceTemplate` has `from: store.family(...)`
+- [ ] A computed key's inputs call `markDirty()` when they change, in the process that declares the key
 - [ ] Processes that must hear each other use a `sqlite` or `redis` store, not `memory`
 - [ ] `update(change)` callbacks are pure: they can run more than once
 - [ ] A writer script calls `store.close()` before it exits

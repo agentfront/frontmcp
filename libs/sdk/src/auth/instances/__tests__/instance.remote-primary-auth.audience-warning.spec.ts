@@ -14,6 +14,8 @@ function startServer(
     allowedHosts?: string[];
     protectionOff?: boolean;
     audienceFromRequestHost?: boolean;
+    clientId?: string;
+    resourceMetadata?: { clientId?: string | true; audience?: string | true };
   } = {},
 ) {
   const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), verbose: jest.fn() };
@@ -37,6 +39,8 @@ function startServer(
       ...(options.audienceFromRequestHost !== undefined && {
         audienceFromRequestHost: options.audienceFromRequestHost,
       }),
+      ...(options.clientId && { clientId: options.clientId }),
+      ...(options.resourceMetadata && { resourceMetadata: options.resourceMetadata }),
     } as never,
   );
   return { auth, warn: logger.warn };
@@ -140,6 +144,28 @@ describe('RemotePrimaryAuth — warning for a token audience that is not configu
   it('does not warn with FRONTMCP_ALLOWED_HOSTS', async () => {
     process.env['FRONTMCP_ALLOWED_HOSTS'] = 'mcp.example.com';
     const { auth, warn } = startServer();
+    await auth.ready;
+
+    expect(warn).not.toHaveBeenCalled();
+  });
+});
+
+describe('RemotePrimaryAuth — warning for a resourceMetadata.clientId with no client id to publish (#1360)', () => {
+  const audience = 'https://mcp.example.com';
+
+  it('warns when resourceMetadata.clientId is true and auth.clientId is not set', async () => {
+    const { auth, warn } = startServer({ expectedAudience: audience, resourceMetadata: { clientId: true } });
+    await auth.ready;
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain('auth.resourceMetadata.clientId is true but auth.clientId is not set');
+  });
+
+  it.each([
+    ['true with auth.clientId', { clientId: 'lens-cli', resourceMetadata: { clientId: true as const } }],
+    ['a client id of its own', { resourceMetadata: { clientId: 'lens-cli' } }],
+  ])('does not warn when resourceMetadata.clientId is %s', async (_name, options) => {
+    const { auth, warn } = startServer({ expectedAudience: audience, ...options });
     await auth.ready;
 
     expect(warn).not.toHaveBeenCalled();

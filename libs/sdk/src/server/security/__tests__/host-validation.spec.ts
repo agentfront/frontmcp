@@ -126,6 +126,15 @@ describe('validateHostHeaders', () => {
       );
     });
 
+    it('rejects an opaque Origin: null, naming it and its usual cause (#1455)', () => {
+      expect(validateHostHeaders({ origin: 'null' }, withOrigins)).toEqual({
+        status: 403,
+        error: 'Forbidden',
+        message:
+          'Invalid Origin header: null (a form posted from a page served with Referrer-Policy: no-referrer, or from a sandboxed page, sends Origin: null)',
+      });
+    });
+
     it('allows a request with no Origin at all (non-browser clients)', () => {
       // A rebound page always sends one; a CLI agent never does. Rejecting the
       // absent case would break every non-browser client for no gain.

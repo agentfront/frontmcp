@@ -220,6 +220,29 @@ export interface PersistenceConfig {
 export type DistributedEnabled = boolean | 'auto';
 
 // ============================================
+// STREAM KEEP-ALIVE TYPES
+// ============================================
+
+/**
+ * The MCP streams' keep-alive: the Streamable HTTP response and `GET` streams, the legacy SSE stream, and the
+ * 2026-07-28 request and `subscriptions/listen` streams.
+ *
+ * @example A proxy that closes idle connections after 30 seconds
+ * ```typescript
+ * transport: { sse: { heartbeatMs: 20_000 } }
+ * ```
+ */
+export interface TransportSseOptions {
+  /**
+   * How often an open MCP stream with nothing else to send writes an SSE keep-alive comment, in milliseconds, so a
+   * proxy's idle timeout (Cloudflare closes after 100 seconds) does not cut a long tool call. SSE readers ignore
+   * comments. `0` or `false` sends none. At most 2147483647 (about 24.8 days), the longest delay a timer keeps.
+   * @default 15000
+   */
+  heartbeatMs?: number | false;
+}
+
+// ============================================
 // EVENT STORE CONFIGURATION TYPES
 // ============================================
 
@@ -470,6 +493,17 @@ export interface TransportOptionsInterface {
    * @default undefined (disabled)
    */
   eventStore?: EventStoreConfig;
+
+  // ============================================
+  // Stream Keep-alive
+  // ============================================
+
+  /**
+   * Keep-alive comments on the open MCP streams, so a long tool call outlives a proxy's idle timeout.
+   *
+   * @default { heartbeatMs: 15000 }
+   */
+  sse?: TransportSseOptions;
 }
 
 // ============================================

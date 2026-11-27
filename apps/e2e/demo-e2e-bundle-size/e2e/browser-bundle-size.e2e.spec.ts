@@ -21,13 +21,18 @@ import {
 } from './helpers/browser-bundle';
 
 const BUDGETS: Array<{ entry: string; label: string; maxBytes: number }> = [
-  // +12 bytes each (#1335): a call dispatched in process keeps the request's elicitation route
-  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_344_825 },
-  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_352_056 },
+  // +3,221 and +3,216 bytes, the 1.13.2 batch: producer-backed resource keys (#1354, +2,033 / +2,027), the
+  // http.userContent option and its warning (#1364, +943 / +944), the client metadata a transparent server publishes
+  // (#1360, +166) and the people session store option (#1355, +79). Then +237 and +236: keep-alive comments on every
+  // MCP stream (#1484, +151 / +151), the closest declared key at any depth (#1486, -13 / -13) and the review fixes on
+  // the stack (+99 / +98)
+  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_348_283 },
+  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_355_508 },
 ];
 
-// +372 bytes (#1315): the task index never shortens a TTL (an atomic extendTtl in the storage adapters) and jumps runs of gone tasks
-const VITE_INITIAL_CHUNK_MAX_BYTES = 785_705;
+// +413 bytes, the 1.13.2 batch: producer-backed resource keys (#1354, +241), the client metadata a transparent server
+// publishes (#1360, +166) and the people session store option (#1355, +6)
+const VITE_INITIAL_CHUNK_MAX_BYTES = 786_118;
 
 // What create() never needs: the parser behind @enclave-vm/ast (#885), the MCP client (#886) and server-only code
 const NEVER_BUNDLED: Record<string, RegExp> = {

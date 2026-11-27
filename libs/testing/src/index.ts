@@ -76,13 +76,13 @@ export { SseTransport } from './transport/sse.transport';
 // AUTH
 // ═══════════════════════════════════════════════════════════════════
 
-export { TestTokenFactory } from './auth/token-factory';
-export type { CreateTokenOptions, TokenFactoryOptions } from './auth/token-factory';
+export { TestTokenFactory } from '@frontmcp/auth/testing';
+export type { CreateTokenOptions, TokenFactoryOptions } from '@frontmcp/auth/testing';
 export { AuthHeaders } from './auth/auth-headers';
 export { TestUsers, createTestUser } from './auth/user-fixtures';
 export type { TestUserFixture } from './auth/user-fixtures';
-export { MockOAuthServer } from './auth/mock-oauth-server';
-export type { MockOAuthServerOptions, MockOAuthServerInfo, MockTestUser } from './auth/mock-oauth-server';
+export { MockOAuthServer } from '@frontmcp/auth/testing';
+export type { MockOAuthServerOptions, MockOAuthServerInfo, MockTestUser } from '@frontmcp/auth/testing';
 export { MockAPIServer } from './auth/mock-api-server';
 export type {
   MockAPIServerOptions,

@@ -15,7 +15,7 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
 
 function createStream(
   produce: () => Promise<unknown>,
-  options: { onError?: (error: unknown) => void; authorized?: () => boolean } = {},
+  options: { onError?: (error: unknown) => void; authorized?: () => boolean | Promise<boolean> } = {},
 ) {
   let publish: () => void = () => undefined;
   const unsubscribe = jest.fn();
@@ -170,6 +170,55 @@ describe('SseRouteStream', () => {
     await jest.advanceTimersByTimeAsync(15_000);
 
     expect(onClose).toHaveBeenCalledTimes(1);
+    expect(await stream.next()).toEqual({ value: undefined, done: true });
+  });
+
+  it('waits for an authorized check that answers later, such as one that reads a store', async () => {
+    let authorized = true;
+    const produce = jest.fn(async () => ({ count: 1 }));
+    const { stream, publish, onClose } = createStream(produce, { authorized: async () => authorized });
+    expect(await stream.next()).toEqual({ value: expect.any(Uint8Array), done: false });
+
+    authorized = false;
+    publish();
+    await jest.advanceTimersByTimeAsync(50);
+
+    expect(produce).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(await stream.next()).toEqual({ value: undefined, done: true });
+  });
+
+  it('reports an authorized check that fails at a heartbeat, and ends the stream', async () => {
+    const onError = jest.fn();
+    const failure = new Error('session store unavailable');
+    const authorized = jest.fn<Promise<boolean>, []>().mockResolvedValueOnce(true).mockRejectedValueOnce(failure);
+    const { stream, onClose, unsubscribe } = createStream(async () => ({ count: 1 }), { onError, authorized });
+    await stream.next();
+
+    // Unhandled, the rejection would fail this test on its own, as it would crash a server.
+    await jest.advanceTimersByTimeAsync(15_000);
+
+    expect(onError).toHaveBeenCalledWith(failure);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+    expect(await stream.next()).toEqual({ value: undefined, done: true });
+  });
+
+  it('reports an authorized check that fails before a view, and ends the stream without the view', async () => {
+    const onError = jest.fn();
+    const failure = new Error('session store unavailable');
+    const authorized = jest.fn<Promise<boolean>, []>().mockResolvedValueOnce(true).mockRejectedValueOnce(failure);
+    const produce = jest.fn(async () => ({ count: 1 }));
+    const { stream, publish, onClose, unsubscribe } = createStream(produce, { onError, authorized });
+    await stream.next();
+
+    publish();
+    await jest.advanceTimersByTimeAsync(50);
+
+    expect(onError).toHaveBeenCalledWith(failure);
+    expect(produce).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
     expect(await stream.next()).toEqual({ value: undefined, done: true });
   });
 

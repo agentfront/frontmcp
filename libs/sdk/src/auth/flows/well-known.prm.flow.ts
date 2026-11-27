@@ -1,7 +1,7 @@
 // auth/flows/well-known.prm.flow.ts
 import 'reflect-metadata';
 
-import { resourceScopesFor, type ResourceScopeOptions } from '@frontmcp/auth';
+import { resourceScopesFor, type ResourceScopeOptions, type TransparentAuthOptions } from '@frontmcp/auth';
 import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import {
@@ -14,6 +14,7 @@ import {
   httpInputSchema,
   HttpJsonSchema,
   makeWellKnownPaths,
+  normalizeEntryPrefix,
   StageHookOf,
   type FlowPlan,
   type FlowRunOptions,
@@ -21,6 +22,7 @@ import {
   type ServerRequest,
 } from '../../common';
 import { FlowInputMissingError } from '../../errors/sdk.errors';
+import { transparentTokenAudiences } from '../transparent-audience';
 
 const inputSchema = httpInputSchema;
 
@@ -31,6 +33,9 @@ const stateSchema = z.object({
   // public and static mode, which have no authorization server.
   authorizationServer: z.string().min(1).optional(),
   scopesSupported: z.array(z.string()),
+  // What a transparent server's `auth.resourceMetadata` publishes for its clients (#1360).
+  clientId: z.string().min(1).optional(),
+  audience: z.string().min(1).optional(),
   isOrchestrated: z.boolean(),
 });
 
@@ -41,6 +46,8 @@ const outputSchema = HttpJsonSchema.extend({
       authorization_servers: z.array(z.string().min(1)).min(1).optional(),
       scopes_supported: z.array(z.string()).optional(),
       bearer_methods_supported: z.array(z.string()).default(['header']),
+      client_id: z.string().min(1).optional(),
+      audience: z.string().min(1).optional(),
     })
     .passthrough(),
 });
@@ -120,12 +127,17 @@ export default class WellKnownPrmFlow extends FlowBase<typeof name> {
     const orchestrated = authOptions?.mode === 'local' || authOptions?.mode === 'remote';
     const hasAuthorizationServer = authOptions?.mode !== 'public' && authOptions?.mode !== 'static';
     const scopesSupported = orchestrated ? granted : [...new Set([...granted, ...scope.getAllSupportedScopes()])];
+    const signIn =
+      authOptions?.mode === 'transparent'
+        ? transparentSignInDetails(authOptions as TransparentAuthOptions, request, scope)
+        : undefined;
     this.state.set(
       stateSchema.parse({
         resource,
         baseUrl,
         authorizationServer: hasAuthorizationServer ? authorizationServer : undefined,
         scopesSupported,
+        ...signIn,
         isOrchestrated: false, //scope.orchestrated,// TODO: fix
       }),
     );
@@ -133,7 +145,7 @@ export default class WellKnownPrmFlow extends FlowBase<typeof name> {
 
   @Stage('collectData') async collectData() {
     const { resource, scopesSupported, isOrchestrated } = this.state.required;
-    const { authorizationServer } = this.state;
+    const { authorizationServer, clientId, audience } = this.state;
     // RFC 9728 §2: `scopes_supported` and `authorization_servers` are optional; a server that names no
     // scopes, or has no authorization server (public and static mode), leaves them out.
     const scopes = scopesSupported.length > 0 ? { scopes_supported: scopesSupported } : {};
@@ -163,6 +175,7 @@ export default class WellKnownPrmFlow extends FlowBase<typeof name> {
     // the client actually reached, which breaks discovery. The request-derived
     // base mirrors the resource URL the same flow already advertises.
     // Transparent scope
+    const signIn = { ...(clientId ? { client_id: clientId } : {}), ...(audience ? { audience } : {}) };
     this.respond({
       kind: 'json',
       status: 200,
@@ -173,7 +186,28 @@ export default class WellKnownPrmFlow extends FlowBase<typeof name> {
         ...authorizationServers,
         ...scopes,
         bearer_methods_supported: ['header'],
+        ...signIn,
       },
     });
   }
+}
+
+/**
+ * The `client_id` and `audience` a transparent server publishes when `auth.resourceMetadata` asks (#1360): `true`
+ * publishes `auth.clientId`, and the first audience the token check accepts for this request that is not empty.
+ */
+function transparentSignInDetails(
+  options: TransparentAuthOptions,
+  request: ServerRequest,
+  scope: ScopeEntry,
+): { clientId?: string; audience?: string } {
+  const { clientId, audience } = options.resourceMetadata ?? {};
+  const requestBaseUrl = getRequestBaseUrl(request, normalizeEntryPrefix(scope.entryPath));
+  return {
+    clientId: (clientId === true ? options.clientId : clientId) || undefined,
+    audience:
+      audience === true
+        ? transparentTokenAudiences(options, requestBaseUrl, scope).find((value) => value.length > 0)
+        : audience,
+  };
 }

@@ -56,7 +56,7 @@ In production, set `JWT_SECRET`: FrontMCP signs its tokens with it. [Remote and 
 
 ### Importing from the package directly
 
-In `local` mode, `login.render` replaces the sign-in page. FrontMCP doesn't escape what you print, so pass every value through `escapeHtml`:
+In `local` mode, `login.render` replaces the sign-in page. FrontMCP doesn't escape what you print, so pass every value through `escapeHtml`. FrontMCP sends no Content-Security-Policy with your page. If you write one, put `ctx.formTargets` in its `form-action` beside `'self'`: browsers apply `form-action` to the callback's redirect back to the client, so with `'self'` alone the sign-in stops at the callback. Keep the page's `Referrer-Policy` at `same-origin`, which FrontMCP sends: under `no-referrer` the form posts `Origin: null`, and the callback refuses it.
 
 ```ts
 import { escapeHtml } from '@frontmcp/auth';
@@ -73,6 +73,9 @@ import { DeskApp } from './desk.app';
       fields: { deskKey: { type: 'password', label: 'Desk key', required: true } },
       render: (ctx) => `<!doctype html>
 <html lang="en">
+  <head>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; form-action 'self' ${escapeHtml(ctx.formTargets?.join(' ') ?? '')}">
+  </head>
   <body>
     <p>${escapeHtml(ctx.clientName)} wants to connect to your desk.</p>
     ${ctx.error ? `<p role="alert">${escapeHtml(ctx.error)}</p>` : ''}
@@ -93,6 +96,46 @@ import { DeskApp } from './desk.app';
 export default class Server {}
 ```
 
+### Signing a CLI or desktop app in
+
+`@frontmcp/auth/native` is the client's half: `signInNative` signs the user in at an authorization server (RFC 8252). It finds the endpoints in the issuer's RFC 8414 or OpenID metadata, opens the browser with S256 PKCE and a loopback redirect on a free port (`http://127.0.0.1:<port>/callback`), sends `resource` (RFC 8707), and keeps the tokens in a store. `getNativeTokens` returns them, refreshed when they are about to expire.
+
+```ts
+import { fileTokenStore, getNativeTokens, signInNative } from '@frontmcp/auth/native';
+
+const options = {
+  issuer: 'https://auth.example.com',
+  clientId: 'desk-cli',
+  scopes: ['openid', 'desk:read'],
+  resource: 'https://desk.example.com/mcp',
+  store: fileTokenStore(`${process.env.HOME}/.desk-cli/tokens.json`), // default: in memory
+};
+
+const tokens = (await getNativeTokens(options)) ?? (await signInNative(options));
+```
+
+### A mock identity provider for tests
+
+`@frontmcp/auth/testing` exports `MockOAuthServer` and `TestTokenFactory`, the classes `@frontmcp/testing` re-exports, without SWC, the Jest presets or the SDK. The mock serves metadata, JWKS, the authorization endpoint (auto-approved with `autoApprove` and `testUser`), the token endpoint (code, refresh and anonymous grants) and userinfo. Its tokens carry `auth_time`, kept across refresh. All of these are opt-in:
+
+- `pkce: 'strict'` requires S256 PKCE. Unset, the mock accepts a request without it and warns once.
+- `resourceIndicators: true` (or a list of allowed values) issues the access token for the request's `resource` (RFC 8707) and `audience`, and refuses other values with `invalid_target`. Unset, they are ignored, with one warning.
+- `users` lists several test users; a `login_hint` (a `sub` or `email`) picks the one who signs in.
+
+```ts
+import { MockOAuthServer, TestTokenFactory } from '@frontmcp/auth/testing';
+
+const idp = new MockOAuthServer(new TestTokenFactory(), {
+  autoApprove: true,
+  users: [{ sub: 'user-1' }, { sub: 'user-2', email: 'two@example.com' }],
+  clientId: 'desk-cli',
+  validRedirectUris: ['http://127.0.0.1:*/callback'],
+  pkce: 'strict',
+  resourceIndicators: ['https://desk.example.com/mcp'],
+});
+const { issuer } = await idp.start();
+```
+
 ## What's in it
 
 - **Auth modes**: `authOptionsSchema` and the option types of each mode. See [Auth modes](https://frontmcp.dev/reference/auth/modes).
@@ -103,7 +146,9 @@ export default class Server {}
 - **CIMD (Client ID Metadata Documents)**: clients whose `client_id` is the URL of a metadata document (`CimdService`). A public client declares `token_endpoint_auth_method: 'none'`; a confidential one declares `private_key_jwt` and authenticates at the token endpoint with a client assertion signed by a key from its `jwks` / `jwks_uri` (RFC 7523, `CimdService.verifyClientAssertion`). See [Client ID metadata](https://frontmcp.dev/reference/auth/cimd).
 - **Authorities**: rules on tools, resources, prompts, skills and agents, from roles, permissions, token claims, the call's arguments or your own code (`AuthorityDeniedError`). See [Authorities](https://frontmcp.dev/reference/auth/authorities).
 - **Credential vault**: per-user credentials that tools read with `this.credentials`, and that users can add to mid-session. See [Progressive auth](https://frontmcp.dev/reference/auth/progressive).
-- **Sign-in pages**: the built-in sign-in, consent and error pages, and `escapeHtml`, `buildLoginPage` and `baseLayout` for your own. See [Custom login UI](https://frontmcp.dev/reference/auth/login-ui).
+- **Sign-in pages**: the built-in sign-in, consent and error pages, and `escapeHtml`, `buildLoginPage` and `baseLayout` for your own. The built-in pages inline their stylesheet and use a system font stack, so they load nothing from a third party, and send `INLINE_AUTH_PAGE_CSP`, which names no third-party host. `baseLayout` does the same with `inlineStyles: true`, which styles only the classes the built-in pages use; without it, the page loads Tailwind from jsDelivr and Inter from Google Fonts. `builtInAuthPageHeaders()` gives a page of your own the built-in pages' security headers. Its default policy, `BUILT_IN_AUTH_PAGE_CSP`, still allows jsDelivr and Google Fonts, as in 1.13.1, so a page built with the default `baseLayout` keeps its styles; pass `{ csp: 'inline' }` for a page built with `inlineStyles: true`, or `{ csp: false }` and send the page's own policy. See [Custom login UI](https://frontmcp.dev/reference/auth/login-ui).
+- **Native sign-in** (`@frontmcp/auth/native`): `signInNative`, `getNativeTokens` and `signOutNative` for a CLI or desktop client, with `memoryTokenStore`, `fileTokenStore` or your own `NativeTokenStore`.
+- **Testing** (`@frontmcp/auth/testing`): `MockOAuthServer` and `TestTokenFactory`, with strict PKCE, resource indicators and several test users as options.
 - **Storage**: memory, Redis, Vercel KV and SQLite stores for sessions, authorization codes and tokens, and encrypted storage for secrets (`EncryptedTypedStorage`, `TokenVault`). See [Local auth storage](https://frontmcp.dev/reference/auth/local#storage).
 
 ## Docs
@@ -119,7 +164,7 @@ export default class Server {}
 - [`@frontmcp/sdk`](https://www.npmjs.com/package/@frontmcp/sdk): the framework. It runs this package and re-exports its option types.
 - [`@frontmcp/utils`](https://www.npmjs.com/package/@frontmcp/utils): the crypto (PKCE, encryption, key derivation) and storage adapters this package builds on.
 - [`@frontmcp/ui`](https://www.npmjs.com/package/@frontmcp/ui): `@frontmcp/ui/auth`, for React sign-in pages set with `auth.ui`.
-- [`@frontmcp/testing`](https://www.npmjs.com/package/@frontmcp/testing): token factories and mock OAuth servers for tests.
+- [`@frontmcp/testing`](https://www.npmjs.com/package/@frontmcp/testing): the test runner, MCP client and fixtures. It re-exports `@frontmcp/auth/testing`.
 
 ## Contributing
 

@@ -21,7 +21,7 @@ Use `TestTokenFactory` to create tokens and verify authenticated and unauthentic
 // src/__tests__/auth.e2e.spec.ts
 // Real API:
 //   libs/testing/src/server/test-server.ts:101 — `TestServer.start({ command, port })`
-//   libs/testing/src/auth/token-factory.ts:97 — `TestTokenFactory.createTestToken({ sub, scopes, claims })`
+//   libs/auth/src/testing/token-factory.ts:135 — `TestTokenFactory.createTestToken({ sub, scopes, claims })`
 //   libs/testing/src/client/mcp-test-client.builder.ts — `withToken`, `withPublicMode`, `buildAndConnect`
 import { McpTestClient, TestServer, TestTokenFactory } from '@frontmcp/testing';
 

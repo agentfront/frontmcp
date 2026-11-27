@@ -511,6 +511,10 @@ export interface LocalDcrConfig {
    * Once reached, further dynamic registrations are rejected (existing clients,
    * including confidential ones, are preserved — never evicted); `0` disables
    * dynamic registration. Pre-registered `clients` are exempt. Default: 1000.
+   *
+   * With a Redis or SQLite `tokenStorage`, registered clients are kept there too, for a refresh token's lifetime
+   * after their registration or last token grant, so a restart or another instance on it knows them. The cap
+   * counts the clients this process registered; clients read from the storage do not count.
    */
   maxDynamicClients?: number;
 }
@@ -631,9 +635,9 @@ export interface LoginConfig {
  * Context passed to a custom {@link LoginConfig.render} function. Carries the
  * client identity (CIMD `client_name`/`logo_uri` when available), requested
  * scopes, the pending-authorization id (must be submitted back), the callback
- * path to POST/GET to, the declared {@link LoginConfig.fields}, and a previous
- * error message (set when {@link AuthenticateResult} failed and the page is
- * being re-rendered).
+ * path to POST/GET to, the client's redirect and the `form-action` sources it
+ * needs, the declared {@link LoginConfig.fields}, and a previous error message
+ * (set when {@link AuthenticateResult} failed and the page is being re-rendered).
  */
 export interface LoginRenderContext {
   /** OAuth client_id (or CIMD URL) of the requesting client. */
@@ -648,6 +652,15 @@ export interface LoginRenderContext {
   pendingAuthId: string;
   /** Path the login form should submit to (the `/oauth/callback` endpoint). */
   callbackPath: string;
+  /** The client's validated `redirect_uri`, where the callback sends a successful sign-in. Set by FrontMCP. */
+  redirectUri?: string;
+  /**
+   * The CSP sources a page with its own `form-action` must allow beside `'self'`
+   * (the `redirectUri`'s origin, or a native app's scheme). Browsers apply
+   * `form-action` to the callback's redirect too, so `'self'` alone stops the
+   * sign-in there. Set by FrontMCP.
+   */
+  formTargets?: string[];
   /** The declared custom login fields (may be empty). */
   fields: Record<string, LoginFieldConfig>;
   /** Error message to display when re-rendering after a failed authenticate(). */
@@ -928,10 +941,28 @@ export interface TransparentAuthOptionsInterface {
    * @default false
    */
   audienceFromRequestHost?: boolean;
+  /**
+   * What the protected resource metadata (`/.well-known/oauth-protected-resource`) tells clients about signing in
+   * at the provider, beside `authorization_servers`. Each field is published only when set.
+   * @default nothing beyond the RFC 9728 fields
+   */
+  resourceMetadata?: TransparentResourceMetadataOptions;
   requiredScopes?: string[];
   allowAnonymous?: boolean;
   anonymousScopes?: string[];
   publicAccess?: PublicAccessConfig;
+}
+
+/** The sign-in details a transparent-mode server publishes in its protected resource metadata. */
+export interface TransparentResourceMetadataOptions {
+  /** Published as `client_id`: the client id to sign in with at the provider; `true` publishes `clientId`. */
+  clientId?: string | true;
+  /**
+   * Published as `audience`: the audience to request tokens for; `true` publishes the one this server checks
+   * (`expectedAudience`'s first entry that is not empty, else the server's address from `FRONTMCP_PUBLIC_URL` or an
+   * allowed host).
+   */
+  audience?: string | true;
 }
 
 export interface LocalAuthOptionsInterface {

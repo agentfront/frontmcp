@@ -21,15 +21,13 @@ import { CHANNEL_NOTIFICATION_METHOD } from '../../channel/channel.utils';
 import type { ListChangedKind } from '../../common/interfaces/flow.interface';
 import { type Scope } from '../../scope';
 import { announcesListChangeNow } from '../../surface/list-change-batch';
+import { DEFAULT_STREAM_HEARTBEAT_MS } from '../stream-keep-alive';
 
 /** Whether a listener may be told of an update: its credentials unexpired both before and after the async check. */
 export async function listenerMayReceive(isExpired: () => boolean, mayRead: () => Promise<boolean>): Promise<boolean> {
   if (isExpired()) return false;
   return (await mayRead()) && !isExpired();
 }
-
-/** How often a bare SSE comment is emitted to hold the connection open. */
-const KEEPALIVE_INTERVAL_MS = 15_000;
 
 export interface SubscriptionStreamOptions {
   scope: Scope;
@@ -49,6 +47,8 @@ export interface SubscriptionStreamOptions {
    * matches), asked again for each update, so a caller that lost access stops hearing of it. Without it, all are sent.
    */
   mayReceiveUpdate?: (uri: string, watchedUri: string) => Promise<boolean>;
+  /** How long the stream stays quiet before it sends a bare SSE comment (`transport.sse.heartbeatMs`); `0` sends none. */
+  keepAliveMs?: number;
 }
 
 /**
@@ -108,6 +108,7 @@ export function createSubscriptionStream(options: SubscriptionStreamOptions): {
   stream: AsyncIterable<Uint8Array>;
 } {
   const { scope, subscriptionId, requested, channels, signal, mayReceiveUpdate } = options;
+  const keepAliveMs = options.keepAliveMs ?? DEFAULT_STREAM_HEARTBEAT_MS;
   const acknowledged = resolveAcknowledgedFilter(scope, requested);
 
   const queue: QueuedNotification[] = [];
@@ -133,6 +134,10 @@ export function createSubscriptionStream(options: SubscriptionStreamOptions): {
   }
 
   const watchedUris = new Set(acknowledged.resourceSubscriptions ?? []);
+  for (const uri of watchedUris) scope.resources.watchUri(uri);
+  unsubscribes.push(() => {
+    for (const uri of watchedUris) scope.resources.unwatchUri(uri);
+  });
   if (acknowledged.resourcesListChanged || watchedUris.size > 0) {
     unsubscribes.push(
       scope.resources.subscribe({}, (event) => {
@@ -182,7 +187,7 @@ export function createSubscriptionStream(options: SubscriptionStreamOptions): {
   if (signal?.aborted) cleanup();
   else signal?.addEventListener('abort', cleanup, { once: true });
 
-  async function* generate(): AsyncIterable<Uint8Array> {
+  async function* generate(): AsyncGenerator<Uint8Array, void, undefined> {
     try {
       // MUST be the first message carrying this subscription's id.
       yield frame({
@@ -210,10 +215,13 @@ export function createSubscriptionStream(options: SubscriptionStreamOptions): {
         if (closed || signal?.aborted) break;
 
         const woke = await new Promise<boolean>((resolve) => {
-          const timer = setTimeout(() => {
-            notify = undefined;
-            resolve(false);
-          }, KEEPALIVE_INTERVAL_MS);
+          const timer =
+            keepAliveMs > 0
+              ? setTimeout(() => {
+                  notify = undefined;
+                  resolve(false);
+                }, keepAliveMs)
+              : undefined;
           notify = () => {
             clearTimeout(timer);
             notify = undefined;
@@ -230,5 +238,22 @@ export function createSubscriptionStream(options: SubscriptionStreamOptions): {
     }
   }
 
-  return { acknowledged, stream: generate() };
+  // A reader that stops releases the listeners at once. The generator's own return() waits behind the read in
+  // progress, which with keep-alives off only the next update ends: a web response's cancel would leave them on.
+  const frames = generate();
+  const stream: AsyncIterableIterator<Uint8Array> = {
+    next: () => frames.next(),
+    return: (value?: unknown) => {
+      cleanup();
+      return frames.return(value as undefined);
+    },
+    throw: (error?: unknown) => {
+      cleanup();
+      return frames.throw(error);
+    },
+    [Symbol.asyncIterator]() {
+      return this;
+    },
+  };
+  return { acknowledged, stream };
 }

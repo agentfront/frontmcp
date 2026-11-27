@@ -1,11 +1,12 @@
 /**
  * Base Layout for Server-Rendered Pages
  *
- * Provides a consistent HTML shell with all CDN resources pre-configured:
- * - Tailwind CSS v4 (Browser CDN) - Utility-first CSS framework with @theme support
- * - Google Fonts (Inter) - Modern UI typography
- *
- * No build step required - all resources loaded from CDN at runtime.
+ * Provides a consistent HTML shell, styled one of two ways:
+ * - `inlineStyles: true` (the built-in auth pages): a pre-built stylesheet of
+ *   the Tailwind classes those pages use, inline, with a system font stack.
+ *   The page loads nothing from a third party.
+ * - otherwise: the Tailwind CSS v4 Browser CDN (any class, `@theme` support)
+ *   and Inter from Google Fonts, loaded at runtime.
  *
  * @example
  * ```typescript
@@ -27,12 +28,15 @@
 
 import { escapeHtml } from '@frontmcp/utils';
 
+import { AUTH_PAGE_CSS } from './auth-page-styles';
+
 // ============================================
 // CDN Configuration
 // ============================================
 
 /**
- * CDN URLs and versions - centralized for easy updates
+ * CDN URLs a {@link baseLayout} page without `inlineStyles` loads. The
+ * built-in auth pages load none of them.
  */
 export const CDN = {
   /** Tailwind CSS v4 Browser CDN - generates styles on-the-fly with @theme support */
@@ -47,13 +51,32 @@ export const CDN = {
 
 /**
  * Content-Security-Policy for the built-in authorization pages (sign-in,
- * consent, provider selection, incremental authorization, errors).
+ * consent, provider selection, incremental authorization, errors), sent with
+ * `builtInAuthPageHeaders({ csp: 'inline' })`.
  *
- * Scripts may come only from this server and the Tailwind CDN; the pages' own
- * small inline handlers need `'unsafe-inline'` (every interpolated value is
- * HTML-escaped). Styles and fonts are limited to Google Fonts, images to this
+ * The pages inline their stylesheet and load no third-party script, style or
+ * font. Their small inline handlers and stylesheet need `'unsafe-inline'`
+ * (every interpolated value is HTML-escaped). Images may come from this
  * server, `data:` and https (a client's `logo_uri`), and the pages can't be
- * framed (clickjacking) or rebased.
+ * framed (clickjacking) or rebased. A {@link baseLayout} page built with
+ * `inlineStyles: true` fits it.
+ */
+export const INLINE_AUTH_PAGE_CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: https:",
+  "connect-src 'self'",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "frame-ancestors 'none'",
+].join('; ');
+
+/**
+ * The Content-Security-Policy {@link builtInAuthPageHeaders} sends by default, as up to 1.13.1: the
+ * {@link INLINE_AUTH_PAGE_CSP} policy, plus the Tailwind CDN and Google Fonts a {@link baseLayout} page without
+ * `inlineStyles` loads, so a page of your own that sends it keeps its styles. The built-in pages send
+ * {@link INLINE_AUTH_PAGE_CSP} since 1.13.2.
  */
 export const BUILT_IN_AUTH_PAGE_CSP = [
   "default-src 'self'",
@@ -68,20 +91,23 @@ export const BUILT_IN_AUTH_PAGE_CSP = [
 ].join('; ');
 
 /**
- * Security headers for a built-in authorization page.
+ * Security headers for an authorization page.
  *
  * `Referrer-Policy: same-origin` keeps the page's URL (client, redirect_uri,
- * state) away from the CDNs it loads, while the page's own form POST still
+ * state) away from any other origin it links to, while the page's own form POST still
  * carries its `Origin`, which the callback checks; `no-referrer` would turn
  * that into `Origin: null` and every sign-in would be refused as cross-origin.
  *
- * @param options.csp - `false` leaves out the Content-Security-Policy, for
- *   markup the server didn't write (a `login.render` override may load its own
- *   scripts); the anti-framing, sniffing, referrer and caching headers still apply.
+ * @param options.csp - the Content-Security-Policy: by default {@link BUILT_IN_AUTH_PAGE_CSP}, which allows the CDN
+ *   a {@link baseLayout} page without `inlineStyles` loads; `'inline'` for {@link INLINE_AUTH_PAGE_CSP}, what the
+ *   built-in pages send, for a page that loads nothing from a third party (`inlineStyles: true`); `false` leaves it
+ *   out, for markup the server didn't write (a `login.render` override may load its own scripts). The anti-framing,
+ *   sniffing, referrer and caching headers apply either way.
  */
-export function builtInAuthPageHeaders(options: { csp?: boolean } = {}): Record<string, string> {
+export function builtInAuthPageHeaders(options: { csp?: boolean | 'inline' } = {}): Record<string, string> {
+  const csp = options.csp === 'inline' ? INLINE_AUTH_PAGE_CSP : BUILT_IN_AUTH_PAGE_CSP;
   return {
-    ...(options.csp === false ? {} : { 'Content-Security-Policy': BUILT_IN_AUTH_PAGE_CSP }),
+    ...(options.csp === false ? {} : { 'Content-Security-Policy': csp }),
     'X-Frame-Options': 'DENY',
     'X-Content-Type-Options': 'nosniff',
     'Referrer-Policy': 'same-origin',
@@ -183,6 +209,15 @@ export interface BaseLayoutOptions {
   /** Include Google Fonts (default: true) */
   includeFonts?: boolean;
 
+  /**
+   * Inline FrontMCP's pre-built stylesheet and a system font stack instead of
+   * loading the Tailwind CDN script and Google Fonts, so the page loads
+   * nothing from a third party. Only the classes the built-in auth pages use
+   * are styled, and `theme.customCss` is plain CSS. The built-in pages set it.
+   * `includeTailwind` and `includeFonts` are ignored. (default: false)
+   */
+  inlineStyles?: boolean;
+
   /** Additional head content (scripts, styles, meta tags) */
   headExtra?: string;
 
@@ -237,7 +272,7 @@ function buildThemeCss(theme: ThemeConfig): string {
 // ============================================
 
 /**
- * Build the complete HTML document with CDN resources
+ * Build the complete HTML document, styled inline or from the CDN (see {@link BaseLayoutOptions.inlineStyles})
  *
  * @param content - The page content (HTML string)
  * @param options - Layout configuration options
@@ -262,11 +297,42 @@ export function baseLayout(content: string, options: BaseLayoutOptions): string 
     description,
     includeTailwind = true,
     includeFonts = true,
+    inlineStyles = false,
     headExtra = '',
     bodyClass = 'bg-gray-50 min-h-screen font-sans antialiased',
     theme,
   } = options;
 
+  // Build meta description
+  const metaDescription = description ? `<meta name="description" content="${escapeHtml(description)}">` : '';
+
+  const styles = inlineStyles ? inlineStyleBlock(theme) : cdnStyleBlock(theme, includeTailwind, includeFonts);
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(title)} - FrontMCP</title>
+  ${metaDescription}
+${styles}
+  ${headExtra}
+</head>
+<body class="${escapeHtml(bodyClass)}">
+  ${content}
+</body>
+</html>`;
+}
+
+/** The pre-built stylesheet, then only the caller's theme: the stylesheet carries the defaults and a system font stack. */
+function inlineStyleBlock(theme: ThemeConfig | undefined): string {
+  const themeVars = theme ? buildThemeCss(theme) : '';
+  return `
+  <style>${AUTH_PAGE_CSS}${themeVars ? `:root{${themeVars}}` : ''}${theme?.customCss ?? ''}</style>`;
+}
+
+/** Inter from Google Fonts and the Tailwind Browser CDN, with the theme merged over the defaults. */
+function cdnStyleBlock(theme: ThemeConfig | undefined, includeTailwind: boolean, includeFonts: boolean): string {
   // Merge theme with defaults
   const mergedTheme: ThemeConfig = {
     colors: { ...DEFAULT_THEME.colors, ...theme?.colors },
@@ -299,29 +365,13 @@ export function baseLayout(content: string, options: BaseLayoutOptions): string 
   </style>`
     : '';
 
-  // Build meta description
-  const metaDescription = description ? `<meta name="description" content="${escapeHtml(description)}">` : '';
-
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${escapeHtml(title)} - FrontMCP</title>
-  ${metaDescription}
-
+  return `
   <!-- Google Fonts CDN - Inter (modern UI font) -->
   ${fontPreconnect}
   ${fontStylesheet}
 
   <!-- Tailwind CSS v4 Browser CDN with @theme support -->
-  ${tailwindBlock}
-  ${headExtra}
-</head>
-<body class="${escapeHtml(bodyClass)}">
-  ${content}
-</body>
-</html>`;
+  ${tailwindBlock}`;
 }
 
 /**

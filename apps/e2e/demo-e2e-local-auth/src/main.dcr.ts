@@ -14,6 +14,10 @@
  *   - DCR_PREREGISTERED=1               → seed a trusted pre-registered client
  *                                         (`preregistered-client`) accepted by
  *                                         authorize WITHOUT a DCR round-trip
+ *   - TOKEN_STORAGE_SQLITE_PATH=file    → SQLite `tokenStorage`, which keeps
+ *                                         registered clients across a restart
+ *   - REQUIRE_REGISTERED_CLIENTS=true   → refuse unregistered client ids, the
+ *                                         framework default
  *
  * No PII is configured or stored — only OAuth client metadata.
  */
@@ -35,6 +39,9 @@ function splitCsv(value: string | undefined): string[] | undefined {
     .filter(Boolean);
   return parts.length > 0 ? parts : undefined;
 }
+
+const sqlitePath = process.env['TOKEN_STORAGE_SQLITE_PATH'];
+const tokenStorage = sqlitePath ? ({ sqlite: { path: sqlitePath } } as const) : ('memory' as const);
 
 const dcr: LocalDcrConfig = {};
 if (process.env['DCR_ENABLED'] === 'false') dcr.enabled = false;
@@ -61,8 +68,9 @@ if (process.env['DCR_PREREGISTERED'] === '1') {
   http: { port },
   auth: {
     mode: 'local',
-    // The e2e specs sign in with ad-hoc client ids that aren't registered.
-    requireRegisteredClients: false,
+    // The e2e specs sign in with ad-hoc client ids that aren't registered, unless one asks for the default.
+    requireRegisteredClients: process.env['REQUIRE_REGISTERED_CLIENTS'] === 'true',
+    tokenStorage,
     allowDefaultPublic: false,
     anonymousScopes: ['anonymous'],
     requireEmail: false,

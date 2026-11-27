@@ -194,6 +194,17 @@ export const cliTargetConfigSchema = z
         clientId: z.string().optional(),
         defaultScope: z.string().optional(),
         portRange: z.tuple([z.number(), z.number()]).optional(),
+        nativeSignIn: z
+          .boolean()
+          .optional()
+          .describe(
+            "Sign in with @frontmcp/auth/native's signInNative: endpoints from the issuer's metadata, resource, and refresh of expired tokens.",
+          ),
+        issuer: z
+          .string()
+          .optional()
+          .describe('With nativeSignIn, the authorization server to sign in at. Defaults to the server URL.'),
+        resource: z.string().optional().describe('With nativeSignIn, the resource (RFC 8707) the token is for.'),
       })
       .strict()
       .optional()

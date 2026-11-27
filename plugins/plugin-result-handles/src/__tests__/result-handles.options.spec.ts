@@ -35,6 +35,23 @@ describe('parseResultHandlesOptions', () => {
     });
   });
 
+  it('leaves resources unfolded, the TTL fixed and the stored bytes unlimited unless told otherwise', () => {
+    const options = parseResultHandlesOptions({});
+    expect(options.resources).toBeUndefined();
+    expect(options.slidingTtl).toBeUndefined();
+    expect(options.maxStoredBytes).toBeUndefined();
+  });
+
+  it('keeps the resource policy, the sliding TTL and the byte budget it is given', () => {
+    const resources = () => true;
+    expect(parseResultHandlesOptions({ resources, slidingTtl: true, maxStoredBytes: 64 * 1024 * 1024 })).toMatchObject({
+      resources,
+      slidingTtl: true,
+      maxStoredBytes: 64 * 1024 * 1024,
+    });
+    expect(parseResultHandlesOptions({ resources: true }).resources).toBe(true);
+  });
+
   it('caps the memory store at 1000 answers unless told otherwise', () => {
     expect(DEFAULT_MEMORY_MAX_ENTRIES).toBe(1000);
     const unlimited = parseResultHandlesOptions({ storage: { type: 'memory', memory: { maxEntries: 0 } } });
@@ -53,6 +70,14 @@ describe('parseResultHandlesOptions', () => {
     [{ storage: 'memory' }, 'storage: must be a storage config, such as { type: "redis", redis: { url } }'],
     [{ namespace: '' }, 'namespace: must not be empty'],
     [{ tresholdBytes: 4096 }, 'Unrecognized key: "tresholdBytes"'],
+    [{ resources: 'all' }, 'resources: must be true, false or a function (uri, answer, context) => boolean'],
+    [{ slidingTtl: 'yes' }, 'slidingTtl: must be true or false'],
+    [{ maxStoredBytes: 1024.5 }, 'maxStoredBytes: must be a whole number of bytes, at least thresholdBytes'],
+    [{ maxStoredBytes: 8192 }, 'maxStoredBytes: must be a whole number of bytes, at least thresholdBytes'],
+    [
+      { thresholdBytes: 4096, maxStoredBytes: 2048 },
+      'maxStoredBytes: must be a whole number of bytes, at least thresholdBytes',
+    ],
   ])('refuses %j', (input, message) => {
     expect(() => parseResultHandlesOptions(input as never)).toThrow(ResultHandlesConfigurationError);
     expect(() => parseResultHandlesOptions(input as never)).toThrow(message);

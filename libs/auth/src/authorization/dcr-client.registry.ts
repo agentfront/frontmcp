@@ -9,15 +9,28 @@
 // round-trip.
 //
 // This is instance state on `LocalPrimaryAuth` (not a module-level Map) so each
-// server gets an isolated registry and tests don't bleed into one another. No
-// PII is stored — only OAuth client metadata.
+// server gets an isolated registry and tests don't bleed into one another. With
+// a persistent token storage, dynamically registered clients are kept there too
+// (#1478), so a restart or another instance on that storage knows them. No PII
+// is stored — only OAuth client metadata.
 
-import { sha256, timingSafeEqual } from '@frontmcp/utils';
+import {
+  base64urlDecode,
+  sha256,
+  sha256Base64url,
+  timingSafeEqual,
+  TypedStorage,
+  type StorageAdapter,
+} from '@frontmcp/utils';
+
+import { REFRESH_TOKEN_TTL_MS } from '../session/authorization.store';
 
 /** A registered OAuth client record held by the local AS. */
 export interface RegisteredClient {
   client_id: string;
   client_secret?: string;
+  /** Base64url SHA-256 of the secret of a client read from the token storage, which never keeps the secret itself. */
+  client_secret_sha256?: string;
   token_endpoint_auth_method:
     | 'none'
     | 'client_secret_basic'
@@ -69,12 +82,46 @@ export interface DcrRegistryConfig {
    * including confidential ones — is preserved. Pre-registered / declarative
    * clients never count toward this cap and are never rejected. Defaults to
    * 1000. Guards against unbounded growth from unauthenticated DCR.
+   *
+   * It counts the clients this process registered. Clients read from the token
+   * storage (registered before a restart or on another instance) do not count;
+   * this process keeps at most this many of them in memory, and reads the store
+   * again for one it dropped.
    */
   maxDynamicClients?: number;
 }
 
+/** How the token storage keeps clients registered through DCR (#1478). */
+export interface DcrClientStoreOptions {
+  /** Seconds a client is kept after its registration or its last token grant. Defaults to a refresh token's lifetime. */
+  ttlSeconds?: number;
+  /** Told when the store cannot be read or written; the client is then known to this process only. */
+  onError?: (operation: 'read' | 'write', error: unknown) => void;
+}
+
+/** What the token storage keeps of a client registered through DCR: its secret only as a SHA-256 digest. */
+type StoredClient = Omit<RegisteredClient, 'client_secret' | 'dev' | 'preRegistered'>;
+
 /** Default cap on dynamically-registered clients when not configured. */
 const DEFAULT_MAX_DYNAMIC_CLIENTS = 1000;
+
+const storedClientKey = (clientId: string) => `oauth:client:${clientId}`;
+
+function toStoredClient(client: RegisteredClient): StoredClient {
+  return {
+    client_id: client.client_id,
+    client_secret_sha256: client.client_secret ? sha256Base64url(client.client_secret) : client.client_secret_sha256,
+    token_endpoint_auth_method: client.token_endpoint_auth_method,
+    grant_types: client.grant_types,
+    response_types: client.response_types,
+    redirect_uris: client.redirect_uris,
+    client_name: client.client_name,
+    scope: client.scope,
+    created_at: client.created_at,
+  };
+}
+
+const isDynamicClient = (client: RegisteredClient) => client.dev && !client.preRegistered;
 
 /**
  * Match `input` against a simple glob where `*` = any run of characters and
@@ -197,12 +244,25 @@ function globMatchRedirectUri(pattern: string, input: string): boolean {
   );
 }
 
+/** The SHA-256 digest of a client's secret: of the secret it holds, or the one the token storage kept. */
+function secretDigest(client: RegisteredClient): Uint8Array | undefined {
+  if (client.client_secret) return sha256(client.client_secret);
+  return client.client_secret_sha256 ? base64urlDecode(client.client_secret_sha256) : undefined;
+}
+
 /**
  * Local-AS DCR client registry. Seeded from `dcr.clients` at construction and
  * mutated by `POST /oauth/register` at runtime.
  */
 export class DcrClientRegistry {
   private readonly clients = new Map<string, RegisteredClient>();
+  /** Clients read from the token storage, oldest first, at most the dynamic-client cap. */
+  private readonly storedClients = new Map<string, RegisteredClient>();
+  private store?: {
+    storage: TypedStorage<StoredClient>;
+    ttlSeconds: number;
+    onError?: DcrClientStoreOptions['onError'];
+  };
   /** Configured redirect_uri allowlist globs (matched via `globMatch`). */
   private readonly redirectGlobs: string[] | undefined;
 
@@ -232,9 +292,77 @@ export class DcrClientRegistry {
     }
   }
 
-  /** Look up a client by id (pre-registered or dynamically registered). */
+  /**
+   * Keep clients registered through DCR in `storage` too, so a restart or another instance on the same storage knows
+   * them (#1478). Pre-registered clients stay in memory: they are seeded from `dcr.clients` at every start.
+   */
+  useStore(storage: StorageAdapter, options: DcrClientStoreOptions = {}): void {
+    this.store = {
+      storage: new TypedStorage<StoredClient>(storage),
+      ttlSeconds: options.ttlSeconds ?? Math.floor(REFRESH_TOKEN_TTL_MS / 1000),
+      onError: options.onError,
+    };
+  }
+
+  /** Look up a client by id (pre-registered, registered by this process, or already read by {@link load}). */
   get(clientId: string): RegisteredClient | undefined {
-    return this.clients.get(clientId);
+    return this.clients.get(clientId) ?? this.storedClients.get(clientId);
+  }
+
+  /**
+   * {@link get}, reading the token storage when this process does not know the client: one registered before a
+   * restart or on another instance. A store that cannot be read finds no client.
+   */
+  async load(clientId: string): Promise<RegisteredClient | undefined> {
+    const known = this.get(clientId);
+    if (known || !this.store) return known;
+    let stored: StoredClient | null;
+    try {
+      stored = await this.store.storage.get(storedClientKey(clientId));
+    } catch (error) {
+      this.store.onError?.('read', error);
+      return undefined;
+    }
+    if (stored?.client_id !== clientId) return undefined;
+    const client: RegisteredClient = { ...stored, dev: true };
+    if (this.storedClients.size >= this.dynamicClientCap()) {
+      const oldest = this.storedClients.keys().next().value;
+      if (oldest !== undefined) this.storedClients.delete(oldest);
+    }
+    this.storedClients.set(clientId, client);
+    return client;
+  }
+
+  /** Keep a client this process registered in the token storage. A write that fails leaves it known to this process only. */
+  async persist(client: RegisteredClient): Promise<void> {
+    if (!this.store || !isDynamicClient(client)) return;
+    try {
+      await this.store.storage.set(storedClientKey(client.client_id), toStoredClient(client), {
+        ttlSeconds: this.store.ttlSeconds,
+      });
+    } catch (error) {
+      this.store.onError?.('write', error);
+    }
+  }
+
+  /**
+   * After a token grant to a dynamically registered client, keep it in the token storage for another TTL. That holds
+   * when this process no longer has it in memory too: a {@link load} for another client can drop it while the grant
+   * runs, and its refresh token still gets a whole lifetime.
+   */
+  async touch(clientId: string): Promise<void> {
+    if (!this.store) return;
+    const client = this.get(clientId);
+    if (client && !isDynamicClient(client)) return;
+    let extended: boolean;
+    try {
+      extended = await this.store.storage.expire(storedClientKey(clientId), this.store.ttlSeconds);
+    } catch (error) {
+      this.store.onError?.('write', error);
+      return;
+    }
+    const known = this.get(clientId) ?? client;
+    if (!extended && known) await this.persist(known);
   }
 
   /**
@@ -253,23 +381,29 @@ export class DcrClientRegistry {
    * client was effectively public. This restores confidential-client
    * authentication with a timing-safe comparison.
    */
-  verifyClientSecret(clientId: string, presentedSecret: string | undefined): 'unknown' | 'ok' | 'invalid' {
-    const client = this.clients.get(clientId);
+  verifyClientSecret(
+    clientId: string,
+    presentedSecret: string | undefined,
+    // The registration a caller already read with {@link load}: a load for another client can drop it from memory.
+    client: RegisteredClient | undefined = this.get(clientId),
+  ): 'unknown' | 'ok' | 'invalid' {
     if (!client) return 'unknown';
     const method = client.token_endpoint_auth_method;
     const isConfidential = method === 'client_secret_basic' || method === 'client_secret_post';
     if (!isConfidential) return 'ok';
     // A confidential client with no stored secret is a server misconfiguration;
     // fail closed rather than silently accept an empty secret.
-    if (!client.client_secret) return 'invalid';
+    const expected = secretDigest(client);
+    if (!expected) return 'invalid';
     if (!presentedSecret) return 'invalid';
     // Compare fixed-length SHA-256 digests to avoid leaking length/content via timing.
-    return timingSafeEqual(sha256(presentedSecret), sha256(client.client_secret)) ? 'ok' : 'invalid';
+    const presented = sha256(presentedSecret);
+    return expected.length === presented.length && timingSafeEqual(presented, expected) ? 'ok' : 'invalid';
   }
 
-  /** Whether a client id is known to the registry. */
+  /** Whether a client id is known to the registry (see {@link get}). */
   has(clientId: string): boolean {
-    return this.clients.has(clientId);
+    return this.get(clientId) !== undefined;
   }
 
   /**
@@ -312,7 +446,7 @@ export class DcrClientRegistry {
 
   private countDynamicClients(): number {
     let n = 0;
-    for (const c of this.clients.values()) if (c.dev && !c.preRegistered) n++;
+    for (const c of this.clients.values()) if (isDynamicClient(c)) n++;
     return n;
   }
 

@@ -25,6 +25,7 @@ import { mcpTransportBodyLimit } from './body-limit';
 import { buildScopedServerOptions, type ScopedServerOptions } from './build-scoped-server-options';
 import { createMcpServer } from './mcp-server.factory';
 import { type PersistentSessionOwnerStore } from './persistent-session-owner';
+import { streamHeartbeatMs } from './stream-keep-alive';
 
 const STATELESS_METHODS = ['POST', 'DELETE'];
 
@@ -85,6 +86,7 @@ async function wireServer(
     sessionIdGenerator,
     enableJsonResponse,
     maxRequestBodySize: mcpTransportBodyLimit(scope.metadata.http?.bodyLimit),
+    keepAliveMs: streamHeartbeatMs(scope.metadata.transport),
   });
   await mcpServer.connect(transport);
   return { mcpServer, transport } as unknown as WebStandardMcpPair;

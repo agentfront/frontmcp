@@ -203,6 +203,23 @@ describe('LOCAL-mode auth E2E (single-operator, non-federated)', () => {
   });
 
   // ===========================================================
+  // #1480 — the built-in page loads nothing from a third party
+  // ===========================================================
+  describe('#1480 self-contained login page', () => {
+    it('serves the login page with its stylesheet inline and a CSP that names no third-party host', async () => {
+      const res = await browserFetch(buildAuthorizeUrl(baseUrl, makePkce().challenge), { redirect: 'manual' });
+      expect(res.status).toBe(200);
+      const html = await res.text();
+
+      expect(res.headers.get('content-security-policy')).toContain("script-src 'self' 'unsafe-inline';");
+      expect(res.headers.get('content-security-policy')).not.toMatch(/https?:\/\//);
+      expect(html).toContain('<style>/*! tailwindcss');
+      expect(html).not.toMatch(/<script[^>]+src=|<link|@import/);
+      expect(html.replace(/\/\*![^*]*\*\//g, '')).not.toMatch(/https?:\/\//);
+    });
+  });
+
+  // ===========================================================
   // #468 — requireEmail: false mints a code without an email,
   //        and the anonymous sub is STABLE.
   // ===========================================================

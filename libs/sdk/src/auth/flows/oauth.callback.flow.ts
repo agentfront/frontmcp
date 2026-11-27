@@ -54,7 +54,14 @@ import {
   type ServerRequest,
 } from '../../common';
 import { oauthBasePath } from '../../flows/flow.http-path';
-import { authUiExtraPath, buildAuthUiPage, buildConsentState, type AuthTool, type AuthUiRegistry } from '../auth-ui';
+import {
+  authUiExtraPath,
+  buildAuthUiPage,
+  buildConsentState,
+  formActionSources,
+  type AuthTool,
+  type AuthUiRegistry,
+} from '../auth-ui';
 import { initialAuthorizedApps, withoutSkippedApps } from '../authorized-apps.utils';
 import { projectConsentTools } from '../consent-tools.helper';
 import {
@@ -491,7 +498,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
           httpRespond.html(
             this.renderLoginRetryPage(pendingAuth, localOptions.login, loginFields ?? {}, result),
             200,
-            builtInAuthPageHeaders({ csp: !localOptions.login?.render }),
+            builtInAuthPageHeaders({ csp: localOptions.login?.render ? false : 'inline' }),
           ),
         );
         return;
@@ -1384,7 +1391,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
    * preserved on the form so the user does not have to re-enter everything.
    */
   private renderLoginRetryPage(
-    pendingAuth: { clientId: string; scopes: string[] },
+    pendingAuth: { clientId: string; redirectUri: string; scopes: string[] },
     login: LoginConfig | undefined,
     fields: Record<string, string>,
     failure: { message: string; retryField?: string },
@@ -1396,6 +1403,8 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       scopes: pendingAuth.scopes ?? [],
       pendingAuthId: this.state.required.pendingAuthId,
       callbackPath,
+      redirectUri: pendingAuth.redirectUri,
+      formTargets: formActionSources([pendingAuth.redirectUri]),
       fields: login?.fields ?? {},
       error: failure.message,
     };
@@ -1648,7 +1657,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
 
   /** An HTML response with the built-in auth pages' security headers (#263). */
   private htmlPage(markup: string, status = 200): ReturnType<typeof httpRespond.html> {
-    return httpRespond.html(markup, status, builtInAuthPageHeaders());
+    return httpRespond.html(markup, status, builtInAuthPageHeaders({ csp: 'inline' }));
   }
 
   /**

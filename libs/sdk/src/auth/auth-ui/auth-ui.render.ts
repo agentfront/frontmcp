@@ -62,14 +62,18 @@ export function authUiExtraPath(fullPath: string): string {
 /** Schemes a page's form is never allowed to reach, whatever a redirect_uri names. */
 const UNSAFE_FORM_TARGET_SCHEMES = new Set(['javascript:', 'data:', 'blob:', 'filesystem:', 'about:', 'file:']);
 
+/** A host a CSP source expression can name: no IPv6 literal, quote, `;` or other character that would end it. */
+const CSP_SOURCE_HOST = /^[a-z0-9.-]+$/;
+
 /**
  * The CSP source expression that lets a form submission end at `target`, or
  * `undefined` when none can name it exactly:
  * - an `http(s)` URL: its origin (`https://app.example.com:8443`);
  * - a native app's private-use scheme (RFC 8252 §7.1, `com.example.app:/cb`),
  *   which has no origin: that scheme;
- * - anything else (unparseable, an IPv6 host a CSP source can't express, a
- *   script or local scheme): nothing, so the redirect stays blocked.
+ * - anything else (unparseable, a host a CSP source can't express, such as
+ *   an IPv6 literal, a script or local scheme): nothing, so the redirect stays
+ *   blocked.
  */
 export function formActionSource(target: string): string | undefined {
   let url: URL;
@@ -79,10 +83,16 @@ export function formActionSource(target: string): string | undefined {
     return undefined;
   }
   if (url.protocol === 'http:' || url.protocol === 'https:') {
-    return url.hostname.startsWith('[') ? undefined : url.origin;
+    return CSP_SOURCE_HOST.test(url.hostname) ? url.origin : undefined;
   }
   if (!/^[a-z][a-z0-9+.-]*:$/.test(url.protocol) || UNSAFE_FORM_TARGET_SCHEMES.has(url.protocol)) return undefined;
   return url.protocol;
+}
+
+/** The distinct {@link formActionSource} of each of `targets`, leaving out those none can name. */
+export function formActionSources(targets: readonly string[]): string[] {
+  const sources = targets.map(formActionSource).filter((source): source is string => source !== undefined);
+  return [...new Set(sources)];
 }
 
 /**
@@ -104,11 +114,6 @@ export function formActionSource(target: string): string | undefined {
  * @param formTargets - Where a submission of the page's form may be redirected
  */
 export function authUiCsp(formTargets: readonly string[] = []): string {
-  const formAction = new Set(["'self'"]);
-  for (const target of formTargets) {
-    const source = formActionSource(target);
-    if (source) formAction.add(source);
-  }
   return [
     "default-src 'self'",
     "script-src 'self' 'unsafe-inline' https://esm.sh",
@@ -117,7 +122,7 @@ export function authUiCsp(formTargets: readonly string[] = []): string {
     "img-src 'self' data: https:",
     "frame-ancestors 'none'",
     "base-uri 'self'",
-    `form-action ${[...formAction].join(' ')}`,
+    `form-action ${["'self'", ...formActionSources(formTargets)].join(' ')}`,
   ].join('; ');
 }
 

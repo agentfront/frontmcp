@@ -400,3 +400,78 @@ describe('RecreateableSSEServerTransport', () => {
     });
   });
 });
+
+describe('legacy SSE stream keep-alive', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  /** A response that records its writes and can be closed by the client. */
+  function streamResponse() {
+    const closeListeners: (() => void)[] = [];
+    const response = {
+      writableEnded: false,
+      writeHead: jest.fn().mockReturnThis(),
+      write: jest.fn().mockReturnValue(true),
+      end: jest.fn(() => (response.writableEnded = true)),
+      on: jest.fn((event: string, listener: () => void) => event === 'close' && closeListeners.push(listener)),
+    };
+    const comments = () => response.write.mock.calls.filter(([chunk]) => chunk === ': keep-alive\n\n').length;
+    const clientCloses = () => closeListeners.forEach((listener) => listener());
+    return { res: response as unknown as ServerResponse, response, comments, clientCloses };
+  }
+
+  it('sends a keep-alive comment after each heartbeat without a write', async () => {
+    const { res, comments } = streamResponse();
+    const transport = new RecreateableSSEServerTransport('/message', res, { heartbeatMs: 1_000 });
+    await transport.start();
+
+    jest.advanceTimersByTime(999);
+    expect(comments()).toBe(0);
+    jest.advanceTimersByTime(1);
+    expect(comments()).toBe(1);
+    jest.advanceTimersByTime(1_000);
+    expect(comments()).toBe(2);
+    await transport.close();
+  });
+
+  it('counts the heartbeat from the last message written', async () => {
+    const { res, comments } = streamResponse();
+    const transport = new RecreateableSSEServerTransport('/message', res, { heartbeatMs: 1_000 });
+    await transport.start();
+
+    jest.advanceTimersByTime(800);
+    await transport.send({ jsonrpc: '2.0', id: 1, result: {} });
+    jest.advanceTimersByTime(800);
+    expect(comments()).toBe(0);
+    jest.advanceTimersByTime(200);
+    expect(comments()).toBe(1);
+    await transport.close();
+  });
+
+  it('stops when the server closes the stream or the client leaves', async () => {
+    const closedByServer = streamResponse();
+    const first = new RecreateableSSEServerTransport('/message', closedByServer.res, { heartbeatMs: 1_000 });
+    await first.start();
+    await first.close();
+
+    const leftByClient = streamResponse();
+    const second = new RecreateableSSEServerTransport('/message', leftByClient.res, { heartbeatMs: 1_000 });
+    await second.start();
+    leftByClient.clientCloses();
+
+    jest.advanceTimersByTime(5_000);
+    expect(closedByServer.comments()).toBe(0);
+    expect(leftByClient.comments()).toBe(0);
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it('sends none when the heartbeat is off', async () => {
+    const { res, comments } = streamResponse();
+    const transport = new RecreateableSSEServerTransport('/message', res, { heartbeatMs: 0 });
+    await transport.start();
+
+    jest.advanceTimersByTime(60_000);
+    expect(comments()).toBe(0);
+    expect(jest.getTimerCount()).toBe(0);
+  });
+});

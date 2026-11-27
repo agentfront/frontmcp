@@ -139,4 +139,42 @@ describe('httpOptionsSchema', () => {
       expect(result.cors).toBe(false);
     });
   });
+
+  describe('userContent option (#1364)', () => {
+    it('is off unless set', () => {
+      expect(httpOptionsSchema.parse({}).userContent).toBeUndefined();
+    });
+
+    it('takes a port or a socket path, a root, allowed hosts, headers and a CSP', () => {
+      const userContent = {
+        port: 3001,
+        root: './content',
+        allowedHosts: ['content.example.com'],
+        headers: { 'Cross-Origin-Resource-Policy': 'cross-origin' },
+        csp: { directives: { 'default-src': "'none'", 'img-src': ["'self'", 'data:'] }, reportOnly: true },
+      };
+
+      expect(httpOptionsSchema.parse({ userContent }).userContent).toEqual(userContent);
+      expect(httpOptionsSchema.parse({ userContent: { socketPath: '/tmp/c.sock', root: '/srv' } }).userContent).toEqual(
+        {
+          socketPath: '/tmp/c.sock',
+          root: '/srv',
+        },
+      );
+    });
+
+    it.each([
+      ['no port or socket path', { root: '/srv' }, 'http.userContent needs a port or a socketPath of its own'],
+      ['no root', { port: 3001 }, 'root'],
+      ['an empty root', { port: 3001, root: '' }, 'root'],
+      ['a port out of range', { port: 70000, root: '/srv' }, 'port'],
+      ['an unknown key', { port: 3001, root: '/srv', allowedHost: ['x'] }, 'allowedHost'],
+      ['a CSP without directives', { port: 3001, root: '/srv', csp: {} }, 'directives'],
+    ])('refuses %s', (_label, userContent, mentions) => {
+      const result = httpOptionsSchema.safeParse({ userContent });
+
+      expect(result.success).toBe(false);
+      expect(JSON.stringify(result.error?.issues)).toContain(mentions);
+    });
+  });
 });

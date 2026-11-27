@@ -114,6 +114,28 @@ const forwardHeaderGlobSchema = z
     });
   });
 
+/** The user-content listener (see `UserContentOptions`). */
+const userContentSchema = z
+  .object({
+    port: z.number().int().min(0).max(65535).optional(),
+    socketPath: z.string().min(1).optional(),
+    root: z.string().min(1),
+    allowedHosts: z.array(z.string().min(1)).optional(),
+    headers: z.record(z.string(), z.string()).optional(),
+    csp: z
+      .object({
+        directives: z.record(z.string(), z.union([z.string(), z.array(z.string())])),
+        reportUri: z.string().optional(),
+        reportOnly: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict()
+  .refine((options) => options.port !== undefined || options.socketPath !== undefined, {
+    message: 'http.userContent needs a port or a socketPath of its own',
+  });
+
 /** The port the HTTP server listens on when `http.port` is not set: `PORT`, else 3000. */
 export const defaultHttpPort = (): number => Number(getEnv('PORT')) || 3000;
 
@@ -191,6 +213,8 @@ export const httpOptionsSchema = z.object({
   securityHeaders: securityHeadersSchema.optional(),
   /** More request headers to keep in `customHeaders`, besides `x-frontmcp-*`; see `HttpOptionsInterface`. */
   forwardHeaders: z.array(forwardHeaderGlobSchema).optional(),
+  /** A second listener for static user content; see `UserContentOptions`. */
+  userContent: userContentSchema.optional(),
 } satisfies RawZodShape<HttpOptionsInterface>);
 
 /**

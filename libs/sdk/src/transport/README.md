@@ -251,6 +251,10 @@ Legacy config flags (for reference):
   cancellation notifications. ([Model Context Protocol][3])
 - **Origin checks** and localhost binding for dev to avoid DNS-rebinding risks (security warning). ([Model Context
   Protocol][1])
+- **Keep-alive**. Every open MCP stream (Streamable HTTP `POST` and `GET`, legacy SSE, the 2026-07-28 request and
+  `subscriptions/listen` streams) writes an SSE keep-alive comment between events after `transport.sse.heartbeatMs`
+  (default 15 s; `0` or `false` turns it off; at most 2,147,483,647 ms, the longest delay a timer keeps), so a proxy's
+  idle timeout (Cloudflare: 100 s) does not cut a long call.
 
 ---
 

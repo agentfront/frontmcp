@@ -55,7 +55,7 @@ function createMockScope() {
     },
     metadata: {},
     runFlow: jest.fn().mockResolvedValue({}),
-    resources: { subscribe: jest.fn().mockReturnValue(() => {}) },
+    resources: { subscribe: jest.fn().mockReturnValue(() => {}), watchUri: jest.fn(), unwatchUri: jest.fn() },
     tools: { subscribe: jest.fn().mockReturnValue(() => {}) },
     prompts: { subscribe: jest.fn().mockReturnValue(() => {}) },
   };
@@ -258,6 +258,32 @@ describe('NotificationService - resource subscription notifications', () => {
 
       expect(mockScope.runFlow).not.toHaveBeenCalled();
       expect(server.notification).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('subscribers counted on the registry', () => {
+    it('counts a URI once per session, until it unsubscribes or its session ends', () => {
+      service.registerServer('session-1', createMockServer());
+      service.registerServer('session-2', createMockServer());
+
+      service.subscribeResource('session-1', 'file://notes.txt');
+      service.subscribeResource('session-1', 'file://notes.txt');
+      service.subscribeResource('session-2', 'file://notes.txt');
+      service.subscribeResource('session-2', 'file://todo.txt');
+      expect(mockScope.resources.watchUri.mock.calls).toEqual([
+        ['file://notes.txt'],
+        ['file://notes.txt'],
+        ['file://todo.txt'],
+      ]);
+
+      service.unsubscribeResource('session-1', 'file://notes.txt');
+      service.unsubscribeResource('session-1', 'file://notes.txt');
+      service.unregisterServer('session-2');
+      expect(mockScope.resources.unwatchUri.mock.calls).toEqual([
+        ['file://notes.txt'],
+        ['file://notes.txt'],
+        ['file://todo.txt'],
+      ]);
     });
   });
 

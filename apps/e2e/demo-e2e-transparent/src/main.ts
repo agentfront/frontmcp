@@ -23,6 +23,8 @@ const expectedAudience = process.env['IDP_EXPECTED_AUDIENCE'] || idpProviderUrl;
       dcrEnabled: false,
     },
     expectedAudience,
+    clientId: 'demo-e2e-transparent-cli',
+    resourceMetadata: { clientId: true, audience: true },
     requiredScopes: [],
     allowAnonymous: false,
   },

@@ -48,6 +48,12 @@ export class RemotePrimaryAuth extends FrontMcpAuth<TransparentAuthOptions> {
 
     await this.registerAuthFlows(scope);
     this.warnWithoutConfiguredAudience(scope);
+    if (this.options.resourceMetadata?.clientId === true && !this.options.clientId) {
+      scope.logger.warn(
+        'auth.resourceMetadata.clientId is true but auth.clientId is not set, so the protected resource metadata ' +
+          'names no client_id. Set auth.clientId, or give resourceMetadata.clientId the client id itself.',
+      );
+    }
     return Promise.resolve();
   }
 

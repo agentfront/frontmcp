@@ -42,6 +42,8 @@
           },
           "external": [
             "@frontmcp/lazy-zod",
+            "@frontmcp/auth",
+            "@frontmcp/auth/*",
             "@frontmcp/sdk",
             "@frontmcp/sdk/*",
             "@frontmcp/protocol",
@@ -89,6 +91,8 @@
           },
           "external": [
             "@frontmcp/lazy-zod",
+            "@frontmcp/auth",
+            "@frontmcp/auth/*",
             "@frontmcp/sdk",
             "@frontmcp/sdk/*",
             "@frontmcp/protocol",

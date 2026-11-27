@@ -35,6 +35,9 @@ export interface StreamableHTTPServerTransportOptions {
 
   eventStore?: any;
 
+  /** Milliseconds between the keep-alive comments of an open SSE stream (`transport.sse.heartbeatMs`); `0` sends none. */
+  keepAliveMs?: number;
+
   /**
    * Callback when a session is initialized.
    */

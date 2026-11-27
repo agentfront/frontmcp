@@ -21,7 +21,7 @@ Verify that tools enforce role-based access by testing admin and user tokens aga
 // src/__tests__/rbac.e2e.spec.ts
 // Real API:
 //   libs/testing/src/server/test-server.ts:101 — `TestServer.start({ command, port })`
-//   libs/testing/src/auth/token-factory.ts:97 — `TestTokenFactory.createTestToken({ sub, scopes, claims })`
+//   libs/auth/src/testing/token-factory.ts:135 — `TestTokenFactory.createTestToken({ sub, scopes, claims })`
 //   libs/testing/src/client/mcp-test-client.builder.ts — `McpTestClient.create(...).withToken(...).buildAndConnect()`
 //   libs/testing/src/client/mcp-test-client.ts:306 — namespaced client API: `client.tools.call(name, args)`
 import { McpTestClient, TestServer, TestTokenFactory } from '@frontmcp/testing';

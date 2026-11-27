@@ -30,6 +30,47 @@ export function findUndeclaredArguments(
   return [...dropped.values()].sort((left, right) => formatKeyPath(left).localeCompare(formatKeyPath(right)));
 }
 
+/** The keys declared below `parentPath`: those of every object the schema allows there, `[]` standing for array items. */
+export function declaredKeysAt(shape: Readonly<Record<string, unknown>>, parentPath: ArgumentKeyPath): string[] {
+  let level: SchemaDefinition[] = [{ type: 'object', shape }];
+  for (const segment of parentPath) {
+    const next = level.flatMap((definition) => {
+      if (segment === '[]') return definition['type'] === 'array' ? definitionsOf(definition['element']) : [];
+      const fields = definition['type'] === 'object' ? (definition['shape'] as Record<string, unknown>) : {};
+      return Object.prototype.hasOwnProperty.call(fields, segment) ? definitionsOf(fields[segment]) : [];
+    });
+    // Each definition once: two options whose field holds the same schema would otherwise double it at each segment.
+    level = [...new Set(next)];
+  }
+  const keys = level.flatMap((definition) =>
+    definition['type'] === 'object' ? Object.keys(definition['shape'] as Record<string, unknown>) : [],
+  );
+  return [...new Set(keys)];
+}
+
+type SchemaDefinition = Record<string, unknown>;
+
+const WRAPPER_TYPES = new Set(['optional', 'nullable', 'default', 'prefault', 'nonoptional', 'readonly', 'catch']);
+
+/** What `schema` can be below its wrappers (optional, default, ...): each union option, both sides of an intersection. */
+function definitionsOf(schema: unknown, seen = new Set<object>()): SchemaDefinition[] {
+  const definition = (schema as { _zod?: { def?: SchemaDefinition } } | null | undefined)?._zod?.def;
+  if (!definition || seen.has(definition)) return [];
+  seen.add(definition);
+  const type = definition['type'];
+  if (typeof type === 'string' && WRAPPER_TYPES.has(type)) return definitionsOf(definition['innerType'], seen);
+  if (type === 'lazy') {
+    // The schema zod keeps for it, so each time it is expanded it gives the same definitions to deduplicate.
+    const inner = (schema as { _zod: { innerType?: unknown } })._zod.innerType;
+    return definitionsOf(inner ?? (definition['getter'] as () => unknown)(), seen);
+  }
+  if (type === 'union') return (definition['options'] as unknown[]).flatMap((option) => definitionsOf(option, seen));
+  if (type === 'intersection') {
+    return [definition['left'], definition['right']].flatMap((side) => definitionsOf(side, seen));
+  }
+  return [definition];
+}
+
 /** A key path as people read it: `filter.owner`, `lines[].margin`. */
 export function formatKeyPath(keyPath: ArgumentKeyPath): string {
   return keyPath.reduce(

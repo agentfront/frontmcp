@@ -1,5 +1,6 @@
-module.exports = {
+const project = {
   displayName: '@frontmcp/storage-sqlite',
+  rootDir: __dirname,
   preset: '../../jest.preset.js',
   testEnvironment: 'node',
   transform: {
@@ -31,6 +32,20 @@ module.exports = {
     '^@frontmcp/utils/crypto/node$': '<rootDir>/../utils/src/crypto/node.ts',
     '^@frontmcp/guard$': '<rootDir>/../guard/src/index.ts',
   },
+};
+
+module.exports = {
+  // Every spec runs twice: on better-sqlite3, and on node:sqlite.
+  projects: [
+    project,
+    {
+      ...project,
+      displayName: '@frontmcp/storage-sqlite (node:sqlite)',
+      setupFiles: ['<rootDir>/src/__test-utils__/use-node-sqlite.ts'],
+      // Type checks of the better-sqlite3 members `openDatabase()` and `getDatabase()` expose.
+      testPathIgnorePatterns: ['/node_modules/', 'public-database-types\\.spec\\.ts$'],
+    },
+  ],
   coverageDirectory: '../../coverage/unit/storage-sqlite',
   collectCoverageFrom: ['src/**/*.ts', '!src/**/*.d.ts', '!src/**/index.ts'],
   coverageThreshold: {

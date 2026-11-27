@@ -1,6 +1,12 @@
 import type { ResourceEntry } from '../../common/entries/resource.entry';
 import type { FrontMcpLogger } from '../../common/interfaces/logger.interface';
-import type { ResourceKey, ResourceStoreHandle } from '../../common/metadata/materialized.metadata';
+import {
+  isProducedResourceKey,
+  isResourceKey,
+  isResourceKeyFamily,
+  type ResourceKey,
+  type ResourceStoreHandle,
+} from '../../common/metadata/materialized.metadata';
 import type { ResourceMetadata } from '../../common/metadata/resource.metadata';
 import { InvalidResourceStoreError } from '../../errors/mcp.error';
 import type { ResourceChangeEvent } from '../resource.events';
@@ -12,13 +18,15 @@ export interface MaterializedResourcesScope {
     listAllInstances(): readonly ResourceEntry[];
     subscribe(options: { immediate?: boolean }, listener: (event: ResourceChangeEvent) => void): () => void;
     notifyContentChanged(uri: string): void;
+    watchedUris(): string[];
+    onWatchChange(listener: () => void): () => void;
   };
   readonly logger: Pick<FrontMcpLogger, 'warn'>;
 }
 
-interface MaterializedEntry {
-  readonly uri: string;
-  readonly from: ResourceKey;
+interface FollowedKey {
+  readonly key: ResourceKey;
+  readonly unfollow: () => void;
 }
 
 function messageOf(error: unknown): string {
@@ -31,20 +39,26 @@ function servesWithoutKey(entry: ResourceEntry): boolean {
   return servesStoredValue && !(entry.metadata as ResourceMetadata).from;
 }
 
-function materializedEntry(entry: ResourceEntry): MaterializedEntry | undefined {
-  const from = (entry.metadata as ResourceMetadata).from;
-  return !entry.isTemplate && entry.uri && from ? { uri: entry.uri, from } : undefined;
+function storeOf(entry: ResourceEntry): ResourceStoreHandle | undefined {
+  const from: unknown = (entry.metadata as { from?: unknown }).from;
+  return isResourceKey(from) || isResourceKeyFamily(from) ? from.store : undefined;
+}
+
+function sameKey(one: ResourceKey, other: ResourceKey): boolean {
+  return one === other || (one.store === other.store && one.name === other.name);
 }
 
 /**
- * The scope's materialized resources (`@Resource({ from })`): each one's key is followed, and a revision change, from
- * a write in any process, becomes the registry's content change, which reaches the sessions subscribed to its URI
- * and the 2026-07-28 `subscriptions/listen` streams. It opens the stores at start and closes them at stop.
+ * The scope's materialized resources (`@Resource({ from })`, `@ResourceTemplate({ from })`): a key's revision change,
+ * from a write in any process, becomes the registry's content change, which reaches the sessions subscribed to its URI
+ * and the 2026-07-28 `subscriptions/listen` streams. A written key is followed from start to stop. A producer-backed
+ * key, and a template's key, is followed only while its URI has a subscriber, so a producer runs only then. It opens
+ * the stores at start and closes them at stop.
  */
 export class MaterializedResources {
-  private readonly followed = new Map<ResourceEntry, () => void>();
+  private readonly followed = new Map<string, FollowedKey>();
   private readonly connected = new Set<ResourceStoreHandle>();
-  private stopRegistry?: () => void;
+  private readonly stopListening: Array<() => void> = [];
 
   constructor(private readonly scope: MaterializedResourcesScope) {}
 
@@ -52,7 +66,7 @@ export class MaterializedResources {
     const entries = this.scope.resources.listAllInstances();
     const misdeclared = entries.find(servesWithoutKey);
     if (misdeclared) throw new InvalidResourceStoreError(missingKeyMessage(misdeclared.metadata.name));
-    const stores = new Set(entries.flatMap((entry) => materializedEntry(entry)?.from.store ?? []));
+    const stores = new Set(entries.flatMap((entry) => storeOf(entry) ?? []));
     const opened = await Promise.allSettled([...stores].map((store) => this.connect(store)));
     const failure = opened.find((result): result is PromiseRejectedResult => result.status === 'rejected');
     if (failure) {
@@ -61,16 +75,18 @@ export class MaterializedResources {
       );
       throw failure.reason;
     }
-    this.follow();
-    this.stopRegistry = this.scope.resources.subscribe({ immediate: false }, (event) => {
-      if (event.kind !== 'updated') this.follow();
-    });
+    this.refresh();
+    this.stopListening.push(
+      this.scope.resources.subscribe({ immediate: false }, (event) => {
+        if (event.kind !== 'updated') this.refresh();
+      }),
+      this.scope.resources.onWatchChange(() => this.refresh()),
+    );
   }
 
   async stop(): Promise<void> {
-    this.stopRegistry?.();
-    this.stopRegistry = undefined;
-    for (const unfollow of this.followed.values()) unfollow();
+    for (const stopListening of this.stopListening.splice(0)) stopListening();
+    for (const { unfollow } of this.followed.values()) unfollow();
     this.followed.clear();
     const stores = [...this.connected];
     this.connected.clear();
@@ -82,28 +98,45 @@ export class MaterializedResources {
     return store.connect();
   }
 
-  private follow(): void {
-    const current = new Map<ResourceEntry, MaterializedEntry>();
-    for (const entry of this.scope.resources.listAllInstances()) {
-      const materialized = materializedEntry(entry);
-      if (materialized) current.set(entry, materialized);
+  /** The key each URI should follow now: every written key, and the others whose URI has a subscriber. */
+  private wanted(): Map<string, ResourceKey> {
+    const wanted = new Map<string, ResourceKey>();
+    const watched = this.scope.resources.watchedUris();
+    const entries = this.scope.resources.listAllInstances();
+    for (const entry of entries) {
+      const from = (entry.metadata as ResourceMetadata).from;
+      if (entry.isTemplate || !entry.uri || !isResourceKey(from)) continue;
+      const uri = entry.uri;
+      if (!isProducedResourceKey(from) || watched.some((prefix) => uri.startsWith(prefix))) wanted.set(uri, from);
     }
-    for (const [entry, unfollow] of this.followed) {
-      if (current.has(entry)) continue;
+    for (const entry of entries) {
+      const from: unknown = (entry.metadata as { from?: unknown }).from;
+      if (!entry.isTemplate || !isResourceKeyFamily(from)) continue;
+      for (const uri of watched) {
+        if (wanted.has(uri)) continue;
+        const { matches, params } = entry.matchUri(uri);
+        if (matches) wanted.set(uri, from.key(params));
+      }
+    }
+    return wanted;
+  }
+
+  private refresh(): void {
+    const wanted = this.wanted();
+    for (const [uri, { key, unfollow }] of this.followed) {
+      const next = wanted.get(uri);
+      if (next && sameKey(next, key)) continue;
       unfollow();
-      this.followed.delete(entry);
+      this.followed.delete(uri);
     }
-    for (const [entry, { uri, from }] of current) {
-      if (this.followed.has(entry)) continue;
-      if (!this.connected.has(from.store)) {
-        this.connect(from.store).catch((error: unknown) =>
+    for (const [uri, key] of wanted) {
+      if (this.followed.has(uri)) continue;
+      if (!this.connected.has(key.store)) {
+        this.connect(key.store).catch((error: unknown) =>
           this.scope.logger.warn(`The store of materialized resource ${uri} could not open: ${messageOf(error)}`),
         );
       }
-      this.followed.set(
-        entry,
-        from.subscribe(() => this.scope.resources.notifyContentChanged(uri)),
-      );
+      this.followed.set(uri, { key, unfollow: key.subscribe(() => this.scope.resources.notifyContentChanged(uri)) });
     }
   }
 }

@@ -15,12 +15,18 @@ export interface LoopbackTokenPeopleAuthOptions {
   lockoutMs?: number;
   /** The `Path` of the session cookie. @default '/' */
   cookiePath?: string;
+  /**
+   * `false` keeps sessions in memory, so a restart signs everyone out, although the server has a store. Otherwise
+   * sessions are kept in the server's `redis`, else its `sqlite`, else a Redis or SQLite `auth.tokenStorage`.
+   */
+  store?: false;
 }
 
 /** `http.auth.people`: `'loopback-token'`, or the same mode with its settings. */
 export type PeopleAuthOption = 'loopback-token' | LoopbackTokenPeopleAuthOptions;
 
-export type PeopleAuthOptions = Required<LoopbackTokenPeopleAuthOptions>;
+export type PeopleAuthOptions = Required<Omit<LoopbackTokenPeopleAuthOptions, 'store'>> &
+  Pick<LoopbackTokenPeopleAuthOptions, 'store'>;
 
 function milliseconds(field: string) {
   return z
@@ -44,6 +50,7 @@ function createPeopleAuthOptionsSchema() {
         .optional(),
       lockoutMs: milliseconds('lockoutMs').optional(),
       cookiePath: z.string().startsWith('/', 'cookiePath must start with "/"').optional(),
+      store: z.literal(false, { message: 'store must be false, or left out to use the server store' }).optional(),
     })
     .strict();
 
@@ -60,6 +67,7 @@ function createPeopleAuthOptionsSchema() {
         maxFailedAttempts: settings.maxFailedAttempts ?? 5,
         lockoutMs: settings.lockoutMs ?? MINUTE_MS,
         cookiePath: settings.cookiePath ?? '/',
+        ...(settings.store === false ? { store: false as const } : {}),
       };
     });
 }

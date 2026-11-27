@@ -4,6 +4,7 @@ import {
   FrontMcpLogger,
   Plugin,
   ProviderScope,
+  ResourceHook,
   storeProvider,
   ToolHook,
   type CallToolResult,
@@ -14,7 +15,7 @@ import {
 
 import { jsonBytes, previewOf, shapeOf, type FoldedAnswer } from './folded-answer';
 import { createResultHandleStore } from './result-handle-store.factory';
-import { addFoldingStore, resultOwnerOf } from './result-handle.store';
+import { addFoldingStore, resultOwnerOf, type ResultHandleStore, type ResultOwner } from './result-handle.store';
 import {
   parseResultHandlesOptions,
   RESULT_HANDLE_META_KEY,
@@ -33,6 +34,21 @@ function parsedJsonText(text: string): unknown {
     return JSON.parse(text);
   } catch {
     return undefined;
+  }
+}
+
+/**
+ * What a resource's text holds: for a JSON media type (`application/json`, `+json`), any JSON value, a string or a
+ * number included; else an object or a list its text spells, as for a tool's text. The text itself when it does not
+ * parse.
+ */
+function resourceAnswerOf(text: string, mimeType: string | undefined): unknown {
+  const media = mimeType?.split(';')[0].trim().toLowerCase();
+  if (media !== 'application/json' && !media?.endsWith('+json')) return parsedJsonText(text) ?? text;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
   }
 }
 
@@ -75,10 +91,17 @@ function jsonSchemaAdmits(jsonSchema: object, folded: FoldedAnswer): boolean {
   }
 }
 
+/** Whether a client read the resource, rather than an agent or a flow in process. */
+function isClientRead(rawInput: unknown): boolean {
+  const ctx = (rawInput as { ctx?: { internalCall?: boolean; agentPrivateCall?: boolean } } | undefined)?.ctx;
+  return !(ctx?.internalCall || ctx?.agentPrivateCall);
+}
+
 /** Folds an answer over `thresholdBytes` into a preview, a shape and a handle that `result_query` reads. */
 @Plugin({
   name: 'result-handles',
-  description: 'Folds large tool answers into a preview, a shape and a handle that result_query reads',
+  description:
+    'Folds large tool answers (and, opted in, resource reads) into a preview, a shape and a handle that result_query reads',
   tools: [ResultQueryTool],
 })
 export default class ResultHandlesPlugin extends DynamicPlugin<
@@ -141,26 +164,73 @@ export default class ResultHandlesPlugin extends DynamicPlugin<
       this.warnUnfoldableOnce(tool, bytes);
       return;
     }
-    try {
-      await store.save(handle, answer, owner);
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      this.logger().warn(
-        `Could not keep the answer of tool "${tool.fullName}" for result_query, so it is sent whole: ${reason}`,
-      );
-      return;
-    }
+    if (!(await this.kept(store, handle, answer, owner, `tool "${tool.fullName}"`))) return;
     addFoldingStore(toolContext.scope, store);
-    const { ttlSeconds } = this.options;
-    const note =
-      `This answer is ${bytes} bytes, so it was folded: preview is its start and shape its structure. ` +
-      `Read the rest with ${RESULT_QUERY_TOOL_NAME} and handle "${handle}" ` +
-      `(a path, then offset and limit or a page, and fields) within ${ttlSeconds} seconds.`;
     flowCtx.respond({
       ...folded,
-      content: [...folded.content, { type: 'text', text: note }],
-      _meta: { ...output._meta, [RESULT_HANDLE_META_KEY]: { handle, bytes, ttlSeconds } },
+      content: [...folded.content, { type: 'text', text: this.foldNote(bytes, handle) }],
+      _meta: { ...output._meta, [RESULT_HANDLE_META_KEY]: { handle, bytes, ttlSeconds: this.options.ttlSeconds } },
     });
+  }
+
+  /** With `resources` on, folds a read of one text over the threshold, as `foldAnswer` folds a tool's answer. */
+  @ResourceHook.Will('fitAnswer')
+  async foldResource(flowCtx: FlowCtxOf<'resources:read-resource'>): Promise<void> {
+    const policy = this.options.resources;
+    const { resource, resourceContext, output, isUIResource } = flowCtx.state;
+    if (!policy || !resource || !resourceContext || !output || isUIResource || !isClientRead(flowCtx.rawInput)) return;
+    const [content, ...others] = output.contents;
+    if (!content || others.length > 0 || !('text' in content) || typeof content.text !== 'string') return;
+    if (content.mimeType?.startsWith('text/html')) return;
+    const answer = resourceAnswerOf(content.text, content.mimeType);
+    const bytes = jsonBytes(answer);
+    if (bytes <= this.options.thresholdBytes) return;
+    const owner = resultOwnerOf(resourceContext);
+    if (owner.session === undefined && owner.caller === undefined) return;
+    const context = { bytes, fullName: resource.fullName, request: flowCtx.request };
+    if (policy !== true && !policy(content.uri, answer, context)) return;
+
+    const store = this.get(ResultHandleStoreToken);
+    const handle = store.newHandle();
+    if (!(await this.kept(store, handle, answer, owner, `resource "${resource.fullName}"`))) return;
+    addFoldingStore(resourceContext.scope, store);
+    const folded: FoldedAnswer = { preview: previewOf(answer, this.options.preview), shape: shapeOf(answer), handle };
+    flowCtx.respond({
+      ...output,
+      contents: [
+        { ...content, mimeType: 'application/json', text: JSON.stringify(folded) },
+        { uri: content.uri, mimeType: 'text/plain', text: this.foldNote(bytes, handle) },
+      ],
+      _meta: { ...output._meta, [RESULT_HANDLE_META_KEY]: { handle, bytes, ttlSeconds: this.options.ttlSeconds } },
+    });
+  }
+
+  /** Whether the store kept `answer`; when it could not, the answer is sent whole and a warning names `entry`. */
+  private async kept(
+    store: ResultHandleStore,
+    handle: string,
+    answer: unknown,
+    owner: ResultOwner,
+    entry: string,
+  ): Promise<boolean> {
+    try {
+      await store.save(handle, answer, owner);
+      return true;
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      this.logger().warn(`Could not keep the answer of ${entry} for result_query, so it is sent whole: ${reason}`);
+      return false;
+    }
+  }
+
+  private foldNote(bytes: number, handle: string): string {
+    const { ttlSeconds, slidingTtl } = this.options;
+    return (
+      `This answer is ${bytes} bytes, so it was folded: preview is its start and shape its structure. ` +
+      `Read the rest with ${RESULT_QUERY_TOOL_NAME} and handle "${handle}" ` +
+      `(a path, then offset and limit or a page, and fields) within ${ttlSeconds} seconds` +
+      `${slidingTtl ? ' of its last read' : ''}.`
+    );
   }
 
   private logger(): FrontMcpLogger {

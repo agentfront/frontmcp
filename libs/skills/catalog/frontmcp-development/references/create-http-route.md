@@ -1,6 +1,6 @@
 ---
 name: create-http-route
-description: Serve pages, APIs and live SSE views for people beside the MCP endpoint with @HttpRoute classes that share the app's providers, behind people auth and a same-origin check
+description: Serve pages, APIs and live SSE views beside the MCP endpoint with @HttpRoute classes that share the app's providers, behind people auth or the server's bearer auth and authorities, and a same-origin check
 ---
 
 # HTTP Routes: Pages and APIs for People
@@ -8,7 +8,8 @@ description: Serve pages, APIs and live SSE views for people beside the MCP endp
 An `@HttpRoute` class serves an HTTP request beside the MCP endpoint, on the same port. It gets the providers of its app
 (`this.get()`), the same instances the app's tools get, so an agent and a person look at one state. Every route runs
 through the hookable `http:route` flow, on the Node server and on `createFetchHandler()` alike: the IP filter, the
-global rate limit, a same-origin check on mutations, people auth, then `handle()`.
+global rate limit, a same-origin check on mutations, people or bearer auth, the route's `authorities`, then
+`handle()`.
 
 ## When to Use This Skill
 
@@ -17,6 +18,7 @@ global rate limit, a same-origin check on mutations, people auth, then `handle()
 - A web page, a JSON API or a live view for a person, next to the tools an agent calls
 - A page that shows what the agent changed (a board, a queue, a report) while it changes
 - Signing a person in to such pages on a local server, without an identity provider
+- A JSON API for the clients that call your tools, with the same token and the same `authorities` policy
 
 ### Recommended
 
@@ -67,7 +69,8 @@ export class HomePage extends HttpRouteContext {
 
 `this.request` holds the method, path, headers, query and parsed body (with `bodyBytes`, its bytes as received, for a
 digest or a signature over the exact body); `this.params` the path parameters;
-`this.person` the signed-in person on a `'people'` or `'subject'` route. `this.get()`, `this.tryGet()`, `this.scope`,
+`this.person` the signed-in person on a `'people'` or `'subject'` route; `this.auth` the verified caller on a
+`'bearer'` route (Step 3b). `this.get()`, `this.tryGet()`, `this.scope`,
 `this.fetch()` and `this.context` work as in a tool.
 
 What `handle()` returns becomes the response:
@@ -131,6 +134,32 @@ a person signed in with a code made by `createCode({ subject })`, and `this.pers
 of sign-in opens only its own routes: a subject's session gets `401` on a `'people'` route, and a session from the
 startup token gets `401` on a `'subject'` route, so a code sent to one person for their questions opens nothing else.
 
+### Step 3b (optional): Require the server's bearer auth, and check authorities
+
+```typescript
+@HttpRoute({ method: 'GET', path: '/api/projects/:projectId', auth: 'bearer', authorities: 'projectMember' })
+export class ProjectApi extends HttpRouteContext {
+  async handle() {
+    return this.get(Projects).find(this.params['projectId'], this.auth.user.sub);
+  }
+}
+```
+
+`auth: 'bearer'` admits the callers the MCP endpoint's `auth` admits, with the same `session:verify` check: a token
+the server doesn't accept (or none) gets the endpoint's `401` and `WWW-Authenticate` challenge, one without a
+`requiredScopes` scope its `403`. It needs no `http.auth.people`. `this.auth` is the verified caller, as in a tool
+(roles, permissions and claims through `authorities.claimsMapping`, and `authorities.pipes`). In `public` mode the
+endpoint admits every caller as anonymous, so the route does too, and the server warns at startup.
+
+`authorities` is a tool's `authorities` (a profile name, a list of names, or a policy), checked after the token and
+before `handle()`. Its `input` is the request body's fields and the path's parameters, which win, so
+`{ fromInput: 'projectId' }` reads `/api/projects/:projectId`, and one profile covers a route and the tool that takes
+`projectId`. A denied caller gets `403` `{ "error": "Forbidden" }` (the reason is logged at verbose). `authorities`
+needs `auth: 'bearer'` (`InvalidDecoratorMetadataError` otherwise), and a server without `@FrontMcp({ authorities })`,
+or a rule that names an unknown profile, fails startup with `AuthConfigurationError`. On an SSE route the stream ends
+when the token expires. Up to 1.13.1 a route could take only `'people'`, `'subject'` or `'public'`, and only an
+`http.routes` entry could require the token.
+
 ### Step 4 (optional): Serve a live view over SSE
 
 ```typescript
@@ -161,7 +190,8 @@ down, and on a people route when the person's session expires or ends (checked b
 | ----------------- | ------------------------------------------------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `method`          | `'GET' \| 'POST' \| 'PUT' \| 'PATCH' \| 'DELETE'` | Required                                            |                                                                                                                                                                                   |
 | `path`            | `string` or `() => string`                        | Required                                            | Literal segments and `:name` parameters (`/board/:id`); Express wildcards and groups (`*`, `()`, `{}`) are refused. A function is called once at startup, for a path from options |
-| `auth`            | `'people' \| 'public'`                            | `'people'` with `http.auth.people`, else `'public'` |                                                                                                                                                                                   |
+| `auth`            | `'people' \| 'subject' \| 'bearer' \| 'public'`   | `'people'` with `http.auth.people`, else `'public'` | `'bearer'`: the MCP endpoint's auth (Step 3b)                                                                                                                                     |
+| `authorities`     | a profile name, a list of names or a policy       | None                                                | With `auth: 'bearer'` only; input is the body's fields and the path's parameters                                                                                                  |
 | `sse.store`       | anything with `subscribe(topic, listener)`        | Required with `sse`                                 | A `resourceStore()`; a key's topic is its name                                                                                                                                    |
 | `sse.topics`      | `string[]`                                        | Required with `sse`, at least one                   |                                                                                                                                                                                   |
 | `sse.coalesceMs`  | `number`                                          | `50`                                                |                                                                                                                                                                                   |
@@ -193,7 +223,9 @@ app) serve one path, the first scope's serves it on every adapter.
    the server's console). Any code is a credential: send it to the person, never back to the MCP client, and never to
    a log. Tool code can make one for any subject, so the binding is as strong as the tools that call `createCode`.
 3. **The sign-in page.** The person opens `/_frontmcp/people/login?code=<code>&next=/board`. The page signs nothing in:
-   its form posts the code back from the server's own origin.
+   its form posts the code back from the server's own origin. It is served with `Referrer-Policy: same-origin`, so the
+   POST carries the page's `Origin` (up to 1.13.1 it was `no-referrer`, whose form posts send `Origin: null` and were
+   refused).
 4. **The cookie.** `POST /_frontmcp/people/login` (a form, or JSON `{ "code", "next" }`) spends the code and sets
    `frontmcp_people=<session>; Path=/; Max-Age=<s>; HttpOnly; SameSite=Strict`, plus `Secure` over https, then goes to
    `next` (a path on this server; anything else goes to `/`).
@@ -206,13 +238,27 @@ app) serve one path, the first scope's serves it on every adapter.
 | `maxFailedAttempts`      | `5`                | Bad tokens or codes from one client before it is locked out            |
 | `lockoutMs`              | `60000`            | How long a lockout lasts, and how long a bad attempt counts            |
 | `cookiePath`             | `'/'`              | The cookie's `Path`; set it to the common prefix of your people routes |
+| `store`                  | the server's store | `false` keeps sessions in memory although the server has a store       |
 
 An invalid value fails startup with `InvalidPeopleAuthOptionsError` (`http.auth.people: <problem>`).
 
 - A code works once and expires after `codeTtlMs`; the cookie value is a fresh random value, never the token or a code.
 - The token, codes and sessions are kept as SHA-256 digests and compared in constant time.
-- Sessions live in the server's memory: a restart signs everyone out and prints a new token. All the scopes of one
-  server share one token and one set of sessions.
+- Sessions are kept in the server's store when it has one (its `redis`, else its `sqlite`, else a Redis or SQLite
+  `auth.tokenStorage`), so a restart or an upgrade signs no one out (from 1.13.2). Only the digest of the cookie value
+  is kept, with its expiry and subject, under `mcp:people:<info.name>:`, so two servers sharing a store never share a
+  sign-in. Without a store, or with `store: false`, sessions live in memory and a restart signs everyone out; startup
+  warns about that unless `store: false` is set. A store that cannot be opened is logged and leaves sessions in memory.
+- `this.get(LoopbackTokenAuth).endSession(cookieValue)` signs a person out. With a store, each people request and each
+  SSE check reads the store, so a sign-out on one process ends the session on every process that shares the store,
+  from its next request (from 1.13.2). The limits, all while the store fails: a process that cannot read the store
+  keeps the sessions it made itself signed in, and refuses the others; a session the store could not keep lives only
+  in the process that made it, so only that process can sign it out; and when the store cannot remove a signed-out
+  session, the process that signed it out refuses it at once and tries the removal again (when the cookie comes back,
+  at the next sign-in, and at shutdown), but other processes, and that process after a restart, accept it until the
+  removal succeeds or the session expires.
+- The token and the codes always live in memory: a restart prints a new token, and an unspent code stops working. All
+  the scopes of one server share one token and one set of sessions.
 - Cookies are not isolated by port: another server on `localhost` receives `frontmcp_people`, and two FrontMCP servers
   on `localhost` sign each other out unless their `cookiePath`s differ.
 - The lockout is keyed by the client's address (`X-Forwarded-For` only behind `FRONTMCP_TRUST_PROXY`), so clients that
@@ -239,6 +285,13 @@ included, which makes signing in CSRF-safe. The rules are the loopback Origin ru
 - without an `Origin`, a `Sec-Fetch-Site` other than `same-origin` or `none` is refused;
 - a request with neither header (a CLI, an agent) is allowed.
 
+A page of yours that posts a `<form>` must not be served with `Referrer-Policy: no-referrer`, as a header or a
+`<meta name="referrer">`: the browser then sends `Origin: null`, which this check and the DNS-rebinding `Origin` check
+refuse. For a form that posts to the page's own origin, use `same-origin`, which still sends no referrer to other
+sites. A form that posts to another origin you list in `allowedOrigins` gets `Origin: null` under `same-origin` too:
+serve that page with `strict-origin-when-cross-origin` (the browsers' default), which sends the page's origin unless the
+post goes from `https` to `http`. A `fetch()` POST sends the page's origin under both.
+
 The check compares the `Origin` with the request's own `Host`, which a page on a DNS-rebound name sets to that name.
 Host validation (`http.security.dnsRebindingProtection`) is what refuses such a host: it is on by default on a loopback
 Node server, and `createFetchHandler()` applies it once `allowedHosts` is set, so set it when a fetch handler listens on
@@ -247,7 +300,7 @@ loopback. The session cookie is host-only, so a rebound page never carries it to
 ## Hooks
 
 Each stage of `http:route` is hookable: `checkIpFilter`, `findRoute`, `acquireQuota`, `checkSameOrigin`,
-`authenticatePerson`, `handle`.
+`authenticatePerson`, `authenticateBearer`, `checkAuthorities`, `handle`.
 
 ```typescript
 import { HttpRouteHook, Plugin } from '@frontmcp/sdk';
@@ -268,7 +321,8 @@ export class RouteAuditPlugin {
 | Declared in       | `@App({ routes })`                           | `@FrontMcp({ http: { routes } })`      |
 | Handler           | A class with `handle()`, the app's providers | `(req, res, next)`, no DI              |
 | Runs through      | The `http:route` flow (hookable)             | The `http:ip-filter` flow              |
-| Auth              | People auth                                  | `auth: true`: the MCP `session:verify` |
+| Auth              | People auth, or `auth: 'bearer'`             | `auth: true`: the MCP `session:verify` |
+| Authorities       | `authorities`, with `auth: 'bearer'`         | None                                   |
 | Same-origin check | On mutations                                 | None                                   |
 | SSE from a store  | `sse: { store, topics }`                     | Write it yourself                      |
 
@@ -298,6 +352,7 @@ export class RouteAuditPlugin {
 | `403 Cross-origin requests may not change …` | The page posting is on another origin        | Serve it from the server, or list its origin in `http.cors.origin`       |
 | `429` from the sign-in route                 | Too many bad codes from this client          | Wait `lockoutMs`, then use a fresh code                                  |
 | `ReservedRouteCollisionError` at startup     | The path is one the MCP endpoint serves      | Move the route                                                           |
+| `403 Forbidden` on a bearer route            | The route's `authorities` denied the caller  | Check the token's claims and `claimsMapping`; the reason logs at verbose |
 | SSE events stop behind a proxy               | The proxy buffers or times out idle streams  | Lower `sse.heartbeatMs`; the route already sends `X-Accel-Buffering: no` |
 
 ## Reference

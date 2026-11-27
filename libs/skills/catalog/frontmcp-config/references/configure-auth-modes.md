@@ -60,9 +60,12 @@ auth: {
   expectedAudience: 'my-api',
   // clientId is OPTIONAL and unused for pure JWT validation — transparent mode
   // never runs an OAuth code exchange, it only verifies tokens against the
-  // provider's JWKS. Omit it unless you have a specific reason to set it.
+  // provider's JWKS. Omit it unless you have a specific reason to set it, such
+  // as publishing it to clients with resourceMetadata.
 }
 ```
+
+To tell clients which client id and audience to sign in with at the provider, set `resourceMetadata: { clientId: true, audience: true }`: the protected resource metadata then carries `client_id` (`auth.clientId`, or the string you give) and `audience` (the audience the token check accepts, or the string you give). Neither is published by default (see `configure-auth.md`).
 
 **Use when:** Behind an API gateway or reverse proxy that handles auth.
 

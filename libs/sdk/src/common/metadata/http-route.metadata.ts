@@ -1,11 +1,14 @@
+import type { AuthoritiesMetadata } from '@frontmcp/auth';
+
 export type HttpRouteMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 /**
  * Who may call a route: a signed-in person (`http.auth.people`), a person signed in for an MCP subject (with a code
- * from `createCode({ subject })`, such as the question inbox's), or anyone. Each kind of sign-in opens only its own
- * routes, so a code made for one caller's questions opens no `'people'` page.
+ * from `createCode({ subject })`, such as the question inbox's), a caller the MCP endpoint's `auth` admits (`'bearer'`:
+ * the token it verifies, as `this.auth`), or anyone. Each kind of sign-in opens only its own routes, so a code made for
+ * one caller's questions opens no `'people'` page.
  */
-export type HttpRouteAuth = 'people' | 'subject' | 'public';
+export type HttpRouteAuth = 'people' | 'subject' | 'bearer' | 'public';
 
 /** Where an SSE route hears that its view changed: a `resourceStore()`, whose keys publish their name as a topic. */
 export interface HttpRouteTopicSource {
@@ -32,6 +35,11 @@ export interface HttpRouteMetadata {
   path: string | (() => string);
   /** @default 'people' when `http.auth.people` is set, else 'public' */
   auth?: HttpRouteAuth;
+  /**
+   * The rule a `'bearer'` caller must satisfy, as a tool's `authorities`: a profile name, a list of names or a policy.
+   * Its input is the request body's fields and the path's parameters, which win.
+   */
+  authorities?: AuthoritiesMetadata;
   /** Serve `text/event-stream`: `handle()` makes the view, sent at once and after each burst of publishes. */
   sse?: HttpRouteSseOptions;
 }
@@ -40,6 +48,7 @@ export interface ResolvedHttpRouteMetadata {
   method: HttpRouteMethod;
   path: string | (() => string);
   auth?: HttpRouteAuth;
+  authorities?: AuthoritiesMetadata;
   sse?: Required<HttpRouteSseOptions>;
 }
 

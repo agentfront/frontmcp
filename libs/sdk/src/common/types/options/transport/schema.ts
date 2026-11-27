@@ -22,6 +22,7 @@ import type {
   ProtocolPreset,
   SessionModeOption,
   TransportOptionsInterface,
+  TransportSseOptions,
 } from './interfaces';
 
 // Re-export transport-specific types (not duplicated from session.options.ts)
@@ -178,6 +179,9 @@ export function toLegacyProtocolFlags(protocol: ProtocolPreset | ProtocolConfig 
 // Note: platformMappingEntrySchema and platformDetectionConfigSchema
 // are already exported from session folder - import for internal use
 
+/** The longest delay a timer keeps: Node and browsers run a longer one after 1 ms. */
+const MAX_HEARTBEAT_MS = 2_147_483_647;
+
 // ============================================
 // PROTOCOL CONFIG SCHEMA
 // ============================================
@@ -319,6 +323,24 @@ export const transportOptionsSchema = z.object({
   // ============================================
 
   eventStore: eventStoreConfigSchema.optional(),
+
+  sse: z
+    .object({
+      heartbeatMs: z
+        .union([
+          z
+            .number()
+            .int()
+            .nonnegative('transport.sse.heartbeatMs must be 0 or more')
+            .max(
+              MAX_HEARTBEAT_MS,
+              `transport.sse.heartbeatMs must be at most ${MAX_HEARTBEAT_MS} ms (about 24.8 days)`,
+            ),
+          z.literal(false),
+        ])
+        .optional(),
+    } satisfies RawZodShape<TransportSseOptions>)
+    .optional(),
 } satisfies RawZodShape<TransportOptionsInterface>);
 
 // ============================================

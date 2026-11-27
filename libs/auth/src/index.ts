@@ -58,6 +58,7 @@ export {
   extraWideLayout,
   escapeHtml,
   BUILT_IN_AUTH_PAGE_CSP,
+  INLINE_AUTH_PAGE_CSP,
   builtInAuthPageHeaders,
   // Templates
   buildConsentPage,
@@ -446,6 +447,7 @@ export {
   type RegisteredClient,
   type PreRegisteredClientInput,
   type DcrRegistryConfig,
+  type DcrClientStoreOptions,
   clientAuthMethodToRecord,
   meetsRecordedClientAuth,
 } from './authorization';
@@ -720,6 +722,7 @@ export type {
   PeopleSession,
   PeopleSessionCookie,
   PeopleSessionIssue,
+  PeopleSessionPersistence,
   PeopleSignInRefusal,
 } from './people';
 
