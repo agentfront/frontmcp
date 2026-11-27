@@ -103,6 +103,19 @@ test.describe('Web host E2E', () => {
     expect(board.status).toBe(200);
   });
 
+  test("the sign-in page's form posts with the Origin the browser sends for it (#1455)", async ({ server }) => {
+    const code = await signInCode(server, startupToken(server));
+
+    const page = await fetch(`${server.info.baseUrl}/_frontmcp/people/login?code=${code}`);
+    const policy = page.headers.get('referrer-policy');
+
+    // A form posted from a `no-referrer` page carries `Origin: null`; any other policy, the page's origin.
+    const login = await postCode(server, code, policy === 'no-referrer' ? 'null' : new URL(page.url).origin);
+    expect(login.status).toBe(200);
+    expect(login.headers.get('set-cookie')).toMatch(/^frontmcp_people=/);
+    expect(policy).toBe('same-origin');
+  });
+
   test('a page refuses a browser that has not signed in, and a public page serves it', async ({ server }) => {
     const { baseUrl } = server.info;
 

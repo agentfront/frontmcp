@@ -149,6 +149,12 @@ replaces the derived protection as a whole, `Origin` included, so set `allowedOr
 keep checking `Origin`. A routable bind derives no origins. On a loopback server, a page on another
 origin also gets `403` for the server card, which otherwise answers any origin.
 
+While `Origin` is checked, a page that posts a `<form>` to the server must not use
+`Referrer-Policy: no-referrer` (as a header or a `<meta name="referrer">`): its form posts send
+`Origin: null`, which no allowed list holds, and get `403 {"error":"Forbidden","message":"Invalid Origin header: null (…)"}`.
+Serve such a page with `same-origin`, as the built-in sign-in pages do; it still sends no referrer to
+other sites.
+
 ```typescript
 // A browser app on another local port talks to a loopback server: name it in CORS.
 http: {

@@ -17,7 +17,8 @@ export const PEOPLE_LOGIN_PATH = '/_frontmcp/people/login';
 
 const CODE = /^[A-Za-z0-9_-]{1,128}$/;
 const SAME_SITE_PATH = /^\/(?![/\\])[^\s]*$/;
-const PAGE_HEADERS = { ...NO_STORE_HEADERS, 'Referrer-Policy': 'no-referrer' };
+/** `same-origin`, not `no-referrer`: the form's POST must carry this page's `Origin`, as `no-referrer` sends `null`. */
+const PAGE_HEADERS = { ...NO_STORE_HEADERS, 'Referrer-Policy': 'same-origin' };
 
 function first(value: unknown): string | undefined {
   const item = Array.isArray(value) ? value[0] : value;
