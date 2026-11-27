@@ -1,4 +1,4 @@
-import { LoopbackTokenAuth, peopleAuthOptionsSchema } from '@frontmcp/auth';
+import { LoopbackTokenAuth, peopleAuthOptionsSchema, type AuthoritiesMetadata } from '@frontmcp/auth';
 import { ProviderScope } from '@frontmcp/di';
 import type { SqliteAdapterOptions } from '@frontmcp/utils';
 
@@ -6,6 +6,7 @@ import {
   HTTP_ROUTE_PATH_MESSAGE,
   httpRouteMetadataOf,
   isHttpRoutePath,
+  isPublicMode,
   type HttpRouteAuth,
   type HttpRouteCtorArgs,
   type HttpRouteInterface,
@@ -16,6 +17,7 @@ import {
 import { questionInboxRoutes } from '../elicitation/questions/question-inbox.routes';
 import { InvalidHttpRouteError, InvalidPeopleAuthOptionsError } from '../errors';
 import { matchRoutePath } from '../flows/flow.http-path';
+import { assertEntryAuthorities } from '../front-mcp/authorities-rules.check';
 import { servedHealthPaths } from '../health/health.routes';
 import type { Scope } from '../scope/scope.instance';
 import { assertNotReserved, computeReservedPaths } from '../server/custom-routes.helper';
@@ -28,6 +30,7 @@ export interface HttpRouteEntry {
   method: HttpRouteMethod;
   path: string;
   auth: HttpRouteAuth;
+  authorities?: AuthoritiesMetadata;
   sse?: Required<HttpRouteSseOptions>;
   target: new (args: HttpRouteCtorArgs) => HttpRouteInterface;
   providers: ProviderRegistryInterface;
@@ -211,7 +214,7 @@ export async function attachHttpRoutes(
     const path = typeof metadata.path === 'function' ? metadata.path() : metadata.path;
     if (!isHttpRoutePath(path)) throw new InvalidHttpRouteError(method, String(path), HTTP_ROUTE_PATH_MESSAGE);
     const auth = metadata.auth ?? (people ? 'people' : 'public');
-    if (auth !== 'public' && !people) {
+    if (auth !== 'public' && auth !== 'bearer' && !people) {
       throw new InvalidHttpRouteError(
         method,
         path,
@@ -232,10 +235,12 @@ export async function attachHttpRoutes(
       throw new InvalidHttpRouteError(method, path, 'another route already serves this method and path');
     }
     served.add(key);
+    if (auth === 'bearer') checkBearerRoute(scope, `${method} ${path}`, metadata.authorities);
     return {
       method,
       path,
       auth,
+      authorities: metadata.authorities,
       sse: metadata.sse,
       target: target as HttpRouteEntry['target'],
       providers,
@@ -250,6 +255,25 @@ export async function attachHttpRoutes(
   const table = new HttpRouteTable(routes, people);
   scope.httpRouteTable = table;
   scope.onDispose(() => table.closeStreams());
+}
+
+/**
+ * Refuse a bearer route whose `authorities` nothing enforces or that are malformed, and warn about one the server's
+ * public mode opens to every caller.
+ */
+function checkBearerRoute(scope: Scope, route: string, authorities: AuthoritiesMetadata | undefined): void {
+  if (authorities !== undefined) {
+    assertEntryAuthorities(scope.authoritiesEngine, scope.authoritiesContextBuilder, [
+      { label: `HTTP route "${route}"`, authorities },
+    ]);
+  }
+  const authOptions = scope.auth?.options;
+  if (!authOptions || isPublicMode(authOptions)) {
+    scope.logger.warn(
+      `HTTP route ${route} has auth: 'bearer', but the server's auth is in public mode, so it admits every caller ` +
+        "as anonymous: set auth to the mode that verifies your tokens, or give the route auth: 'public'.",
+    );
+  }
 }
 
 /**

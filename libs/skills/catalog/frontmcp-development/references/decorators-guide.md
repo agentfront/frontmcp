@@ -821,18 +821,19 @@ class PruneCacheDuty {
 ## 17. @HttpRoute
 
 **Purpose:** Serves an HTTP request beside the MCP endpoint, through the hookable `http:route` flow (IP filter, rate
-limit, same-origin check on mutations, people auth), with the app's providers.
+limit, same-origin check on mutations, people or bearer auth, `authorities`), with the app's providers.
 
 **When to use:** A page, JSON API or live SSE view for a person (see `create-http-route`).
 
 **Key fields:**
 
-| Field    | Description                                                                                   |
-| -------- | --------------------------------------------------------------------------------------------- |
-| `method` | `'GET'`, `'POST'`, `'PUT'`, `'PATCH'` or `'DELETE'`                                           |
-| `path`   | Express-style path, or a function returning it at startup                                     |
-| `auth?`  | `'people'` (default with `http.auth.people`) or `'public'`                                    |
-| `sse?`   | `{ store, topics, coalesceMs?, heartbeatMs? }`: `handle()` is the view, re-sent on each write |
+| Field          | Description                                                                                   |
+| -------------- | --------------------------------------------------------------------------------------------- |
+| `method`       | `'GET'`, `'POST'`, `'PUT'`, `'PATCH'` or `'DELETE'`                                           |
+| `path`         | Express-style path, or a function returning it at startup                                     |
+| `auth?`        | `'people'` (default with `http.auth.people`), `'subject'`, `'bearer'` or `'public'`           |
+| `authorities?` | With `auth: 'bearer'`: a tool's `authorities`, input from the body and the path's parameters  |
+| `sse?`         | `{ store, topics, coalesceMs?, heartbeatMs? }`: `handle()` is the view, re-sent on each write |
 
 ```typescript
 import { HttpRoute, HttpRouteContext } from '@frontmcp/sdk';

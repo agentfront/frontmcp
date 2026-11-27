@@ -170,6 +170,37 @@ describe('Authorities E2E', () => {
   });
 
   // =============================================
+  // HTTP routes: bearer auth and the same profile (#1362)
+  // =============================================
+
+  describe("HTTP route with auth: 'bearer' and authorities", () => {
+    async function getReport(tenantId: string, claims?: Record<string, unknown>): Promise<Response> {
+      const headers: Record<string, string> = {};
+      if (claims) {
+        headers['Authorization'] = `Bearer ${await tokenFactory.createTestToken({ sub: 'user-1', claims })}`;
+      }
+      return fetch(`${server.info.baseUrl}/tenants/${tenantId}/report`, { headers });
+    }
+
+    it('refuses a request without a token', async () => {
+      const response = await getReport('tenant-42');
+      expect(response.status).toBe(401);
+      expect(response.headers.get('www-authenticate')).toContain('resource_metadata=');
+    });
+
+    it('serves the tenant the matchTenant profile admits, with the caller as this.auth', async () => {
+      const response = await getReport('tenant-42', { tenantId: 'tenant-42', roles: ['viewer'] });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ tenant: 'tenant-42', sub: 'user-1', roles: ['viewer'] });
+    });
+
+    it('refuses another tenant, as the tenant-scoped tool does', async () => {
+      const response = await getReport('tenant-99', { tenantId: 'tenant-42' });
+      expect(response.status).toBe(403);
+    });
+  });
+
+  // =============================================
   // Profiles — String shorthand
   // =============================================
 

@@ -1937,7 +1937,7 @@
         },
         {
           "name": "create-http-route",
-          "description": "Serve pages, APIs and live SSE views for people beside the MCP endpoint with @HttpRoute classes that share the app's providers, behind people auth and a same-origin check",
+          "description": "Serve pages, APIs and live SSE views beside the MCP endpoint with @HttpRoute classes that share the app's providers, behind people auth or the server's bearer auth and authorities, and a same-origin check",
           "examples": []
         },
         {
