@@ -72,6 +72,7 @@ import {
   buildFederatedState,
   buildIncrementalState,
   buildLoginState,
+  formActionSources,
   type AuthFlowState,
   type AuthUiRegistry,
 } from '../auth-ui';
@@ -1349,7 +1350,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     redirectUri: string;
     logoUri?: string;
   }): string {
-    const { pendingAuthId, clientId, clientName, scope, logoUri } = params;
+    const { pendingAuthId, clientId, clientName, scope, redirectUri, logoUri } = params;
     const callbackPath = `${oauthBasePath(this.scope)}/oauth/callback`;
 
     // Read the optional login customization from the local auth options.
@@ -1366,6 +1367,8 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       scopes: scope ? scope.split(' ').filter(Boolean) : [],
       pendingAuthId,
       callbackPath,
+      redirectUri,
+      formTargets: formActionSources([redirectUri]),
       fields: login?.fields ?? {},
     };
 

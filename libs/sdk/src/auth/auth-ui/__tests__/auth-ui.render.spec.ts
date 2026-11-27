@@ -28,6 +28,7 @@ import {
   authUiSecurityHeaders,
   buildAuthUiPage,
   formActionSource,
+  formActionSources,
 } from '../auth-ui.render';
 
 const COMPONENT = `
@@ -254,9 +255,19 @@ describe('auth-UI form-action', () => {
   it('names nothing it cannot express exactly or must never allow', () => {
     expect(formActionSource('not a url')).toBeUndefined();
     expect(formActionSource('http://[::1]:5555/cb')).toBeUndefined();
+    expect(formActionSource('https://a"b.example.com/cb')).toBeUndefined();
+    expect(formActionSource("https://a'b.example.com/cb")).toBeUndefined();
+    expect(formActionSource('https://a;script-src*.example.com/cb')).toBeUndefined();
     expect(formActionSource('javascript:alert(1)')).toBeUndefined();
     expect(formActionSource('data:text/html,hi')).toBeUndefined();
     expect(formActionSource('file:///etc/passwd')).toBeUndefined();
+  });
+
+  it('lists the distinct sources of the targets it can name', () => {
+    expect(
+      formActionSources(['https://a.example.com/cb', 'https://a.example.com/x', 'javascript:x', 'cursor://cb']),
+    ).toEqual(['https://a.example.com', 'cursor:']);
+    expect(formActionSources([])).toEqual([]);
   });
 
   it("allows this server plus each target's origin, once", () => {
