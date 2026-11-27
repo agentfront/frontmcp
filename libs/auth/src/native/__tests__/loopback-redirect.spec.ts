@@ -79,6 +79,10 @@ describe('listenForRedirect', () => {
     ['a range that ends before it starts', [3001, 3000] as const],
     ['a range with a fractional end', [3000, 3000.5] as const],
     ['a range that holds port 0', [0, 10] as const],
+    ['a list of three ports', [3000, 3001, 3002] as unknown as readonly [number, number]],
+    ['a list of one port', [3000] as unknown as readonly [number, number]],
+    ['an object', {} as unknown as number],
+    ['a port as a string', '3000' as unknown as number],
   ])(
     'refuses %s before it binds',
     async (_case, port) => {
