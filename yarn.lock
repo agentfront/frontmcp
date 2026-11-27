@@ -2907,6 +2907,9 @@ __metadata:
     typescript: "npm:^5.9.3"
   peerDependencies:
     "@frontmcp/lazy-zod": 1.13.1
+  dependenciesMeta:
+    better-sqlite3:
+      optional: true
   languageName: unknown
   linkType: soft
 

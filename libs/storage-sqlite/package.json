@@ -46,7 +46,9 @@
     "node": ">=24.0.0"
   },
   "dependencies": {
-    "@frontmcp/utils": "1.13.1",
+    "@frontmcp/utils": "1.13.1"
+  },
+  "optionalDependencies": {
     "better-sqlite3": "^12.6.2"
   },
   "peerDependencies": {

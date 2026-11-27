@@ -28,29 +28,28 @@ description: Configure SQLite for local deployments, shared by the processes on 
 
 > **Decision:** Use SQLite for storage on one machine, including several processes sharing a file; switch to `setup-redis` for several machines or serverless deployments. In a Cloudflare Durable Object the stores run on the object's own SQLite database.
 
-## Step 1 -- Install the Native Dependency
-
-The `@frontmcp/storage-sqlite` package depends on `better-sqlite3`, which compiles a native C module during installation. Build tools must be available on the system.
+## Step 1 -- Install the Package
 
 ```bash
-yarn add @frontmcp/storage-sqlite better-sqlite3
-yarn add -D @types/better-sqlite3
+yarn add @frontmcp/storage-sqlite
 ```
 
-If the install fails with compilation errors:
+`@frontmcp/storage-sqlite` installs `better-sqlite3` as an optional dependency: a native module that downloads or compiles its binary during installation. When it can't be built, the install goes on without it, and the stores use Node's built-in `node:sqlite` (see [The SQLite library](#the-sqlite-library)). Up to 1.13.1 it was a regular dependency, and a failed build failed the install. Add `@types/better-sqlite3` to `devDependencies` only if your code calls `better-sqlite3` itself.
+
+If you want `better-sqlite3` and its build fails:
 
 - **macOS**: Install Xcode Command Line Tools: `xcode-select --install`
 - **Linux (Debian/Ubuntu)**: `sudo apt-get install build-essential python3`
 - **Linux (Alpine)**: `apk add build-base python3`
 - **Windows**: Install Visual Studio Build Tools with the "Desktop development with C++" workload
 
-Verify the native module loads:
+Verify the native module loads, if you want it:
 
 ```bash
 node -e "require('better-sqlite3')"
 ```
 
-No output means success. An error means the native bindings did not compile correctly.
+No output means success. An error means the native bindings did not compile correctly, and the stores use `node:sqlite`.
 
 ## Step 2 -- Configure the FrontMCP Server
 
@@ -432,6 +431,23 @@ sqlite3 ~/.frontmcp/data/sessions.sqlite ".tables"
 sqlite3 ~/.frontmcp/data/sessions.sqlite "SELECT key FROM kv LIMIT 5;"
 ```
 
+## The SQLite library
+
+The stores open their files with `better-sqlite3` when it is installed, and with Node's built-in `node:sqlite` when it is not. Both write the same SQLite file, so nothing in it is lost when the library changes. Every SQLite store uses the library this picks: the sessions, tasks, elicitations and events of `sqlite`, `jobs.store.sqlite`, the duty and worker leases in `~/.frontmcp/duties.sqlite`, and the start lock of `runShared()`.
+
+- **`FRONTMCP_SQLITE_DRIVER=node:sqlite`** opens every file with `node:sqlite`, even with `better-sqlite3` installed; job and task workers inherit it. `FRONTMCP_SQLITE_DRIVER=better-sqlite3` requires `better-sqlite3`, with no fallback. Any other value fails with an error naming both.
+- **`useSqliteDriver(nodeSqlite())`** from `@frontmcp/storage-sqlite`, before the server is created, does the same in code. It creates missing folders as `better-sqlite3` does.
+
+```typescript
+import { nodeSqlite, useSqliteDriver } from '@frontmcp/storage-sqlite';
+
+useSqliteDriver(nodeSqlite());
+```
+
+- **A CLI published to npm** runs where `better-sqlite3` can't be built: the install skips it (or `npm install --omit=optional` does), and the stores use `node:sqlite`.
+- **Processes on different libraries share a file safely**, a server on `better-sqlite3` and a CLI on `node:sqlite` wait for each other's locks. In one process, open a file with one library only: two SQLite libraries in one process don't see each other's locks.
+- **On `node:sqlite`, a store's `getDatabase()` and `openDatabase()` return a database with the members of `SqliteDatabase` only**, not `better-sqlite3`'s `Database`. Its errors carry `code: 'ERR_SQLITE_ERROR'` and an `errcode` (5 for `SQLITE_BUSY`); `isBusyError()` reads both forms.
+
 ## In a Cloudflare Durable Object
 
 A Durable Object with SQLite storage has its own database, and the stores run on it without `better-sqlite3`, a native module that does not load on Workers. Up to 1.12.0 they could not. Import `@frontmcp/storage-sqlite` in the Worker, hand it to the SDK, and set the driver in the Durable Object's constructor, before the server is created:
@@ -471,7 +487,7 @@ export class HelpDeskServer extends DurableObject {
 - **Which stores.** Every store that takes a `sqlite` option: sessions, `auth.tokenStorage`, `events.store`, tasks, elicitation, and your own `createStorage({ type: 'sqlite' })`. On an edge runtime the task and elicitation stores open `sqlite` only when a driver is set, and refuse it otherwise. Persistent questions (`elicitation.persistent`) need their own `persistent.storage` of type `sqlite` there: one that would inherit the server's top-level `sqlite` is still refused.
 - **`frontmcp build --target cloudflare`** generates a stateless Worker without a Durable Object, so it sets none of this up: write the Worker entry and the Durable Object class yourself.
 
-`useSqliteDriver()` takes any function from a path to a database with the part of `better-sqlite3`'s `Database` the stores call (the `SqliteDriver` and `SqliteDatabase` types), and `useSqliteDriver(undefined)` goes back to `better-sqlite3`.
+`useSqliteDriver()` takes any function from a path to a database with the part of `better-sqlite3`'s `Database` the stores call (the `SqliteDriver` and `SqliteDatabase` types), and `useSqliteDriver(undefined)` goes back to the default: `better-sqlite3`, or `node:sqlite` without it.
 
 ## Migrating from SQLite to Redis
 
@@ -479,7 +495,7 @@ When your project outgrows single-instance deployment, migrate to Redis:
 
 1. Run the `setup-redis` skill to configure Redis.
 2. Replace the `sqlite` block with a `redis` block in the `@FrontMcp` decorator.
-3. Remove `@frontmcp/storage-sqlite` and `better-sqlite3` from dependencies.
+3. Remove `@frontmcp/storage-sqlite` (and `better-sqlite3`, if you added it) from dependencies.
 4. Active sessions will not transfer -- users will need to re-authenticate.
 
 The change in `src/main.ts`:
@@ -510,21 +526,20 @@ The change in `src/main.ts`:
 
 ## Common Patterns
 
-| Pattern                        | Correct                                            | Incorrect                                  | Why                                                                                                           |
-| ------------------------------ | -------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
-| Database path                  | `path: '~/.frontmcp/data/sessions.sqlite'`         | `path: './sessions.sqlite'`                | Tilde-prefixed or absolute paths are stable across working directories; relative paths break when CWD changes |
-| Encryption secret source       | `secret: process.env['SQLITE_ENCRYPTION_SECRET']!` | `secret: 'hardcoded-secret-value'`         | Secrets must come from environment variables, never committed to source code                                  |
-| WAL mode default               | `walMode: true` (or omit, defaults to `true`)      | `walMode: false` without a specific reason | WAL provides better read concurrency with no downside on local filesystems                                    |
-| Native dependency installation | `yarn add @frontmcp/storage-sqlite better-sqlite3` | `yarn add better-sqlite3` alone            | Both packages are required; the storage package wraps the native bindings with FrontMCP session store logic   |
-| TTL cleanup interval           | `ttlCleanupIntervalMs: 60000` (default)            | `ttlCleanupIntervalMs: 500`                | Overly aggressive cleanup wastes CPU; the default 60s is appropriate for most workloads                       |
+| Pattern                  | Correct                                            | Incorrect                                  | Why                                                                                                                                    |
+| ------------------------ | -------------------------------------------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Database path            | `path: '~/.frontmcp/data/sessions.sqlite'`         | `path: './sessions.sqlite'`                | Tilde-prefixed or absolute paths are stable across working directories; relative paths break when CWD changes                          |
+| Encryption secret source | `secret: process.env['SQLITE_ENCRYPTION_SECRET']!` | `secret: 'hardcoded-secret-value'`         | Secrets must come from environment variables, never committed to source code                                                           |
+| WAL mode default         | `walMode: true` (or omit, defaults to `true`)      | `walMode: false` without a specific reason | WAL provides better read concurrency with no downside on local filesystems                                                             |
+| Package installation     | `yarn add @frontmcp/storage-sqlite`                | `yarn add better-sqlite3` alone            | The storage package holds the FrontMCP stores; it brings `better-sqlite3` as an optional dependency, and uses `node:sqlite` without it |
+| TTL cleanup interval     | `ttlCleanupIntervalMs: 60000` (default)            | `ttlCleanupIntervalMs: 500`                | Overly aggressive cleanup wastes CPU; the default 60s is appropriate for most workloads                                                |
 
 ## Verification Checklist
 
 ### Dependencies
 
-- [ ] `@frontmcp/storage-sqlite` and `better-sqlite3` are in `dependencies`
-- [ ] `@types/better-sqlite3` is in `devDependencies`
-- [ ] `node -e "require('better-sqlite3')"` runs without errors
+- [ ] `@frontmcp/storage-sqlite` is in `dependencies`
+- [ ] Either `node -e "require('better-sqlite3')"` runs without errors, or the server runs on `node:sqlite` (Node 24)
 
 ### Configuration
 
@@ -546,15 +561,15 @@ The change in `src/main.ts`:
 
 ## Troubleshooting
 
-| Problem                                 | Cause                                                           | Solution                                                                                                                      |
-| --------------------------------------- | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `Cannot find module 'better-sqlite3'`   | Native module not installed                                     | Run `yarn add @frontmcp/storage-sqlite better-sqlite3`                                                                        |
-| `Could not locate the bindings file`    | Native compilation failed                                       | Ensure build tools are installed (Xcode CLI on macOS, `build-essential` on Linux), delete `node_modules` and reinstall        |
-| `SQLITE_BUSY` errors                    | Another process held the write lock longer than `busyTimeoutMs` | Keep WAL mode on (`walMode: true`), keep transactions short, and raise `busyTimeoutMs` (default 5000)                         |
-| `Failed to persist session to SQLite`   | A session write waited longer than `busyTimeoutMs` for the lock | Raise `busyTimeoutMs`, or use Redis for many writer processes                                                                 |
-| `SQLITE_READONLY`                       | Insufficient file permissions                                   | Check write permissions on the database file and its parent directory                                                         |
-| WAL errors on network mount             | WAL mode requires a local filesystem with shared-memory support | Move the database to a local disk; `walMode: false` only keeps a new file out of WAL, it does not switch an existing one back |
-| Encrypted data unreadable after restart | Encryption secret changed or missing                            | The secret must be identical across restarts; if the original secret is lost, delete the database and let it be recreated     |
+| Problem                                 | Cause                                                                                                                | Solution                                                                                                                      |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `Cannot find module 'better-sqlite3'`   | `FRONTMCP_SQLITE_DRIVER=better-sqlite3` is set, or the runtime has no `node:sqlite`, and the module is not installed | Run `yarn add better-sqlite3`, or unset `FRONTMCP_SQLITE_DRIVER` to use `node:sqlite`                                         |
+| `Could not locate the bindings file`    | Native compilation failed                                                                                            | Ensure build tools are installed (Xcode CLI on macOS, `build-essential` on Linux), delete `node_modules` and reinstall        |
+| `SQLITE_BUSY` errors                    | Another process held the write lock longer than `busyTimeoutMs`                                                      | Keep WAL mode on (`walMode: true`), keep transactions short, and raise `busyTimeoutMs` (default 5000)                         |
+| `Failed to persist session to SQLite`   | A session write waited longer than `busyTimeoutMs` for the lock                                                      | Raise `busyTimeoutMs`, or use Redis for many writer processes                                                                 |
+| `SQLITE_READONLY`                       | Insufficient file permissions                                                                                        | Check write permissions on the database file and its parent directory                                                         |
+| WAL errors on network mount             | WAL mode requires a local filesystem with shared-memory support                                                      | Move the database to a local disk; `walMode: false` only keeps a new file out of WAL, it does not switch an existing one back |
+| Encrypted data unreadable after restart | Encryption secret changed or missing                                                                                 | The secret must be identical across restarts; if the original secret is lost, delete the database and let it be recreated     |
 
 ## Examples
 

@@ -18,7 +18,7 @@ Share counters and a lock between several local processes through one SQLite fil
 ## Code
 
 ```bash
-yarn add @frontmcp/storage-sqlite better-sqlite3
+yarn add @frontmcp/storage-sqlite
 ```
 
 ```typescript
