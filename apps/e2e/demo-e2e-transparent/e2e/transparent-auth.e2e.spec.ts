@@ -187,6 +187,16 @@ describe('Transparent Auth Mode E2E', () => {
         expect(metadata.resource).toBeDefined();
       }
     });
+
+    it('publishes the client id and audience its clients sign in with (#1360)', async () => {
+      const response = await fetch(`${server.info.baseUrl}/.well-known/oauth-protected-resource`);
+      expect(response.status).toBe(200);
+
+      const metadata = await response.json();
+      expect(metadata.authorization_servers).toEqual([mockOAuth.info.baseUrl]);
+      expect(metadata.client_id).toBe('demo-e2e-transparent-cli');
+      expect(metadata.audience).toBe(mockOAuth.info.issuer);
+    });
   });
 
   describe('Authenticated Access', () => {
