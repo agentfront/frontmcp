@@ -188,6 +188,15 @@ describe('transportOptionsSchema', () => {
       expect(transportOptionsSchema.safeParse({ sse: { heartbeatMs: 1.5 } }).success).toBe(false);
       expect(transportOptionsSchema.safeParse({ sse: { heartbeatMs: true } }).success).toBe(false);
     });
+
+    it('refuses an sse.heartbeatMs longer than a timer keeps, which would fire every 1 ms', () => {
+      expect(transportOptionsSchema.parse({ sse: { heartbeatMs: 2_147_483_647 } }).sse).toEqual({
+        heartbeatMs: 2_147_483_647,
+      });
+      const tooLong = transportOptionsSchema.safeParse({ sse: { heartbeatMs: 2_592_000_000 } });
+      expect(tooLong.success).toBe(false);
+      expect(tooLong.error?.issues[0]?.message).toContain('at most 2147483647 ms');
+    });
   });
 
   describe('full config', () => {

@@ -236,7 +236,7 @@ export interface TransportSseOptions {
   /**
    * How often an open MCP stream with nothing else to send writes an SSE keep-alive comment, in milliseconds, so a
    * proxy's idle timeout (Cloudflare closes after 100 seconds) does not cut a long tool call. SSE readers ignore
-   * comments. `0` or `false` sends none.
+   * comments. `0` or `false` sends none. At most 2147483647 (about 24.8 days), the longest delay a timer keeps.
    * @default 15000
    */
   heartbeatMs?: number | false;
