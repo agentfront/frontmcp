@@ -87,9 +87,10 @@ function replaceTokens(store: NativeTokenStore, key: string, tokens: NativeToken
   // A read from before this one must not answer for a caller that comes after it.
   lane.reading = undefined;
   return enqueue(lane, async () => {
-    lane.unsaved = undefined;
     if (tokens) await store.set(key, tokens);
     else await store.delete(key);
+    // Only once replaced: a write that fails leaves the store with the refresh token the unsaved ones replace.
+    lane.unsaved = undefined;
   });
 }
 
