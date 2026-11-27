@@ -32,7 +32,7 @@ describe('TransportStreamableHttpAdapter.destroy', () => {
     Object.assign(adapter, {
       logger: { verbose: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() },
       key: { type: 'streamable-http', sessionId: 'session-1' },
-      scope: { eventStore: undefined, notifications: { unregisterServer: jest.fn() } },
+      scope: { metadata: {}, eventStore: undefined, notifications: { unregisterServer: jest.fn() } },
       onDispose: jest.fn(),
     });
     const transport = adapter.createTransport('session-1', {} as never);

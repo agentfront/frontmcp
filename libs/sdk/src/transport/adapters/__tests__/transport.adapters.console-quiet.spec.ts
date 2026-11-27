@@ -15,7 +15,7 @@ function makeAdapter(type: 'streamable-http' | 'stateless-http') {
   const adapter = Object.create(TransportStreamableHttpAdapter.prototype);
   adapter.logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn(), verbose: jest.fn(), debug: jest.fn() };
   adapter.key = { type, sessionId: 'session-123' };
-  adapter.scope = { eventStore: undefined, notifications: { unregisterServer: jest.fn() } };
+  adapter.scope = { metadata: {}, eventStore: undefined, notifications: { unregisterServer: jest.fn() } };
   adapter.transport = { close: jest.fn() };
   return adapter;
 }

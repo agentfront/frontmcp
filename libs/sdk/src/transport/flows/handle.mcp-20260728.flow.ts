@@ -59,6 +59,7 @@ import {
   type JsonRpcErrorPayload,
 } from '../mcp-20260728';
 import { mcpRequestSurface } from '../mcp-handlers/mcp-surface';
+import { streamHeartbeatMs, withKeepAlive } from '../stream-keep-alive';
 
 export const plan = {
   pre: ['parseInput', 'validate', 'router'],
@@ -442,6 +443,7 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
           () => hasExpiredCaller({ caller: sessionCallerOf(listenerAuthInfo) }),
           () => mayRead(this.scope.resources.findResourceForUri(uri) ? uri : watchedUri),
         ),
+      keepAliveMs: streamHeartbeatMs(this.scope.metadata.transport),
     });
 
     this.log.info('handleSubscriptions: stream opened', {
@@ -663,7 +665,10 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
       this.respond({
         kind: 'sse',
         status: 200,
-        stream: streamMessageResponse(dispatchOptions, sink, body['id'], this.buildContextRunner()),
+        stream: withKeepAlive(
+          streamMessageResponse(dispatchOptions, sink, body['id'], this.buildContextRunner()),
+          stdio ? 0 : streamHeartbeatMs(this.scope.metadata.transport),
+        ),
         contentType: 'text/event-stream',
         disposition: 'inline',
         headers: {

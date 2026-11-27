@@ -19,6 +19,7 @@ import {
   UnsupportedContentTypeError,
 } from '../../errors/transport.errors';
 import { compileHostValidation, validateHostHeaders } from '../../server/security/host-validation';
+import { KEEP_ALIVE_COMMENT } from '../stream-keep-alive';
 
 const MAXIMUM_MESSAGE_SIZE = '4mb';
 
@@ -45,6 +46,9 @@ export interface SSEServerTransportOptions {
   enableDnsRebindingProtection?: boolean;
 
   sessionId?: string;
+
+  /** Milliseconds without a write before the stream sends a keep-alive comment (`transport.sse.heartbeatMs`); `0` sends none. */
+  heartbeatMs?: number;
 }
 
 /**
@@ -58,6 +62,7 @@ export class SSEServerTransport implements Transport {
   private _options: SSEServerTransportOptions;
   /** Incrementing event ID counter for SSE events (MCP 2025-11-25 spec compliance) */
   private _eventIdCounter = 0;
+  private _heartbeat?: ReturnType<typeof setTimeout>;
   onclose?: () => void;
   onerror?: (error: Error) => void;
   onmessage?: (message: JSONRPCMessage, extra?: MessageExtraInfo) => void;
@@ -140,9 +145,21 @@ export class SSEServerTransport implements Transport {
 
     this._sseResponse = this.res;
     this.res.on('close', () => {
+      clearTimeout(this._heartbeat);
       this._sseResponse = undefined;
       this.onclose?.();
     });
+    this.armHeartbeat(this._options.heartbeatMs ?? 0);
+  }
+
+  private armHeartbeat(heartbeatMs: number): void {
+    if (heartbeatMs <= 0) return;
+    this._heartbeat = setTimeout(() => {
+      if (!this._sseResponse || this._sseResponse.writableEnded) return;
+      this._sseResponse.write(KEEP_ALIVE_COMMENT);
+      this._heartbeat?.refresh();
+    }, heartbeatMs);
+    this._heartbeat.unref?.();
   }
 
   /**
@@ -219,6 +236,7 @@ export class SSEServerTransport implements Transport {
   }
 
   async close(): Promise<void> {
+    clearTimeout(this._heartbeat);
     this._sseResponse?.end();
     this._sseResponse = undefined;
     this.onclose?.();
@@ -232,6 +250,7 @@ export class SSEServerTransport implements Transport {
     // Include event ID per MCP 2025-11-25 spec for client reconnection support
     const eventId = ++this._eventIdCounter;
     this._sseResponse.write(`id: ${eventId}\nevent: message\ndata: ${JSON.stringify(message)}\n\n`);
+    this._heartbeat?.refresh();
   }
 
   /**

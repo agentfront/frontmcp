@@ -15,6 +15,8 @@ export type {
   PersistenceConfig,
   // EventStore types
   EventStoreConfig,
+  // Stream keep-alive
+  TransportSseOptions,
   // Session types (re-exported from session options)
   SessionMode,
   SessionModeOption,
