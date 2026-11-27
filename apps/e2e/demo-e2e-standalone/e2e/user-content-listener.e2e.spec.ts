@@ -215,8 +215,12 @@ describe('User-content listener (#1364)', () => {
     });
   });
 
-  it('closes both listeners on SIGTERM', async () => {
+  it('closes both listeners on SIGTERM, shutting down gracefully', async () => {
+    const stopping = Date.now();
     await server?.stop();
+    // TestServer.stop() kills the server with SIGKILL after 5 s, without failing: a graceful shutdown ends before that.
+    expect(Date.now() - stopping).toBeLessThan(5_000);
+    expect(server?.getLogs().join('\n')).not.toContain('Graceful shutdown');
     server = undefined;
 
     await expect(fetch(`${contentUrl}/frame.html`)).rejects.toThrow();
