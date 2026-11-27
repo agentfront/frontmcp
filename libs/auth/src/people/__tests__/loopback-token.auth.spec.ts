@@ -469,6 +469,54 @@ describe('LoopbackTokenAuth with a session store (#1355)', () => {
       expect(onError).toHaveBeenCalledWith(expect.stringContaining('could not be read'), expect.any(Error));
     });
 
+    /** Holds the next store read until the test answers it: with what the store held when it was made, or an error. */
+    function holdNextRead(): { answer: () => void; fail: () => void } {
+      const held = { answer: () => undefined, fail: () => undefined } as { answer: () => void; fail: () => void };
+      store.get.mockImplementationOnce(
+        (key: string) =>
+          new Promise<string | null>((resolve, reject) => {
+            const value = store.entries.get(key)?.value ?? null;
+            held.answer = () => resolve(value);
+            held.fail = () => reject(new Error('store down'));
+          }),
+      );
+      return held;
+    }
+
+    it('refuses a session signed out here while the store was read, though the read then fails', async () => {
+      const cookieValue = await keptSignIn();
+      const read = holdNextRead();
+
+      const finding = auth.findSession(cookieValue);
+      auth.endSession(cookieValue);
+      read.fail();
+
+      expect(await finding).toBeUndefined();
+    });
+
+    it('refuses a session signed out and removed here while the store answered with what it held before', async () => {
+      const cookieValue = await keptSignIn();
+      const read = holdNextRead();
+
+      const finding = auth.findSession(cookieValue);
+      auth.endSession(cookieValue);
+      await auth.flush();
+      read.answer();
+
+      expect(await finding).toBeUndefined();
+    });
+
+    it('refuses a session that expired while the store was read, though the read then fails', async () => {
+      const cookieValue = await keptSignIn();
+      const read = holdNextRead();
+
+      const finding = auth.findSession(cookieValue);
+      jest.setSystemTime(1_000_000 + 43_200_000);
+      read.fail();
+
+      expect(await finding).toBeUndefined();
+    });
+
     it('stays signed in when the store could not keep it, as it lives only here', async () => {
       store.set.mockRejectedValueOnce(new Error('store down'));
       const cookieValue = await keptSignIn();
