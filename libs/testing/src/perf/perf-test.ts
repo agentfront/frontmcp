@@ -28,7 +28,7 @@
  * ```
  */
 
-import { TestTokenFactory } from '../auth/token-factory';
+import { TestTokenFactory } from '@frontmcp/auth/testing';
 import { McpTestClient } from '../client/mcp-test-client';
 import { McpTestClientBuilder } from '../client/mcp-test-client.builder';
 import type { AuthFixture, ServerFixture, TestConfig, TestFixtures, TestUser } from '../fixtures/fixture-types';

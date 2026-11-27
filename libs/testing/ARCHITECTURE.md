@@ -1241,8 +1241,7 @@ libs/testing/
 │   ├── server/
 │   │   └── test-server.ts          # Server lifecycle management
 │   │
-│   ├── auth/
-│   │   ├── token-factory.ts        # JWT generation
+│   ├── auth/                       # TestTokenFactory and MockOAuthServer come from @frontmcp/auth/testing
 │   │   ├── auth-headers.ts         # Auth header utilities
 │   │   └── user-fixtures.ts        # Pre-built test users
 │   │

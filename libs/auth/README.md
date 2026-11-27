@@ -111,6 +111,28 @@ const options = {
 const tokens = (await getNativeTokens(options)) ?? (await signInNative(options));
 ```
 
+### A mock identity provider for tests
+
+`@frontmcp/auth/testing` exports `MockOAuthServer` and `TestTokenFactory`, the classes `@frontmcp/testing` re-exports, without SWC, the Jest presets or the SDK. The mock serves metadata, JWKS, the authorization endpoint (auto-approved with `autoApprove` and `testUser`), the token endpoint (code, refresh and anonymous grants) and userinfo. Its tokens carry `auth_time`, kept across refresh. All of these are opt-in:
+
+- `pkce: 'strict'` requires S256 PKCE. Unset, the mock accepts a request without it and warns once.
+- `resourceIndicators: true` (or a list of allowed values) issues the access token for the request's `resource` (RFC 8707) and `audience`, and refuses other values with `invalid_target`. Unset, they are ignored, with one warning.
+- `users` lists several test users; a `login_hint` (a `sub` or `email`) picks the one who signs in.
+
+```ts
+import { MockOAuthServer, TestTokenFactory } from '@frontmcp/auth/testing';
+
+const idp = new MockOAuthServer(new TestTokenFactory(), {
+  autoApprove: true,
+  users: [{ sub: 'user-1' }, { sub: 'user-2', email: 'two@example.com' }],
+  clientId: 'desk-cli',
+  validRedirectUris: ['http://127.0.0.1:*/callback'],
+  pkce: 'strict',
+  resourceIndicators: ['https://desk.example.com/mcp'],
+});
+const { issuer } = await idp.start();
+```
+
 ## What's in it
 
 - **Auth modes**: `authOptionsSchema` and the option types of each mode. See [Auth modes](https://frontmcp.dev/reference/auth/modes).
@@ -123,6 +145,7 @@ const tokens = (await getNativeTokens(options)) ?? (await signInNative(options))
 - **Credential vault**: per-user credentials that tools read with `this.credentials`, and that users can add to mid-session. See [Progressive auth](https://frontmcp.dev/reference/auth/progressive).
 - **Sign-in pages**: the built-in sign-in, consent and error pages, and `escapeHtml`, `buildLoginPage` and `baseLayout` for your own. See [Custom login UI](https://frontmcp.dev/reference/auth/login-ui).
 - **Native sign-in** (`@frontmcp/auth/native`): `signInNative`, `getNativeTokens` and `signOutNative` for a CLI or desktop client, with `memoryTokenStore`, `fileTokenStore` or your own `NativeTokenStore`.
+- **Testing** (`@frontmcp/auth/testing`): `MockOAuthServer` and `TestTokenFactory`, with strict PKCE, resource indicators and several test users as options.
 - **Storage**: memory, Redis, Vercel KV and SQLite stores for sessions, authorization codes and tokens, and encrypted storage for secrets (`EncryptedTypedStorage`, `TokenVault`). See [Local auth storage](https://frontmcp.dev/reference/auth/local#storage).
 
 ## Docs
@@ -138,7 +161,7 @@ const tokens = (await getNativeTokens(options)) ?? (await signInNative(options))
 - [`@frontmcp/sdk`](https://www.npmjs.com/package/@frontmcp/sdk): the framework. It runs this package and re-exports its option types.
 - [`@frontmcp/utils`](https://www.npmjs.com/package/@frontmcp/utils): the crypto (PKCE, encryption, key derivation) and storage adapters this package builds on.
 - [`@frontmcp/ui`](https://www.npmjs.com/package/@frontmcp/ui): `@frontmcp/ui/auth`, for React sign-in pages set with `auth.ui`.
-- [`@frontmcp/testing`](https://www.npmjs.com/package/@frontmcp/testing): token factories and mock OAuth servers for tests.
+- [`@frontmcp/testing`](https://www.npmjs.com/package/@frontmcp/testing): the test runner, MCP client and fixtures. It re-exports `@frontmcp/auth/testing`.
 
 ## Contributing
 

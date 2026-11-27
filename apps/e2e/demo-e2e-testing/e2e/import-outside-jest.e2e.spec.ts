@@ -1,7 +1,8 @@
 /**
  * The built @frontmcp/testing package can be loaded and used from a plain Node process, outside
  * Jest (issue #644): token factory, mock OAuth server and TestServer no longer pull in
- * `@jest/globals` at import time, and the placeholder `playwright` entry says so clearly.
+ * `@jest/globals` at import time, and the placeholder `playwright` entry says so clearly. The mock provider
+ * also loads from `@frontmcp/auth/testing` alone (issue #1365).
  */
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -75,5 +76,46 @@ describe('@frontmcp/testing outside Jest', () => {
       ),
     );
     expect(messages[3]).toBe('planned');
+  });
+
+  // #1365: the mock provider from @frontmcp/auth, without @frontmcp/testing, the SDK, SWC or Jest
+  it('runs the mock OAuth server from @frontmcp/auth/testing alone, with strict PKCE', () => {
+    const authTesting = join(root, 'libs/auth/dist/testing/index.js');
+    const result = runNode(`
+      const { MockOAuthServer, TestTokenFactory } = require(${JSON.stringify(authTesting)});
+      const { generatePkcePair } = require('@frontmcp/utils');
+      (async () => {
+        const server = new MockOAuthServer(new TestTokenFactory(), {
+          autoApprove: true, testUser: { sub: 'u' }, clientId: 'c', validRedirectUris: ['http://127.0.0.1:1/cb'], pkce: 'strict',
+        });
+        const info = await server.start();
+        const authorize = async (extra) => {
+          const u = new URL(info.baseUrl + '/oauth/authorize');
+          for (const [k, v] of Object.entries({ client_id: 'c', redirect_uri: 'http://127.0.0.1:1/cb', response_type: 'code', ...extra })) u.searchParams.set(k, v);
+          const r = await fetch(u, { redirect: 'manual' });
+          return new URL(r.headers.get('location')).searchParams;
+        };
+        const refused = await authorize({});
+        const { codeVerifier, codeChallenge } = generatePkcePair();
+        const code = (await authorize({ code_challenge: codeChallenge, code_challenge_method: 'S256' })).get('code');
+        const t = await fetch(info.baseUrl + '/oauth/token', { method: 'POST',
+          body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: 'http://127.0.0.1:1/cb', client_id: 'c', code_verifier: codeVerifier }) });
+        await server.stop();
+        const heavy = Object.keys(require.cache).filter((p) => ['@swc', 'jest', 'libs/sdk', 'libs/testing'].some((n) => p.includes(n)));
+        console.log('REFUSED:' + refused.get('error') + ' TOKEN:' + t.status + ' HEAVY:' + heavy.length);
+      })().catch((e) => { console.error(e); process.exit(1); });
+    `);
+    expect(result.stderr).toBe('');
+    expect(result.status).toBe(0);
+    expect(result.stdout.trim()).toBe('REFUSED:invalid_request TOKEN:200 HEAVY:0');
+  });
+
+  it('exports the same MockOAuthServer and TestTokenFactory from @frontmcp/testing', () => {
+    const result = runNode(`
+      const testing = require(${JSON.stringify(join(dist, 'index.js'))});
+      const auth = require(${JSON.stringify(join(root, 'libs/auth/dist/testing/index.js'))});
+      console.log(testing.MockOAuthServer === auth.MockOAuthServer && testing.TestTokenFactory === auth.TestTokenFactory);
+    `);
+    expect(result.stdout.trim()).toBe('true');
   });
 });
