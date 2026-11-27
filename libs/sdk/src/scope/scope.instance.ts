@@ -760,7 +760,8 @@ export class Scope extends ScopeEntry {
         this.transportService.getBackendKind() === 'sqlite') ||
       this.taskBackendType === 'sqlite' ||
       this.elicitationBackendType === 'sqlite' ||
-      this._persistentQuestions?.type === 'sqlite';
+      this._persistentQuestions?.type === 'sqlite' ||
+      httpServing?.peopleKeepSessionsInSqlite(this, resolvedTopLevelSqlite) === true;
 
     // ═══ BATCH 2: App-dependent registries (parallel) ═══
     // These call providers.getRegistries('AppRegistry') during initialize(),
@@ -1096,7 +1097,7 @@ export class Scope extends ScopeEntry {
     // reserved-path guard uses the resolved entryPath + routeBase, so it is
     // aware of split-by-app scope bases (e.g. /mcp/billing).
     if (httpServing) {
-      httpServing.attachHttpRoutes(this, this.globalProviders);
+      await httpServing.attachHttpRoutes(this, this.globalProviders, { sqlite: this.topLevelSqlite });
       httpServing.registerCustomHttpRoutes({
         routes: this.metadata.http?.routes,
         server: this.httpRouteRegistrar,

@@ -15,7 +15,7 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
 
 function createStream(
   produce: () => Promise<unknown>,
-  options: { onError?: (error: unknown) => void; authorized?: () => boolean } = {},
+  options: { onError?: (error: unknown) => void; authorized?: () => boolean | Promise<boolean> } = {},
 ) {
   let publish: () => void = () => undefined;
   const unsubscribe = jest.fn();
@@ -169,6 +169,21 @@ describe('SseRouteStream', () => {
     authorized = false;
     await jest.advanceTimersByTimeAsync(15_000);
 
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(await stream.next()).toEqual({ value: undefined, done: true });
+  });
+
+  it('waits for an authorized check that answers later, such as one that reads a store', async () => {
+    let authorized = true;
+    const produce = jest.fn(async () => ({ count: 1 }));
+    const { stream, publish, onClose } = createStream(produce, { authorized: async () => authorized });
+    expect(await stream.next()).toEqual({ value: expect.any(Uint8Array), done: false });
+
+    authorized = false;
+    publish();
+    await jest.advanceTimersByTimeAsync(50);
+
+    expect(produce).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(await stream.next()).toEqual({ value: undefined, done: true });
   });

@@ -1,4 +1,4 @@
-import { base64urlEncode, randomBytes, sha256, timingSafeEqual } from '@frontmcp/utils';
+import { base64urlEncode, randomBytes, sha256, timingSafeEqual, type StorageAdapter } from '@frontmcp/utils';
 
 import type { PeopleAuthOptions } from './people-auth.options';
 
@@ -21,6 +21,12 @@ export interface PeopleSignInRefusal {
 export type PeopleCodeIssue = { ok: true; code: string; expiresAt: number } | PeopleSignInRefusal;
 
 export type PeopleSessionIssue = { ok: true; cookieValue: string; expiresAt: number } | PeopleSignInRefusal;
+
+/** Where sessions are kept besides memory, so they survive a restart, and who hears when that store fails. */
+export interface PeopleSessionPersistence {
+  store: Pick<StorageAdapter, 'get' | 'set' | 'delete'>;
+  onError?: (message: string, error: unknown) => void;
+}
 
 interface StoredSecret {
   digest: Uint8Array;
@@ -52,9 +58,31 @@ function unexpired(secrets: StoredSecret[]): StoredSecret[] {
   return secrets.filter((secret) => secret.expiresAt > now);
 }
 
+function toSession({ expiresAt, subject }: Omit<StoredSecret, 'digest'>): PeopleSession {
+  return subject ? { expiresAt, subject } : { expiresAt };
+}
+
+/** A session is kept under the digest of its cookie value, never the value itself. */
+function sessionKey(digest: Uint8Array): string {
+  return `session:${base64urlEncode(digest)}`;
+}
+
+function keptSession(raw: string | null): PeopleSession | undefined {
+  if (raw === null) return undefined;
+  try {
+    const { expiresAt, subject } = JSON.parse(raw) as { expiresAt?: unknown; subject?: unknown };
+    if (typeof expiresAt !== 'number' || (subject !== undefined && typeof subject !== 'string')) return undefined;
+    return toSession({ expiresAt, subject });
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * People auth for a server's own pages: a token printed once at startup buys one-time sign-in codes, and a code,
  * posted from the server's own page, buys a session cookie. Only digests of the token, codes and sessions are kept.
+ * With a {@link PeopleSessionPersistence} store, sessions are kept there too, so they outlive the process; the token,
+ * codes and lockouts stay in memory.
  */
 export class LoopbackTokenAuth {
   private token?: string;
@@ -62,8 +90,12 @@ export class LoopbackTokenAuth {
   private codes: StoredSecret[] = [];
   private sessions: StoredSecret[] = [];
   private readonly failures = new Map<string, ClientFailures>();
+  private readonly writes = new Set<Promise<void>>();
 
-  constructor(readonly options: PeopleAuthOptions) {
+  constructor(
+    readonly options: PeopleAuthOptions,
+    private readonly persistence?: PeopleSessionPersistence,
+  ) {
     const token = newSecret();
     this.token = token;
     this.tokenDigest = sha256(token);
@@ -106,26 +138,71 @@ export class LoopbackTokenAuth {
     this.failures.delete(client);
     const cookieValue = newSecret();
     const expiresAt = Date.now() + this.options.sessionTtlMs;
-    this.sessions = [
-      ...unexpired(this.sessions),
-      { digest: sha256(cookieValue), expiresAt, ...(subject ? { subject } : {}) },
-    ];
+    const digest = sha256(cookieValue);
+    this.sessions = [...unexpired(this.sessions), { digest, expiresAt, ...(subject ? { subject } : {}) }];
+    this.keep(digest, toSession({ expiresAt, subject }));
     return { ok: true, cookieValue, expiresAt };
   }
 
+  /** A session this process made; {@link findSession} also finds one kept in the store. */
   verifySession(presented: string | undefined): PeopleSession | undefined {
     if (!presented) return undefined;
     this.sessions = unexpired(this.sessions);
     const session = this.sessions.find((stored) => matches(presented, stored.digest));
-    if (!session) return undefined;
-    return session.subject
-      ? { expiresAt: session.expiresAt, subject: session.subject }
-      : { expiresAt: session.expiresAt };
+    return session ? toSession(session) : undefined;
+  }
+
+  /** A session this process made, else one kept in the store; a store that cannot be read finds none. */
+  async findSession(presented: string | undefined): Promise<PeopleSession | undefined> {
+    const known = this.verifySession(presented);
+    const store = this.persistence?.store;
+    if (known || !presented || !store) return known;
+    let raw: string | null;
+    try {
+      raw = await store.get(sessionKey(sha256(presented)));
+    } catch (error) {
+      this.report('a kept people session could not be read', error);
+      return undefined;
+    }
+    const session = keptSession(raw);
+    return session && session.expiresAt > Date.now() ? session : undefined;
   }
 
   endSession(presented: string | undefined): void {
     if (!presented) return;
     this.sessions = this.sessions.filter((stored) => !matches(presented, stored.digest));
+    const store = this.persistence?.store;
+    if (store) this.track(store.delete(sessionKey(sha256(presented))), 'a kept people session could not be removed');
+  }
+
+  /** Waits for the session writes in flight, so a session handed out is kept before the answer goes. */
+  async flush(): Promise<void> {
+    await Promise.all(this.writes);
+  }
+
+  private keep(digest: Uint8Array, session: PeopleSession): void {
+    const store = this.persistence?.store;
+    if (!store) return;
+    const ttlSeconds = Math.max(1, Math.ceil((session.expiresAt - Date.now()) / 1000));
+    const write = store.set(sessionKey(digest), JSON.stringify(session), { ttlSeconds });
+    this.track(write, 'a people session could not be kept, so a restart ends it');
+  }
+
+  private track(write: Promise<unknown>, failure: string): void {
+    const settled = write.then(
+      () => undefined,
+      (error: unknown) => this.report(failure, error),
+    );
+    this.writes.add(settled);
+    void settled.then(() => this.writes.delete(settled));
+  }
+
+  private report(message: string, error: unknown): void {
+    try {
+      this.persistence?.onError?.(message, error);
+    } catch {
+      // a failing listener must not fail the sign-in
+    }
   }
 
   private isLocked(client: string): boolean {
