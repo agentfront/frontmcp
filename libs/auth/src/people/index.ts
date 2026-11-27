@@ -12,5 +12,6 @@ export {
   type PeopleSession,
   type PeopleSessionCookie,
   type PeopleSessionIssue,
+  type PeopleSessionPersistence,
   type PeopleSignInRefusal,
 } from './loopback-token.auth';

@@ -133,7 +133,7 @@ export default class HttpRouteFlow extends FlowBase<typeof name> {
   async authenticatePerson() {
     const { auth } = this.state.required.route;
     if (auth === 'public') return;
-    const person = this.verifyPerson(auth);
+    const person = await this.verifyPerson(auth);
     if (!person) throw new PersonNotSignedInError();
     this.state.set('person', person);
   }
@@ -185,9 +185,9 @@ export default class HttpRouteFlow extends FlowBase<typeof name> {
   }
 
   /** The person signed in for routes of `auth`: a session for a subject opens `'subject'` routes only. */
-  private verifyPerson(auth: HttpRouteAuth): PeopleSession | undefined {
+  private async verifyPerson(auth: HttpRouteAuth): Promise<PeopleSession | undefined> {
     const cookie = getCookie(this.httpRequest.headers['cookie'], PEOPLE_SESSION_COOKIE);
-    const person = this.scope.httpRouteTable?.people?.verifySession(cookie);
+    const person = await this.scope.httpRouteTable?.people?.findSession(cookie);
     return person && (person.subject !== undefined) === (auth === 'subject') ? person : undefined;
   }
 
@@ -208,7 +208,7 @@ export default class HttpRouteFlow extends FlowBase<typeof name> {
       onError: (error) =>
         this.scope.logger.warn(`SSE route ${route.method} ${route.path} failed to make its view`, error),
       onClose: () => table?.untrack(stream),
-      authorized: route.auth === 'public' ? undefined : () => this.verifyPerson(route.auth) !== undefined,
+      authorized: route.auth === 'public' ? undefined : async () => (await this.verifyPerson(route.auth)) !== undefined,
     });
     table?.track(stream);
     return {

@@ -487,6 +487,9 @@ http: {
 
 The sign-in routes are `POST /_frontmcp/people/code` (with `Authorization: Bearer <token>`), and
 `GET`/`POST /_frontmcp/people/login`. An invalid `http.auth.people` fails startup with `InvalidPeopleAuthOptionsError`.
+Sessions are kept in the server's `redis`, else its `sqlite`, else a Redis or SQLite `auth.tokenStorage`, so a
+restart signs no one out; without any of them (or with `store: false`) they live in memory, and startup warns unless
+`store: false` is set.
 With `elicitation.persistent` on too, the question inbox joins them: `GET /_frontmcp/inbox`, `GET /_frontmcp/questions`
 (and `/events`), `POST /_frontmcp/questions/:id/answer`, `auth: 'subject'` routes that only a session from a subject's
 code opens (see `configure-elicitation`).

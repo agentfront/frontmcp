@@ -223,7 +223,8 @@ export interface HttpAuthOptions {
    * (`POST /_frontmcp/people/code` with `Authorization: Bearer <token>`, or `this.get(LoopbackTokenAuth).createCode()`
    * in a tool); the person opens `/_frontmcp/people/login?code=…`, whose page posts the code back and gets an
    * HttpOnly, SameSite=Strict session cookie. With it set, routes need a signed-in person unless they say
-   * `auth: 'public'`.
+   * `auth: 'public'`. Sessions are kept in the server's `redis`, else its `sqlite`, else a Redis or SQLite
+   * `auth.tokenStorage`, so a restart signs no one out; `store: false` keeps them in memory.
    */
   people?: PeopleAuthOption;
 }

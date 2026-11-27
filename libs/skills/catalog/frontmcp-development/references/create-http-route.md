@@ -208,13 +208,19 @@ app) serve one path, the first scope's serves it on every adapter.
 | `maxFailedAttempts`      | `5`                | Bad tokens or codes from one client before it is locked out            |
 | `lockoutMs`              | `60000`            | How long a lockout lasts, and how long a bad attempt counts            |
 | `cookiePath`             | `'/'`              | The cookie's `Path`; set it to the common prefix of your people routes |
+| `store`                  | the server's store | `false` keeps sessions in memory although the server has a store       |
 
 An invalid value fails startup with `InvalidPeopleAuthOptionsError` (`http.auth.people: <problem>`).
 
 - A code works once and expires after `codeTtlMs`; the cookie value is a fresh random value, never the token or a code.
 - The token, codes and sessions are kept as SHA-256 digests and compared in constant time.
-- Sessions live in the server's memory: a restart signs everyone out and prints a new token. All the scopes of one
-  server share one token and one set of sessions.
+- Sessions are kept in the server's store when it has one (its `redis`, else its `sqlite`, else a Redis or SQLite
+  `auth.tokenStorage`), so a restart or an upgrade signs no one out (from 1.13.2). Only the digest of the cookie value
+  is kept, with its expiry and subject, under `mcp:people:<info.name>:`, so two servers sharing a store never share a
+  sign-in. Without a store, or with `store: false`, sessions live in memory and a restart signs everyone out; startup
+  warns about that unless `store: false` is set. A store that cannot be opened is logged and leaves sessions in memory.
+- The token and the codes always live in memory: a restart prints a new token, and an unspent code stops working. All
+  the scopes of one server share one token and one set of sessions.
 - Cookies are not isolated by port: another server on `localhost` receives `frontmcp_people`, and two FrontMCP servers
   on `localhost` sign each other out unless their `cookiePath`s differ.
 - The lockout is keyed by the client's address (`X-Forwarded-For` only behind `FRONTMCP_TRUST_PROXY`), so clients that
