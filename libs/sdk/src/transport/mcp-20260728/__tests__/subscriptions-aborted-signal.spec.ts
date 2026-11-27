@@ -49,3 +49,22 @@ describe('a subscriptions/listen stream whose signal is already aborted', () => 
     expect(events[0]).toContain('notifications/subscriptions/acknowledged');
   });
 });
+
+describe('a subscriptions/listen stream with resource subscriptions', () => {
+  it('counts each URI on the registry while it is open, and stops counting when it closes', () => {
+    const resources = { subscribe: jest.fn(() => () => undefined), watchUri: jest.fn(), unwatchUri: jest.fn() };
+    const controller = new AbortController();
+
+    createSubscriptionStream({
+      scope: { resources } as unknown as Scope,
+      subscriptionId: 'listen-1',
+      requested: { resourceSubscriptions: ['board://status', 'tables://'] },
+      signal: controller.signal,
+    });
+    expect(resources.watchUri.mock.calls).toEqual([['board://status'], ['tables://']]);
+    expect(resources.unwatchUri).not.toHaveBeenCalled();
+    controller.abort();
+
+    expect(resources.unwatchUri.mock.calls).toEqual([['board://status'], ['tables://']]);
+  });
+});

@@ -68,6 +68,9 @@ export default class ResourceRegistry extends RegistryAbstract<
   // version + emitter
   private version = 0;
   private emitter = new ResourceEmitter();
+  /** Subscribers by URI: a session's `resources/subscribe`, or a `subscriptions/listen` stream's URI prefix. */
+  private readonly watchers = new Map<string, number>();
+  private readonly watchListeners = new Set<() => void>();
 
   /**
    * When false, the registry holds only the entries registered into it and adopts nothing: it
@@ -558,6 +561,39 @@ export default class ResourceRegistry extends RegistryAbstract<
       });
     }
     return this.emitter.on((e) => cb({ ...e, snapshot: this.listAllInstances().filter(filter) }));
+  }
+
+  /** Count a subscriber of `uri` until {@link unwatchUri}: a session's `resources/subscribe`, or a listen stream's prefix. */
+  watchUri(uri: string): void {
+    const count = this.watchers.get(uri) ?? 0;
+    this.watchers.set(uri, count + 1);
+    if (count === 0) this.emitWatchChange();
+  }
+
+  unwatchUri(uri: string): void {
+    const count = this.watchers.get(uri);
+    if (count === undefined) return;
+    if (count > 1) {
+      this.watchers.set(uri, count - 1);
+      return;
+    }
+    this.watchers.delete(uri);
+    this.emitWatchChange();
+  }
+
+  /** The URIs (or listen-stream prefixes) that have a subscriber now. */
+  watchedUris(): string[] {
+    return [...this.watchers.keys()];
+  }
+
+  /** Call `listener` when a URI gets its first subscriber or loses its last one. */
+  onWatchChange(listener: () => void): () => void {
+    this.watchListeners.add(listener);
+    return () => this.watchListeners.delete(listener);
+  }
+
+  private emitWatchChange(): void {
+    for (const listener of [...this.watchListeners]) listener();
   }
 
   /**

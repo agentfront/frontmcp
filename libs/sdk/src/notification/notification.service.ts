@@ -549,7 +549,9 @@ export class NotificationService {
     const deleted = this.servers.delete(sessionId);
 
     // Clean up resource subscriptions for this session
-    const subCount = this.subscriptions.get(sessionId)?.size ?? 0;
+    const sessionSubs = this.subscriptions.get(sessionId);
+    const subCount = sessionSubs?.size ?? 0;
+    for (const uri of sessionSubs ?? []) this.scope.resources.unwatchUri(uri);
     this.subscriptions.delete(sessionId);
 
     // Clean up channel subscriptions for this session
@@ -737,6 +739,7 @@ export class NotificationService {
     sessionSubs.add(uri);
 
     if (isNew) {
+      this.scope.resources.watchUri(uri);
       this.logger.verbose(`Session ${sessionId.slice(0, 20)}... subscribed to resource ${uri}`);
     }
 
@@ -764,6 +767,7 @@ export class NotificationService {
     }
 
     if (wasSubscribed) {
+      this.scope.resources.unwatchUri(uri);
       this.logger.verbose(`Session ${sessionId.slice(0, 20)}... unsubscribed from resource ${uri}`);
     }
 
@@ -1327,6 +1331,9 @@ export class NotificationService {
 
     // Clear server registrations, resource subscriptions, log levels, and terminated sessions
     this.servers.clear();
+    for (const uris of this.subscriptions.values()) {
+      for (const uri of uris) this.scope.resources.unwatchUri(uri);
+    }
     this.subscriptions.clear();
     this.logLevels.clear();
     this.terminatedSessions.clear();
