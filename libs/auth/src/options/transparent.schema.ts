@@ -4,7 +4,7 @@
 import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import type { RawZodShape } from '../common/zod-utils';
-import type { TransparentAuthOptionsInterface } from './interfaces';
+import type { TransparentAuthOptionsInterface, TransparentResourceMetadataOptions } from './interfaces';
 import { flatRemoteProviderFields, publicAccessConfigSchema } from './shared.schemas';
 
 // ============================================
@@ -41,6 +41,17 @@ export const transparentAuthOptionsSchema = z.object({
    * @default false
    */
   audienceFromRequestHost: z.boolean().optional(),
+
+  /**
+   * Sign-in details published in the protected resource metadata (#1360): `client_id` (`true` publishes
+   * `clientId`) and `audience` (`true` publishes the audience this server checks).
+   */
+  resourceMetadata: z
+    .object({
+      clientId: z.union([z.literal(true), z.string().min(1)]).optional(),
+      audience: z.union([z.literal(true), z.string().min(1)]).optional(),
+    } satisfies RawZodShape<TransparentResourceMetadataOptions>)
+    .optional(),
 
   /**
    * Required scopes for access
