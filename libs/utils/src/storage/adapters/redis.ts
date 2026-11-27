@@ -1,18 +1,16 @@
 /**
  * Redis Storage Adapter
  *
- * Redis-based storage implementation for production use.
- * Uses ioredis with dynamic import for browser compatibility.
+ * Redis-based storage implementation for production use: a single node, a Redis Cluster, or a
+ * client the application made (ioredis or node-redis). ioredis is required only when a client is
+ * opened, for browser compatibility.
  */
 
 import { StorageConfigError, StorageConnectionError } from '../errors';
+import { deleteRedisKeys, getRedisKeys, isRedisClusterClient, scanRedisKeys } from '../redis-client/cluster-ops';
+import { adoptRedisClient, createRedisConnection, urlConnectionOptions } from '../redis-client/connection';
+import type { FrontMcpRedisClient, RedisConnectionSettings } from '../redis-client/types';
 import { attachRedisErrorListener, type RedisErrorListenerOptions } from '../redis-error-listener';
-import {
-  describeRedisUrlConflicts,
-  mergeRedisUrlFields,
-  type RedisUrlMerge,
-  type RedisUrlSiblingFields,
-} from '../redis-url';
 import type { MessageHandler, RedisAdapterOptions, SetOptions, Unsubscribe } from '../types';
 import { validateTTL } from '../utils';
 import {
@@ -25,32 +23,6 @@ import { BaseStorageAdapter } from './base';
 
 // Type imports for ioredis (dynamic import at runtime)
 type Redis = import('ioredis').Redis;
-type RedisOptions = import('ioredis').RedisOptions;
-
-/**
- * Lazy-load ioredis to avoid bundling in browser builds.
- */
-function getRedisClass(): typeof import('ioredis').default {
-  try {
-    return require('ioredis').default || require('ioredis');
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-
-    // Check if it's a bundler/ESM issue and provide helpful error
-    if (msg.includes('Dynamic require') || msg.includes('require is not defined')) {
-      throw new Error(
-        `Failed to load ioredis: ${msg}. ` +
-          'This typically happens with ESM bundlers (esbuild, Vite). ' +
-          'Ensure your bundler externalizes ioredis or use CJS mode.',
-        { cause: error },
-      );
-    }
-
-    throw new Error('ioredis is required for Redis storage adapter. Install it with: npm install ioredis', {
-      cause: error,
-    });
-  }
-}
 
 /**
  * Redis storage adapter.
@@ -76,8 +48,8 @@ function getRedisClass(): typeof import('ioredis').default {
 export class RedisStorageAdapter extends BaseStorageAdapter {
   protected readonly backendName = 'redis';
 
-  private client?: Redis;
-  private subscriber?: Redis;
+  private client?: FrontMcpRedisClient;
+  private subscriber?: FrontMcpRedisClient;
   private readonly options: RedisAdapterOptions;
   private readonly ownsClient: boolean;
   private detachErrorListener?: () => void;
@@ -86,8 +58,6 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
   private readonly subscriptionHandlers = new Map<string, Set<MessageHandler>>();
   private readonly reconnectListeners = new Set<() => void>();
   private readonly connectionUrl?: string;
-  /** The connection options of a URL this adapter reads itself; undefined for one only ioredis reads. */
-  private readonly urlOptions?: RedisOptions;
 
   constructor(options: RedisAdapterOptions = {}) {
     super();
@@ -118,7 +88,8 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
     this.keyPrefix = options.keyPrefix ?? '';
     const configUrl = options.config?.url;
     this.connectionUrl = options.url ?? (typeof configUrl === 'string' ? configUrl : undefined);
-    this.urlOptions = this.connectionUrl ? resolveUrlOptions(this.connectionUrl, options) : undefined;
+    // A url and a field that contradict each other fail here, not on the first connect
+    if (this.connectionUrl) validateUrlFields(this.connectionUrl, options);
   }
 
   // ============================================
@@ -145,11 +116,11 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
       socketError = error;
     };
 
-    let client: Redis | undefined;
+    let client: FrontMcpRedisClient | undefined;
     try {
       if (this.options.client) {
-        // Use external client
-        client = this.options.client as Redis;
+        // An external client (ioredis Redis/Cluster, node-redis, or a FrontMcpRedisClient); never closed here
+        client = adoptRedisClient(this.options.client as object).client;
       } else {
         client = this.newClient();
         client.on('error', recordSocketError);
@@ -220,7 +191,7 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
   /**
    * Get the connected Redis client, throwing if not connected.
    */
-  private getConnectedClient(): Redis {
+  private getConnectedClient(): FrontMcpRedisClient {
     this.ensureConnected();
     if (!this.client) {
       throw new StorageConnectionError('Redis client not connected', undefined, 'redis');
@@ -231,7 +202,7 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
   /**
    * Get the connected Redis subscriber, throwing if not created.
    */
-  private getConnectedSubscriber(): Redis {
+  private getConnectedSubscriber(): FrontMcpRedisClient {
     if (!this.subscriber) {
       throw new StorageConnectionError('Redis subscriber not created', undefined, 'redis');
     }
@@ -330,7 +301,8 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
   override async mget(keys: string[]): Promise<(string | null)[]> {
     if (keys.length === 0) return [];
     const prefixedKeys = keys.map((k) => this.prefixKey(k));
-    return this.getConnectedClient().mget(...prefixedKeys);
+    // One MGET on a single node; one GET per key on a cluster, whose keys span hash slots
+    return getRedisKeys(this.getConnectedClient(), prefixedKeys);
   }
 
   override async mset(entries: import('../types').SetEntry[]): Promise<void> {
@@ -341,37 +313,29 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
       this.validateSetOptions(entry.options);
     }
 
-    // Use pipeline for efficiency
-    const pipeline = this.getConnectedClient().pipeline();
+    const client = this.getConnectedClient();
+    const commands = entries.map(
+      (entry) => [this.prefixKey(entry.key), entry.value, ...setArguments(entry.options)] as const,
+    );
 
-    for (const entry of entries) {
-      const prefixedKey = this.prefixKey(entry.key);
-
-      // Build SET command with proper typing
-      if (entry.options?.ttlSeconds) {
-        if (entry.options.ifNotExists) {
-          pipeline.set(prefixedKey, entry.value, 'EX', entry.options.ttlSeconds, 'NX');
-        } else if (entry.options.ifExists) {
-          pipeline.set(prefixedKey, entry.value, 'EX', entry.options.ttlSeconds, 'XX');
-        } else {
-          pipeline.set(prefixedKey, entry.value, 'EX', entry.options.ttlSeconds);
-        }
-      } else if (entry.options?.ifNotExists) {
-        pipeline.set(prefixedKey, entry.value, 'NX');
-      } else if (entry.options?.ifExists) {
-        pipeline.set(prefixedKey, entry.value, 'XX');
-      } else {
-        pipeline.set(prefixedKey, entry.value);
-      }
+    // A cluster pipeline refuses keys of different slots, so a cluster gets the SETs one by one, in
+    // parallel (the pipeline was never atomic either)
+    if (isRedisClusterClient(client) || typeof client.pipeline !== 'function') {
+      await Promise.all(commands.map(([key, value, ...args]) => client.set(key, value, ...args)));
+      return;
     }
 
+    // Use pipeline for efficiency
+    const pipeline = client.pipeline();
+    for (const [key, value, ...args] of commands) pipeline.set(key, value, ...args);
     await pipeline.exec();
   }
 
   override async mdelete(keys: string[]): Promise<number> {
     if (keys.length === 0) return 0;
     const prefixedKeys = keys.map((k) => this.prefixKey(k));
-    return this.getConnectedClient().del(...prefixedKeys);
+    // One DEL on a single node; one DEL per key on a cluster
+    return deleteRedisKeys(this.getConnectedClient(), prefixedKeys);
   }
 
   // ============================================
@@ -396,22 +360,10 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
   // ============================================
 
   async keys(pattern = '*'): Promise<string[]> {
-    const client = this.getConnectedClient();
-    const prefixedPattern = this.prefixKey(pattern);
-    const result: string[] = [];
-    let cursor = '0';
-
-    do {
-      const [nextCursor, keys] = await client.scan(cursor, 'MATCH', prefixedPattern, 'COUNT', 100);
-      cursor = nextCursor;
-
-      // Remove prefix from keys
-      for (const key of keys) {
-        result.push(this.unprefixKey(key));
-      }
-    } while (cursor !== '0');
-
-    return result;
+    // SCAN on a single node; SCAN on every master of a cluster
+    const keys = await scanRedisKeys(this.getConnectedClient(), this.prefixKey(pattern), 100);
+    // Remove prefix from keys
+    return keys.map((key) => this.unprefixKey(key));
   }
 
   // ============================================
@@ -489,50 +441,41 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
   // ============================================
 
   /**
-   * Build Redis options from config.
+   * The connection settings of a client this adapter opens: the URL with the config's fields
+   * filling in what it leaves out, or the config's host (or its cluster's seed nodes).
    */
-  private buildRedisOptions(): RedisOptions {
-    if (this.connectionUrl) {
-      return { lazyConnect: false, maxRetriesPerRequest: 3, ...this.urlOptions };
-    }
+  private connectionSettings(): RedisConnectionSettings {
+    const config: RedisConnectionSettings = { ...this.options.config };
+    const { url: _configUrl, ...fields } = config;
+    if (this.connectionUrl) return { ...fields, url: this.connectionUrl };
 
-    const config = this.options.config;
-    if (!config || typeof config.url === 'string' || config.host === undefined) {
+    const hasSeedNodes =
+      typeof fields.cluster === 'object' && fields.cluster !== null && (fields.cluster.nodes?.length ?? 0) > 0;
+    if (!this.options.config || (fields.host === undefined && !hasSeedNodes)) {
       throw new StorageConfigError('redis', 'Redis config is required when URL is not provided');
     }
-    return {
-      host: config.host,
-      port: config.port ?? 6379,
-      password: config.password,
-      db: config.db ?? 0,
-      tls: config.tls ? {} : undefined,
-      lazyConnect: false,
-      maxRetriesPerRequest: 3,
-    };
+    return { ...fields, port: fields.port ?? 6379, db: fields.db ?? 0 };
   }
 
   /**
-   * Create a client this adapter owns. A URL only ioredis reads goes to it as is.
+   * Create a client this adapter owns: an ioredis Redis, or a Cluster with `cluster`. A URL only
+   * ioredis reads goes to it as is.
    */
-  private newClient(): Redis {
-    const RedisClass = getRedisClass();
-    if (this.connectionUrl && !this.urlOptions) {
-      return new RedisClass(this.connectionUrl, this.buildRedisOptions());
-    }
-    return new RedisClass(this.buildRedisOptions());
+  private newClient(): FrontMcpRedisClient {
+    return createRedisConnection({ ...this.connectionSettings(), noErrorListener: true }).client;
   }
 
   /**
    * Create subscriber connection.
    */
   private async createSubscriber(): Promise<void> {
-    let subscriber: Redis;
+    let subscriber: FrontMcpRedisClient;
 
     if (this.connectionUrl || this.options.config) {
       subscriber = this.newClient();
-    } else if (this.options.client) {
-      // Duplicate the client for subscriber
-      subscriber = (this.options.client as Redis).duplicate();
+    } else if (this.options.client && this.client) {
+      // A copy of the external client for subscribing: this adapter made it, so it closes it
+      subscriber = this.client.duplicate();
     } else {
       throw new StorageConfigError('redis', 'Cannot create subscriber without url, config, or client');
     }
@@ -590,44 +533,22 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
 
   /**
    * Get the underlying Redis client (for advanced use).
+   *
+   * An ioredis `Redis` for a single node. With a cluster it is an ioredis `Cluster`, and for a client
+   * passed in it is that client (a node-redis one behind its {@link FrontMcpRedisClient} adapter), whose
+   * `quit()`/`disconnect()` do nothing; both answer the commands of {@link FrontMcpRedisClient}.
    */
   getClient(): Redis | undefined {
-    return this.client;
+    return this.client as Redis | undefined;
   }
 }
 
-function resolveUrlOptions(connectionUrl: string, options: RedisAdapterOptions): RedisOptions | undefined {
+function validateUrlFields(connectionUrl: string, options: RedisAdapterOptions): void {
   const { url: configUrl, ...siblingFields } = { url: undefined, ...options.config };
   if (options.url && configUrl && configUrl !== options.url) {
     throw new StorageConfigError('redis', 'redis.url and redis.config.url name different servers; set one of them.');
   }
-  return urlConnectionOptions(connectionUrl, siblingFields);
-}
-
-/**
- * The ioredis options for a url and the fields beside it: what the URL states, then what the fields
- * fill in. ioredis would keep a username-only URL's empty password over a filled-in one, so it gets
- * these options instead of the URL. A field that contradicts the URL throws a StorageConfigError;
- * undefined for a URL only ioredis reads.
- */
-function urlConnectionOptions(url: string, fields: RedisUrlSiblingFields): RedisOptions | undefined {
-  const merge = mergeRedisUrlFields(url, fields);
-  if (!merge) return undefined;
-  if (merge.conflicts.length > 0) {
-    throw new StorageConfigError('redis', describeRedisUrlConflicts(merge.conflicts));
-  }
-  const { queryOptions, tls, ...stated } = merge.connection;
-  return { ...queryOptions, ...stated, ...toFillInOptions(merge.fillIns), ...(tls ? { tls: {} } : {}) };
-}
-
-/** The connection fields a URL leaves out, as ioredis options. */
-function toFillInOptions({ port, password, db, tls }: RedisUrlMerge['fillIns']): RedisOptions {
-  return {
-    ...(port !== undefined ? { port } : {}),
-    ...(password !== undefined ? { password } : {}),
-    ...(db !== undefined ? { db } : {}),
-    ...(tls ? { tls: {} } : {}),
-  };
+  urlConnectionOptions(connectionUrl, siblingFields);
 }
 
 export interface CreateRedisClientOptions {
@@ -650,24 +571,16 @@ export interface CreateRedisClientOptions {
  * password, db, tls), and one that contradicts it throws a `StorageConfigError`.
  */
 export function createRedisClient(options: CreateRedisClientOptions): Redis {
-  const urlOptions = options.url ? urlConnectionOptions(options.url, options) : undefined;
-  const RedisClass = getRedisClass();
-  const baseOptions: RedisOptions = { lazyConnect: false, maxRetriesPerRequest: 3 };
-  let client: Redis;
-  if (urlOptions) {
-    client = new RedisClass({ ...baseOptions, ...urlOptions });
-  } else if (options.url) {
-    client = new RedisClass(options.url, baseOptions);
-  } else {
-    client = new RedisClass({
-      ...baseOptions,
-      host: options.host ?? 'localhost',
-      port: options.port ?? 6379,
-      password: options.password,
-      db: options.db ?? 0,
-      tls: options.tls ? {} : undefined,
-    });
-  }
-  attachRedisErrorListener(client, { label: options.label ?? 'redis', logger: options.logger });
-  return client;
+  const { url, host, port, password, db, tls, label, logger } = options;
+  return createRedisConnection({ url, host, port, password, db, tls, label: label ?? 'redis', logger })
+    .client as unknown as Redis;
+}
+
+/** The arguments after `SET key value` for one write's options: `EX seconds`, then `NX` or `XX`. */
+function setArguments(options: SetOptions | undefined): Array<string | number> {
+  const args: Array<string | number> = [];
+  if (options?.ttlSeconds) args.push('EX', options.ttlSeconds);
+  if (options?.ifNotExists) args.push('NX');
+  else if (options?.ifExists) args.push('XX');
+  return args;
 }
