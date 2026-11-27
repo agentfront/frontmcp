@@ -22,6 +22,7 @@ import { ScopeEventPublisher } from './event-publisher';
 import { reauthorizeSubscriber } from './event-reauthorization';
 import EventRegistry from './event.registry';
 import EventDeliverFlow from './flows/event-deliver.flow';
+import EventEndedFlow from './flows/event-ended.flow';
 import EventPollFlow from './flows/event-poll.flow';
 import EventPublishFlow, { EVENT_DELIVERY_MAX_BYTES } from './flows/event-publish.flow';
 import EventStreamFlow from './flows/event-stream.flow';
@@ -180,6 +181,7 @@ async function enableWebhookDelivery(
     settings: eventsConfig.subscriptions,
     rotationGraceMs: webhook.rotationGraceMs,
     logger,
+    ended: (ending) => scope.runFlow('events:ended', ending),
   });
   const outbox = new EventOutbox({
     storage,
@@ -193,7 +195,7 @@ async function enableWebhookDelivery(
   eventRegistry.subscriptions = subscriptions;
   eventRegistry.outbox = outbox;
   eventRegistry.storage = storage;
-  await scope.registryFlows(EventDeliverFlow);
+  await scope.registryFlows(EventDeliverFlow, EventEndedFlow);
   subscriptions.start();
   outbox.start();
   const replays = new EventReplays({

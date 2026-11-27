@@ -340,6 +340,22 @@ describe('Events subscriptions E2E', () => {
       expect(recreated.result?.['deliveryStatus']).toBeUndefined();
     });
 
+    it('tells a plugin hooked on events:ended which subscription went away, once', async () => {
+      const client = await connectAs('olga');
+      const key = { name: 'order.created', arguments: { status: 'audited' }, delivery: { url: receiver.url } };
+      const created = await rpc(client, 'events/subscribe', subscription('audited'));
+      const id = created.result?.['id'];
+
+      await rpc(client, 'events/unsubscribe', key);
+      await rpc(client, 'events/unsubscribe', key);
+
+      const audit = await client.tools.call('subscription-audit', {});
+      const { ended } = audit.json<{ ended: Array<{ id: string; eventName: string; reason: string }> }>();
+      expect(ended.filter((end) => end.id === id)).toEqual([
+        { id, eventName: 'order.created', reason: 'unsubscribed' },
+      ]);
+    });
+
     it('refuses an anonymous caller', async () => {
       const client = await connectAnonymously();
 
