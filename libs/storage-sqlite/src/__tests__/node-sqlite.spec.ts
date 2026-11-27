@@ -144,6 +144,20 @@ describe('nodeSqlite()', () => {
     expect(fs.existsSync(dbPath)).toBe(true);
   });
 
+  it('creates the folder when another copy of the package set nodeSqlite(), as a CommonJS and an ESM copy do', () => {
+    jest.isolateModules(() => {
+      const otherCopy = require('../node-sqlite') as typeof import('../node-sqlite');
+      expect(otherCopy.nodeSqlite()).not.toBe(nodeSqlite());
+      useSqliteDriver(otherCopy.nodeSqlite());
+    });
+    const dbPath = path.join(dir, 'made', 'by', 'the-other-copy.sqlite');
+
+    const db = openDatabase(dbPath, 'TestStore');
+    db.close();
+
+    expect(fs.existsSync(dbPath)).toBe(true);
+  });
+
   it('names node:sqlite on a runtime without it', () => {
     jest.spyOn(process, 'getBuiltinModule').mockReturnValue(undefined as never);
     useSqliteDriver(nodeSqlite());

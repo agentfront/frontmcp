@@ -45,6 +45,29 @@ function freePort(): Promise<number> {
   });
 }
 
+/**
+ * Resolves once `port` accepts a TCP connection. The server answers its MCP health check before the content listener,
+ * which starts after it, is listening.
+ */
+async function waitForListener(port: number, timeoutMs = 30_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const accepted = await new Promise<boolean>((resolve) => {
+      const socket = net.connect({ host: '127.0.0.1', port }, () => {
+        socket.destroy();
+        resolve(true);
+      });
+      socket.once('error', () => {
+        socket.destroy();
+        resolve(false);
+      });
+    });
+    if (accepted) return;
+    if (Date.now() > deadline) throw new Error(`the content listener did not listen on port ${port}`);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+}
+
 /** Raw HTTP, which keeps a forged Host and an unnormalized path (`fetch` rewrites both). */
 function rawGet(
   port: number,
@@ -91,6 +114,7 @@ describe('User-content listener (#1364)', () => {
     });
     mcpUrl = server.info.baseUrl;
     contentUrl = `http://localhost:${contentPort}`;
+    await waitForListener(contentPort);
   }, 90_000);
 
   afterAll(async () => {
@@ -160,6 +184,10 @@ describe('User-content listener (#1364)', () => {
         expect(res.body).not.toContain('note.txt');
       }
     });
+  });
+
+  it('starts with the Node server, which does not say it ignores the option', () => {
+    expect(server?.getLogs().join('\n')).not.toContain('http.userContent is ignored');
   });
 
   describe('the MCP listener', () => {

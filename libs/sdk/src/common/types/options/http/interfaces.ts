@@ -234,7 +234,8 @@ export interface UserContentOptions {
 
   /**
    * Directory the files are served from; relative paths resolve against the working directory.
-   * Dotfiles, paths outside it and directory listings get 404; `index.html` is served for a directory.
+   * Dotfiles, paths outside it (a symlink pointing outside it included) and directory listings get 404;
+   * `index.html` is served for a directory.
    */
   root: string;
 

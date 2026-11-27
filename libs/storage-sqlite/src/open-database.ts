@@ -18,7 +18,7 @@ import type Database from 'better-sqlite3';
 import { dirname, ensureDirSync, getEnv } from '@frontmcp/utils';
 
 import { loadBetterSqlite3 } from './better-sqlite3-loader';
-import { hasNodeSqlite, openNodeSqlite } from './node-sqlite';
+import { hasNodeSqlite, isBuiltInNodeSqlite, openNodeSqlite } from './node-sqlite';
 import { currentSqliteDriver, type SqliteDatabase, type SqliteDriver } from './sqlite-driver';
 
 /** Picks the SQLite library when no driver is set: `better-sqlite3` or `node:sqlite`. */
@@ -130,7 +130,7 @@ function ensureDatabaseDirectory(path: string, storeName: string): void {
 export function openDatabase(path: string, storeName: string, options: OpenDatabaseOptions = {}): Database.Database {
   const driver = currentSqliteDriver();
   const open = driver ?? defaultDriver(storeName);
-  if (!driver || driver === openNodeSqlite) ensureDatabaseDirectory(path, storeName);
+  if (!driver || isBuiltInNodeSqlite(driver)) ensureDatabaseDirectory(path, storeName);
 
   let db: SqliteDatabase;
   try {

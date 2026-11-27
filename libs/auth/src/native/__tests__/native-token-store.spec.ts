@@ -1,9 +1,15 @@
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { mkdtemp, readFile, rm, stat, writeFile } from '@frontmcp/utils';
+import * as utils from '@frontmcp/utils';
+import { mkdtemp, readdir, readFile, rm, stat, writeFile } from '@frontmcp/utils';
 
 import { fileTokenStore, memoryTokenStore, type NativeTokenSet } from '../native-token-store';
+
+jest.mock('@frontmcp/utils', () => {
+  const actual = jest.requireActual<typeof import('@frontmcp/utils')>('@frontmcp/utils');
+  return { ...actual, writeFile: jest.fn(actual.writeFile) };
+});
 
 const tokens = (accessToken: string): NativeTokenSet => ({
   accessToken,
@@ -62,6 +68,48 @@ describe('fileTokenStore', () => {
     expect(await other.get('a')).toEqual(tokens('one'));
     expect(await other.get('b')).toBeUndefined();
     expect(await other.get('c')).toEqual(tokens('three'));
+  });
+
+  it('keeps the updates of two stores on one file in this process', async () => {
+    const filePath = join(dir, 'tokens.json');
+
+    await Promise.all([
+      fileTokenStore(filePath).set('a', tokens('one')),
+      fileTokenStore(filePath).set('b', tokens('two')),
+    ]);
+
+    expect(JSON.parse(await readFile(filePath))).toEqual({ a: tokens('one'), b: tokens('two') });
+  });
+
+  it('finds nothing under a key the file does not hold, such as one Object.prototype has', async () => {
+    const filePath = join(dir, 'tokens.json');
+    await fileTokenStore(filePath).set('a', tokens('one'));
+
+    expect(await fileTokenStore(join(dir, 'missing.json')).get('constructor')).toBeUndefined();
+    expect(await fileTokenStore(filePath).get('toString')).toBeUndefined();
+  });
+
+  it('keeps tokens under __proto__ like any other key', async () => {
+    const filePath = join(dir, 'tokens.json');
+    await fileTokenStore(filePath).set('__proto__', tokens('one'));
+
+    expect(await fileTokenStore(filePath).get('__proto__')).toEqual(tokens('one'));
+  });
+
+  it('removes its temporary file when the write fails, and keeps the file it would have replaced', async () => {
+    const filePath = join(dir, 'tokens.json');
+    const store = fileTokenStore(filePath);
+    await store.set('a', tokens('one'));
+    const actual = jest.requireActual<typeof import('@frontmcp/utils')>('@frontmcp/utils');
+    jest.mocked(utils.writeFile).mockImplementationOnce(async (path, content, options) => {
+      await actual.writeFile(path, String(content).slice(0, 10), options);
+      throw new Error('ENOSPC: no space left on device');
+    });
+
+    await expect(store.set('b', tokens('two'))).rejects.toThrow('ENOSPC');
+
+    expect(await readdir(dir)).toEqual(['tokens.json']);
+    expect(JSON.parse(await readFile(filePath))).toEqual({ a: tokens('one') });
   });
 
   it('reports a file that is not JSON', async () => {

@@ -119,7 +119,8 @@ ResultHandlesPlugin.init({ resources: true }); // off by default
 ResultHandlesPlugin.init({ resources: (uri, answer, { bytes, fullName, request }) => uri.startsWith('reports://') });
 ```
 
-A client's `resources/read` of one text content that is not HTML folds when its text (parsed when JSON) is over the
+A client's `resources/read` of one text content that is not HTML folds when its text (parsed when JSON: any JSON value, a string included, under an `application/json` or `+json`
+`mimeType`) is over the
 threshold and the read has a session or a signed-in caller. The folded read has two contents: the JSON of
 `{ preview, shape, handle }` (`application/json`) and a `text/plain` note naming `result_query`. An agent's
 `read_resource` and `ui://` widgets are never folded. A resource handle is bound to the session and caller of the read.
@@ -181,10 +182,12 @@ It answers `{ path, value, total?, offset?, nextOffset? }`; with `where` or `gre
 items kept, and `count: true` answers `{ path, value: <count> }`. The views run `where`, `grep`, `sort`, then the range,
 then `fields`. `op` is one of `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `in` (a list of up to 100 values), `contains` (a
 substring, or a list member), `startsWith`, `endsWith` and `exists`; `field` is a path in each item, or the item itself
-when left out. No code runs. A `grep` on a string answers its matching lines as `{ line, text }` items. A
+when left out. No code runs. A `grep` on a string answers its matching lines as `{ line, text }` items, which `where`
+then reads; `grep.field` is for a list only. A malformed `field` in `where`, `grep` or `sort` is `INVALID_INPUT`. A
 `regex: true` pattern runs on a matcher with no backtracking (ReDoS-safe: time grows with the text, and one query
 stops after 20,000,000 steps); it takes literals, `.`, classes, `\d \w \s \b`, `^ $`, groups, `|` and quantifiers up to
-`{100}`, and refuses backreferences and lookarounds with `INVALID_INPUT`.
+`{100}` (a larger count of any length is refused), and refuses backreferences and lookarounds with `INVALID_INPUT`.
+`ignoreCase` folds case as a JavaScript RegExp's `i` flag does, a literal pattern's too (`σ` finds `ς` and `Σ`).
 
 ```json
 {

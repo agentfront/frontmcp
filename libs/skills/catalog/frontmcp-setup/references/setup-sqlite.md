@@ -43,13 +43,13 @@ If you want `better-sqlite3` and its build fails:
 - **Linux (Alpine)**: `apk add build-base python3`
 - **Windows**: Install Visual Studio Build Tools with the "Desktop development with C++" workload
 
-Verify the native module loads, if you want it:
+Verify the native module opens a database, if you want it (loading the package alone does not load its binary):
 
 ```bash
-node -e "require('better-sqlite3')"
+node -e "new (require('better-sqlite3'))(':memory:').close()"
 ```
 
-No output means success. An error means the native bindings did not compile correctly, and the stores use `node:sqlite`.
+No output means success. `Cannot find module 'better-sqlite3'` means it is not installed, and the stores use `node:sqlite`. Any other error means `better-sqlite3` is installed but its native binary is missing or broken (built for another Node version, for example): the stores do not fall back then, and opening the database fails. Repair the install (`npm rebuild better-sqlite3`), or set `FRONTMCP_SQLITE_DRIVER=node:sqlite`, which opens every file with `node:sqlite` without loading `better-sqlite3`.
 
 ## Step 2 -- Configure the FrontMCP Server
 
@@ -539,7 +539,7 @@ The change in `src/main.ts`:
 ### Dependencies
 
 - [ ] `@frontmcp/storage-sqlite` is in `dependencies`
-- [ ] Either `node -e "require('better-sqlite3')"` runs without errors, or the server runs on `node:sqlite` (Node 24)
+- [ ] Either `node -e "new (require('better-sqlite3'))(':memory:').close()"` runs without errors, or `better-sqlite3` is not installed (or `FRONTMCP_SQLITE_DRIVER=node:sqlite` is set) and the server runs on `node:sqlite` (Node 24)
 
 ### Configuration
 

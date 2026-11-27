@@ -75,6 +75,18 @@ export function openNodeSqlite(path: string): SqliteDatabase {
 }
 
 /**
+ * Marks the built-in node:sqlite driver, which `openDatabase` creates the folder for. A symbol from the global
+ * registry, so a driver that the package's CommonJS copy set is known to its ESM copy too.
+ */
+const BUILT_IN_NODE_SQLITE = Symbol.for('frontmcp.sqliteDriver.builtInNodeSqlite');
+Object.defineProperty(openNodeSqlite, BUILT_IN_NODE_SQLITE, { value: true });
+
+/** Whether `driver` is the built-in node:sqlite driver of any copy of this package; a custom driver is not. */
+export function isBuiltInNodeSqlite(driver: SqliteDriver): boolean {
+  return (driver as SqliteDriver & { [BUILT_IN_NODE_SQLITE]?: unknown })[BUILT_IN_NODE_SQLITE] === true;
+}
+
+/**
  * A driver that opens every database with Node's built-in `node:sqlite` instead of better-sqlite3, creating the
  * folder as better-sqlite3's does: `useSqliteDriver(nodeSqlite())`. Without better-sqlite3 installed, or with
  * `FRONTMCP_SQLITE_DRIVER=node:sqlite`, the stores use it without one being set.

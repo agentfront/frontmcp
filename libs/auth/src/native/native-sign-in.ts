@@ -1,13 +1,16 @@
 import { base64urlEncode, generatePkcePair, getSpawnFn, randomBytes } from '@frontmcp/utils';
 
 import { normalizeIssuer } from '../jwks/jwks.utils';
-import { assertSecureUrl, discoverAuthorizationServer, requestWithTimeout } from './authorization-server-metadata';
+import { assertSecureEndpoint, discoverAuthorizationServer, requestWithTimeout } from './authorization-server-metadata';
 import { listenForRedirect } from './loopback-redirect';
 import { NativeSignInError } from './native-sign-in.error';
 import { memoryTokenStore, type NativeTokenSet, type NativeTokenStore } from './native-token-store';
 
 /** A token is refreshed this long before it expires, so a request never carries one that expires on the way. */
 const REFRESH_MARGIN_MS = 60_000;
+
+/** A browser launcher still running this long has handed the URL on, or runs the browser itself, which never exits. */
+const LAUNCHER_SETTLE_MS = 2_000;
 
 export interface NativeSignInOptions {
   /** The authorization server's issuer URL; its endpoints come from its RFC 8414 or OpenID metadata. */
@@ -22,25 +25,73 @@ export interface NativeSignInOptions {
   audience?: string;
   /** Where the tokens are kept. @default an in-memory store shared by the process */
   store?: NativeTokenStore;
-  /** The key the tokens are kept under. @default the issuer, client ID and resources */
+  /** The key the tokens are kept under. @default the issuer, client ID, resources and audience */
   storeKey?: string;
-  /** The loopback port, or an inclusive range to take the first free one from. @default any free port */
+  /**
+   * The loopback port (0 to 65535, where 0 is any free port), or an inclusive range of ports from 1 to 65535 to take
+   * the first free one from; anything else fails with `invalid_port` before a port is bound. @default any free port
+   */
   redirectPort?: number | readonly [number, number];
   /** @default '/callback' */
   redirectPath?: string;
-  /** Shows the user the authorization URL. @default {@link openSystemBrowser} */
+  /**
+   * Shows the user the authorization URL. The callback is awaited meanwhile, so one that never settles still ends at
+   * `timeoutMs`, and one that fails before the callback comes back fails the sign-in. @default {@link openSystemBrowser}
+   */
   openBrowser?: (url: string) => void | Promise<void>;
   /** How long to wait for the browser to come back, in milliseconds. @default 120000 */
   timeoutMs?: number;
 }
 
+/** What finds the kept tokens and refreshes them: the sign-in's options, `audience` included, since it is in the key. */
 export type NativeTokenOptions = Pick<
   NativeSignInOptions,
-  'issuer' | 'clientId' | 'clientSecret' | 'resource' | 'store' | 'storeKey'
+  'issuer' | 'clientId' | 'clientSecret' | 'resource' | 'audience' | 'store' | 'storeKey'
 >;
 
 const defaultStore = memoryTokenStore();
-const refreshes = new WeakMap<NativeTokenStore, Map<string, Promise<NativeTokenSet | undefined>>>();
+
+/**
+ * The token operations on one store and key, run one at a time: a read with its refresh, a sign-out, and the save
+ * that ends a sign-in. So a refresh in flight can neither undo a sign-out nor replace (or, refused, drop) the tokens
+ * of a newer sign-in.
+ */
+interface TokenLane {
+  /** The last operation queued; the next starts once it settles. */
+  tail: Promise<unknown>;
+  /** A read, with its refresh, that callers share until a sign-in or sign-out is queued behind it. */
+  reading?: Promise<NativeTokenSet | undefined>;
+  /** Refreshed tokens the store could not save: the server has spent the refresh token they replace. */
+  unsaved?: NativeTokenSet;
+}
+
+const lanes = new WeakMap<NativeTokenStore, Map<string, TokenLane>>();
+
+function laneOf(store: NativeTokenStore, key: string): TokenLane {
+  let byKey = lanes.get(store);
+  if (!byKey) lanes.set(store, (byKey = new Map()));
+  let lane = byKey.get(key);
+  if (!lane) byKey.set(key, (lane = { tail: Promise.resolve() }));
+  return lane;
+}
+
+function enqueue<T>(lane: TokenLane, operation: () => Promise<T>): Promise<T> {
+  const run = lane.tail.then(operation);
+  lane.tail = run.catch(() => undefined);
+  return run;
+}
+
+/** Replaces the kept tokens, after the operations queued before: a sign-in's save, or a sign-out's delete. */
+function replaceTokens(store: NativeTokenStore, key: string, tokens: NativeTokenSet | undefined): Promise<void> {
+  const lane = laneOf(store, key);
+  // A read from before this one must not answer for a caller that comes after it.
+  lane.reading = undefined;
+  return enqueue(lane, async () => {
+    lane.unsaved = undefined;
+    if (tokens) await store.set(key, tokens);
+    else await store.delete(key);
+  });
+}
 
 /**
  * Signs a CLI or desktop app in at an OAuth 2.1 authorization server (RFC 8252): discovers its endpoints, opens the
@@ -73,10 +124,13 @@ export async function signInNative(options: NativeSignInOptions): Promise<Native
     for (const resource of resources) query.append('resource', resource);
     if (options.audience) query.set('audience', options.audience);
 
-    await (options.openBrowser ?? openSystemBrowser)(authorizationUrl.toString());
-    const code = await redirect.code;
+    // The callback is awaited while the launcher runs: a launcher that never settles cannot outlast the callback
+    // timeout, one that fails first ends the sign-in, and a callback that comes back first is taken.
+    const open = options.openBrowser ?? openSystemBrowser;
+    const launched = Promise.resolve().then(() => open(authorizationUrl.toString()));
+    const code = await Promise.race([redirect.code, launched.then(() => redirect.code)]);
 
-    const tokens = await requestTokens(options, metadata.token_endpoint, {
+    const tokens = await requestTokens(options, metadata.issuer, metadata.token_endpoint, {
       grant_type: 'authorization_code',
       code,
       redirect_uri: redirect.redirectUri,
@@ -88,7 +142,7 @@ export async function signInNative(options: NativeSignInOptions): Promise<Native
       clientId: options.clientId,
       resource: resources.length ? resources : undefined,
     });
-    await storeOf(options).set(storeKeyOf(options), tokenSet);
+    await replaceTokens(storeOf(options), storeKeyOf(options), tokenSet);
     return tokenSet;
   } finally {
     redirect.close();
@@ -96,31 +150,36 @@ export async function signInNative(options: NativeSignInOptions): Promise<Native
 }
 
 /**
- * The kept tokens, refreshed first when the access token has expired or is about to. `undefined` when there are
- * none, or the server refused the refresh token, which is then dropped: the app has to sign in again.
+ * The kept tokens, refreshed first when the access token has expired or expires within a minute. Without a refresh
+ * token, the access token is returned until it expires. `undefined` when there are none, when they expired and cannot
+ * be refreshed, or when the server refused the refresh token, which is then dropped: the app has to sign in again.
+ * Callers at the same time share one read and refresh, which waits for a sign-in or sign-out queued before it.
  */
-export async function getNativeTokens(options: NativeTokenOptions): Promise<NativeTokenSet | undefined> {
+export function getNativeTokens(options: NativeTokenOptions): Promise<NativeTokenSet | undefined> {
   const store = storeOf(options);
   const key = storeKeyOf(options);
-  const tokens = await store.get(key);
-  if (!tokens || !isExpiring(tokens)) return tokens;
-  if (!tokens.refreshToken) return undefined;
-
-  let pending = refreshes.get(store);
-  if (!pending) refreshes.set(store, (pending = new Map()));
-  const inFlight = pending.get(key);
-  if (inFlight) return inFlight;
-  const refresh = refreshTokens(options, store, key, tokens).finally(() => pending.delete(key));
-  pending.set(key, refresh);
-  return refresh;
+  const lane = laneOf(store, key);
+  if (lane.reading) return lane.reading;
+  const reading: Promise<NativeTokenSet | undefined> = enqueue(lane, () =>
+    currentTokens(options, store, key, lane),
+  ).finally(() => {
+    if (lane.reading === reading) lane.reading = undefined;
+  });
+  lane.reading = reading;
+  return reading;
 }
 
-/** Forgets the kept tokens. */
-export async function signOutNative(options: NativeTokenOptions): Promise<void> {
-  await storeOf(options).delete(storeKeyOf(options));
+/** Forgets the kept tokens, once a refresh in flight is done, so it cannot sign the caller back in. */
+export function signOutNative(options: NativeTokenOptions): Promise<void> {
+  return replaceTokens(storeOf(options), storeKeyOf(options), undefined);
 }
 
-/** Opens a URL in the system's default browser. */
+/**
+ * Opens a URL in the system's default browser with `open`, `xdg-open` or `rundll32`. Resolves once the launcher exits
+ * with status 0, or is still running 2 seconds after it started, as a launcher that runs the browser itself is: so it
+ * can take up to 2 seconds to resolve, while the browser opens. Rejects when the launcher cannot start, or exits with
+ * another status first (`browser_launch_failed`), such as `xdg-open` with no browser to hand the URL to.
+ */
 export function openSystemBrowser(url: string): Promise<void> {
   const [command, args] =
     process.platform === 'darwin'
@@ -130,12 +189,47 @@ export function openSystemBrowser(url: string): Promise<void> {
         : ['xdg-open', [url]];
   return new Promise((resolve, reject) => {
     const child = getSpawnFn()(command, args, { detached: true, stdio: 'ignore' });
-    child.once('error', reject);
+    let settled: ReturnType<typeof setTimeout> | undefined;
+    const finish = (error?: unknown) => {
+      clearTimeout(settled);
+      if (error === undefined) resolve();
+      else reject(error);
+    };
+    child.once('error', finish);
     child.once('spawn', () => {
       child.unref();
-      resolve();
+      settled = setTimeout(finish, LAUNCHER_SETTLE_MS);
+      settled.unref?.();
+    });
+    child.once('exit', (code: number | null, signal: NodeJS.Signals | null) => {
+      if (code === 0) return finish();
+      const status = code === null ? `signal ${signal}` : `status ${code}`;
+      finish(
+        new NativeSignInError('browser_launch_failed', `Could not open the browser: ${command} exited with ${status}`),
+      );
     });
   });
+}
+
+/** The kept tokens, refreshed when due; tokens a refresh could not save are saved before anything else. */
+async function currentTokens(
+  options: NativeTokenOptions,
+  store: NativeTokenStore,
+  key: string,
+  lane: TokenLane,
+): Promise<NativeTokenSet | undefined> {
+  let tokens: NativeTokenSet | undefined;
+  if (lane.unsaved) {
+    tokens = lane.unsaved;
+    await store.set(key, tokens);
+    lane.unsaved = undefined;
+  } else {
+    tokens = await store.get(key);
+  }
+  if (!tokens || !isExpiring(tokens)) return tokens;
+  // The margin is for a refresh: an access token nothing can refresh serves until it expires.
+  if (!tokens.refreshToken) return (tokens.expiresAt as number) > Date.now() ? tokens : undefined;
+  return refreshTokens(options, store, key, tokens, lane);
 }
 
 async function refreshTokens(
@@ -143,10 +237,11 @@ async function refreshTokens(
   store: NativeTokenStore,
   key: string,
   tokens: NativeTokenSet,
+  lane: TokenLane,
 ): Promise<NativeTokenSet | undefined> {
   let body: Record<string, unknown>;
   try {
-    body = await requestTokens(options, tokens.tokenEndpoint, {
+    body = await requestTokens(options, tokens.issuer, tokens.tokenEndpoint, {
       grant_type: 'refresh_token',
       refresh_token: tokens.refreshToken as string,
     });
@@ -158,16 +253,20 @@ async function refreshTokens(
     throw error;
   }
   const refreshed = toTokenSet(body, tokens, tokens);
+  // Kept until saved: the next read saves them rather than send the refresh token the server has spent.
+  lane.unsaved = refreshed;
   await store.set(key, refreshed);
+  lane.unsaved = undefined;
   return refreshed;
 }
 
 async function requestTokens(
   options: NativeTokenOptions,
+  issuer: string,
   tokenEndpoint: string,
   grant: Record<string, string>,
 ): Promise<Record<string, unknown>> {
-  assertSecureUrl(tokenEndpoint);
+  assertSecureEndpoint(tokenEndpoint, issuer);
   const form = new URLSearchParams({ ...grant, client_id: options.clientId });
   if (options.clientSecret) form.set('client_secret', options.clientSecret);
   for (const resource of resourcesOf(options)) form.append('resource', resource);
@@ -220,6 +319,9 @@ function storeOf(options: Pick<NativeSignInOptions, 'store'>): NativeTokenStore 
   return options.store ?? defaultStore;
 }
 
+/** A sign-in for another audience gets other tokens, so the audience is part of the key; without one, it is left out. */
 function storeKeyOf(options: NativeTokenOptions): string {
-  return options.storeKey ?? [normalizeIssuer(options.issuer), options.clientId, ...resourcesOf(options)].join(' ');
+  if (options.storeKey) return options.storeKey;
+  const audience = options.audience ? [`audience=${options.audience}`] : [];
+  return [normalizeIssuer(options.issuer), options.clientId, ...resourcesOf(options), ...audience].join(' ');
 }

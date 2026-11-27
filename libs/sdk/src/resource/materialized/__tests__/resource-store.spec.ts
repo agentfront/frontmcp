@@ -6,6 +6,12 @@ import { isResourceKey } from '../../../common/metadata/materialized.metadata';
 import { InvalidResourceStoreError } from '../../../errors';
 import { resourceStore, type ResourceStore } from '../resource-store';
 
+// Counts the storages the stores open, so a test can tell that a closed store opened none.
+jest.mock('@frontmcp/utils', () => {
+  const actual = jest.requireActual<typeof import('@frontmcp/utils')>('@frontmcp/utils');
+  return { ...actual, createStorage: jest.fn(actual.createStorage) };
+});
+
 interface Board {
   open: number;
 }
@@ -463,6 +469,69 @@ describe('resourceStore()', () => {
       await expect(board.get()).resolves.toMatchObject({ value: 1, revision: 1 });
     });
 
+    it('runs the producer again once the store closed and opened again, as its storage was replaced', async () => {
+      const store = open();
+      let runs = 0;
+      const board = store.key('board', { produce: () => ++runs });
+      await expect(board.get()).resolves.toMatchObject({ value: 1 });
+
+      await store.close();
+
+      await expect(board.get()).resolves.toMatchObject({ value: 2 });
+    });
+
+    it('opens no storage for a run that ends after the store closed, and fails the read that waited for it', async () => {
+      const onError = jest.fn();
+      const store = open({ onError });
+      let finish: (value: number) => void = () => undefined;
+      const board = store.key('board', { produce: () => new Promise<number>((resolve) => (finish = resolve)) });
+      await store.connect();
+      const opens = jest.mocked(createStorage).mock.calls.length;
+
+      const reading = board.get();
+      await store.close();
+      finish(1);
+
+      await expect(reading).rejects.toThrow('closed');
+      expect(jest.mocked(createStorage).mock.calls.length).toBe(opens);
+      expect(onError).not.toHaveBeenCalled();
+      // A read after the close is the next use, which opens the store again.
+      const next = board.get();
+      finish(2);
+      await expect(next).resolves.toMatchObject({ value: 2 });
+    });
+
+    it('reports to onError, once, a failed run that a read started, and fails that read', async () => {
+      const onError = jest.fn();
+      const board = open({ onError }).key('board', {
+        produce: () => {
+          throw new Error('source offline');
+        },
+      });
+
+      await expect(board.get()).rejects.toThrow('source offline');
+
+      expect(onError).toHaveBeenCalledTimes(1);
+      expect(onError).toHaveBeenCalledWith(new Error('source offline'));
+    });
+
+    it('reports a failed run the timer started once', async () => {
+      const onError = jest.fn();
+      const board = open({ onError }).key('board', {
+        minIntervalMs: 0,
+        produce: () => {
+          throw new Error('source offline');
+        },
+      });
+
+      const unsubscribe = board.subscribe(() => undefined);
+      await until(() => onError.mock.calls.length > 0);
+      await later(30);
+      unsubscribe();
+
+      expect(onError).toHaveBeenCalledTimes(1);
+    });
+
     it.each([
       [{ produce: 'board' }, 'produce'],
       [{ produce: () => 1, minIntervalMs: -1 }, 'minIntervalMs'],
@@ -502,6 +571,25 @@ describe('resourceStore()', () => {
       expect(family.key({ id: 'kept' })).toBe(subscribed);
       expect(family.key({ id: 'idle' })).not.toBe(idle);
       unsubscribe();
+    });
+
+    it('keeps a computed key a caller still holds tied to the key the family serves, after forgetting it', async () => {
+      let version = 0;
+      const family = open().family('stats', { produce: ({ id }) => `${id} v${version}`, minIntervalMs: 0 });
+      const held = family.key({ id: 'held' });
+      await held.get();
+      for (let id = 0; id < 1_000; id++) family.key({ id: String(id) });
+      const served = family.key({ id: 'held' });
+      await served.get();
+      const seen: string[] = [];
+      const unsubscribe = served.subscribe((snapshot) => seen.push(snapshot.value));
+
+      version = 1;
+      held.markDirty();
+      await until(() => seen.length > 0, 1_000).finally(unsubscribe);
+
+      expect(seen).toEqual(['held v1']);
+      await expect(held.get()).resolves.toMatchObject({ value: 'held v1' });
     });
 
     it('refuses a family without a name, and a producer that is not a function', () => {

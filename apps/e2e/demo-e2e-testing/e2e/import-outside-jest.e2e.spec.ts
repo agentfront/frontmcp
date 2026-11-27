@@ -114,8 +114,8 @@ describe('@frontmcp/testing outside Jest', () => {
     const result = runNode(`
       const testing = require(${JSON.stringify(join(dist, 'index.js'))});
       const auth = require(${JSON.stringify(join(root, 'libs/auth/dist/testing/index.js'))});
-      console.log(testing.MockOAuthServer === auth.MockOAuthServer && testing.TestTokenFactory === auth.TestTokenFactory);
+      console.log('SAME:' + (testing.MockOAuthServer === auth.MockOAuthServer && testing.TestTokenFactory === auth.TestTokenFactory));
     `);
-    expect(result.stdout.trim()).toBe('true');
+    expect(result.stdout.trim()).toBe('SAME:true');
   });
 });

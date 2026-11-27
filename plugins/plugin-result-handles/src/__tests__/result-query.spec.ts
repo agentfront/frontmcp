@@ -156,10 +156,59 @@ describe('queryResult views', () => {
     expect(() => queryResult(orders, { path: 'orders', where: [condition as never] })).toThrow(message);
   });
 
-  it('refuses a where field that is not a path', () => {
-    expect(() => queryResult(orders, { path: 'orders', where: [{ field: 'a..b', op: 'exists' }] })).toThrow(
-      ResultPathNotFoundError,
+  it.each([
+    [{ where: [{ field: 'a..b', op: 'exists' }] }, 'where[0].field "a..b"'],
+    [{ grep: { pattern: 'x', field: 'a..b' } }, 'grep.field "a..b"'],
+    [{ sort: [{ field: 'id' }, { field: 'a..b' }] }, 'sort[1].field "a..b"'],
+  ])('refuses an item field that is not a path, %j, as a bad view', (view, option) => {
+    const query = { path: 'orders', ...view } as never;
+
+    expect(() => queryResult(orders, query)).toThrow(InvalidInputError);
+    expect(() => queryResult(orders, query)).toThrow(`${option} is not a dot path or a JSON pointer`);
+  });
+
+  it('still answers a path that names nothing with ResultPathNotFoundError, and an absent field as missing', () => {
+    expect(() => queryResult(orders, { path: 'missing', where: [{ op: 'exists' }] })).toThrow(ResultPathNotFoundError);
+    expect(
+      ids(queryResult(orders, { path: 'orders', where: [{ field: 'note', op: 'exists', value: false }] })),
+    ).toEqual([4]);
+  });
+
+  it('runs where before grep on a list, so grep spends its steps on the items where keeps', () => {
+    const long = 'y'.repeat(1_000);
+    const items = [
+      { id: 1, status: 'open', note: `${long}z` },
+      ...Array.from({ length: 200 }, (_, index) => ({ id: index + 2, status: 'closed', note: long })),
+      { id: 202, status: 'open', note: long },
+    ];
+
+    const slice = queryResult(
+      { items },
+      {
+        path: 'items',
+        where: [{ field: 'status', op: 'eq', value: 'open' }],
+        grep: { pattern: '.{0,100}z', regex: true },
+      },
     );
+
+    expect(ids(slice)).toEqual([1]);
+  });
+
+  it('runs where on the { line, text } items of a string grep', () => {
+    const slice = queryResult(orders, {
+      path: 'log',
+      grep: { pattern: 'r' },
+      where: [{ field: 'line', op: 'gt', value: 3 }],
+    });
+
+    expect(slice.value).toEqual([{ line: 4, text: 'error timeout after 30s' }]);
+  });
+
+  it('refuses grep.field on a string, whose lines have no fields to search', () => {
+    const query = { path: 'log', grep: { pattern: 'ERROR', field: 'line' } };
+
+    expect(() => queryResult(orders, query)).toThrow(InvalidInputError);
+    expect(() => queryResult(orders, query)).toThrow('grep.field');
   });
 
   it('sorts by several fields, keeping the order of equal items and putting items with no value last', () => {

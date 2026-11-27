@@ -164,10 +164,11 @@ describe('ResultHandleStore', () => {
       const bytes = await storedBytesOf(big('a'));
       const root = createMemoryStorage({ enableSweeper: false });
       await root.connect();
-      const store = new ResultHandleStore(root.namespace('result-handles'), ttlSeconds, {
+      const storage = root.namespace('result-handles');
+      const store = new ResultHandleStore(storage, ttlSeconds, {
         maxStoredBytes: Math.floor(bytes * (answers + 0.5)),
       });
-      return { root, store };
+      return { root, storage, store };
     }
 
     async function keep(store: ResultHandleStore, tag: string): Promise<string> {
@@ -187,6 +188,40 @@ describe('ResultHandleStore', () => {
       expect(await store.read(second, alice)).toBeUndefined();
       expect(await store.read(first, alice)).toEqual({ value: big('first') });
       expect(await store.read(third, alice)).toEqual({ value: big('third') });
+    });
+
+    it('keeps the budget when two saves run at once, the first one still writing', async () => {
+      const { root, storage, store } = await budgetStore(1);
+      const write = storage.set.bind(storage);
+      let release: () => void = () => undefined;
+      jest.spyOn(storage, 'set').mockImplementationOnce(async (...args) => {
+        await new Promise<void>((resolve) => (release = resolve));
+        return write(...args);
+      });
+
+      const first = store.save(store.newHandle(), big('first'), alice);
+      const second = store.newHandle();
+      const saving = store.save(second, big('second'), alice);
+      await new Promise((resolve) => setImmediate(resolve));
+      release();
+      await Promise.all([first, saving]);
+
+      expect(await root.keys('*')).toHaveLength(1);
+      expect(await store.read(second, alice)).toEqual({ value: big('second') });
+    });
+
+    it('keeps counting the answers it could not drop, and counts none it did not keep', async () => {
+      const { root, storage, store } = await budgetStore(1);
+      const kept = await keep(store, 'kept');
+      jest.spyOn(storage, 'mdelete').mockRejectedValueOnce(new Error('storage down'));
+
+      await expect(keep(store, 'refused')).rejects.toThrow('storage down');
+      expect(await root.keys('*')).toHaveLength(1);
+      const next = await keep(store, 'next');
+
+      expect(await root.keys('*')).toHaveLength(1);
+      expect(await store.read(kept, alice)).toBeUndefined();
+      expect(await store.read(next, alice)).toEqual({ value: big('next') });
     });
 
     it('refuses an answer larger than the whole budget, keeping the others', async () => {

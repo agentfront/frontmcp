@@ -96,7 +96,7 @@ ResultHandlesPlugin.init({ resources: (uri, answer, { bytes, fullName, request }
 
 The plugin runs on the `fitAnswer` stage of `resources/read`, before the answer budget. A read folds when a client
 read it (an agent's `read_resource` gets it whole), it has one text content that isn't HTML, the text (parsed when
-it's a JSON object or array) is larger than `thresholdBytes`, the call has a verified session or an authenticated
+it's a JSON object or array, or any JSON value under a JSON `mimeType`) is larger than `thresholdBytes`, the call has a verified session or an authenticated
 caller, and the `resources` policy, when it's a function, returns `true`. The folded read has two contents: the JSON of
 `{ preview, shape, handle }` (`mimeType: 'application/json'`), then a `text/plain` note naming `result_query`.
 `_meta['frontmcp/result-handle']` holds `{ handle, bytes, ttlSeconds }`, as for a tool. A resource handle is bound to
@@ -167,20 +167,23 @@ itself when it's left out. No code is run: `op` is one of these comparisons.
 | `startsWith`, `endsWith` | is a string starting or ending with `value`                               |
 | `exists`                 | is there (`value: false`: is missing)                                     |
 
-`grep` searches each item's strings, numbers and booleans (16 levels deep), or the value at `field`. Its `pattern` is
+`where` runs before `grep` on a list, so a grep spends its steps on the items `where` keeps; on a string, `where` reads
+the `{ line, text }` items the grep makes. `grep` searches each item's strings, numbers and booleans (16 levels deep),
+or the value at `field`, which only a list takes. Its `pattern` is
 literal unless `regex: true`. A regex runs on a matcher with no backtracking, so its time grows with the text, not with
 the pattern's shape, and one query stops after 20,000,000 steps. It takes literals, `.`, classes (`[a-z]`, `[^0-9]`),
 `\d \w \s` and their negations, `\b`, `^` and `$` (the start and end of each string or line), groups, `|`, and the
-quantifiers `* + ? {m} {m,} {m,n}` (counts up to 100); backreferences and lookarounds are refused. Its errors carry a
+quantifiers `* + ? {m} {m,} {m,n}` (counts up to 100; a larger one is refused); backreferences and lookarounds are
+refused. `ignoreCase` folds case as a JavaScript RegExp's `i` flag does, for a literal pattern too (`σ` finds `ς`). Its errors carry a
 remedy for the model:
 
-| Code                           | When                                                                                                 |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------- |
-| `RESULT_HANDLE_NOT_FOUND`      | The handle expired, was never issued, or belongs to another session or caller.                       |
-| `RESULT_HANDLE_OWNER_REQUIRED` | The call has neither a verified session nor an authenticated caller, so no answer was folded for it. |
-| `RESULT_PATH_NOT_FOUND`        | The path isn't a dot path or a JSON pointer, or names nothing in the answer.                         |
-| `RESULT_SLICE_TOO_LARGE`       | The slice is larger than `thresholdBytes`: read fewer items, fewer fields or a deeper path.          |
-| `INVALID_INPUT`                | Both `page` and `offset`, a view of a value that isn't a list, a bad condition or grep pattern.      |
+| Code                           | When                                                                                                   |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| `RESULT_HANDLE_NOT_FOUND`      | The handle expired, was never issued, or belongs to another session or caller.                         |
+| `RESULT_HANDLE_OWNER_REQUIRED` | The call has neither a verified session nor an authenticated caller, so no answer was folded for it.   |
+| `RESULT_PATH_NOT_FOUND`        | The path isn't a dot path or a JSON pointer, or names nothing in the answer.                           |
+| `RESULT_SLICE_TOO_LARGE`       | The slice is larger than `thresholdBytes`: read fewer items, fewer fields or a deeper path.            |
+| `INVALID_INPUT`                | Both `page` and `offset`, a view of a value that isn't a list, a bad condition, field or grep pattern. |
 
 ## Who can read a handle
 

@@ -155,8 +155,11 @@ origin also gets `403` for the server card, which otherwise answers any origin.
 While `Origin` is checked, a page that posts a `<form>` to the server must not use
 `Referrer-Policy: no-referrer` (as a header or a `<meta name="referrer">`): its form posts send
 `Origin: null`, which no allowed list holds, and get `403 {"error":"Forbidden","message":"Invalid Origin header: null (…)"}`.
-Serve such a page with `same-origin`, as the built-in sign-in pages do; it still sends no referrer to
-other sites.
+A page whose form posts to its own origin can use `same-origin`, as the built-in sign-in pages do; it
+still sends no referrer to other sites. A form that posts to another origin (a page on
+`app.example.com` posting to `api.example.com`, with `app.example.com` in `allowedOrigins`) gets
+`Origin: null` under `same-origin` too, so serve that page with `strict-origin-when-cross-origin` (the
+browsers' default), which sends the page's origin unless the post goes from `https` to `http`.
 
 ```typescript
 // A browser app on another local port talks to a loopback server: name it in CORS.
@@ -607,8 +610,9 @@ http: {
 | `headers`      | `Record<string, string>`                                                      | `X-Content-Type-Options: nosniff` | Sent on every response; a header named here replaces the default                                        |
 | `csp`          | `{ directives: Record<string, string \| string[]>; reportUri?; reportOnly? }` | none                              | `Content-Security-Policy` (or `-Report-Only`) on every response                                         |
 
-- Files only: a path that leaves `root` (`..`, encoded or not), a dotfile, and a directory without `index.html`
-  get `404`; a directory is never listed. The content type comes from the file's extension
+- Files only: a path that leaves `root` (`..`, encoded or not), a symlink under `root` that points outside it (for a
+  file or a directory's `index.html`; from 1.13.2), a dotfile, and a directory without `index.html` get `404`; a
+  symlink that stays under `root` is served, and a directory is never listed. The content type comes from the file's extension
   (`application/octet-stream` when unknown). Only `GET` and `HEAD` are served.
 - None of the MCP listener's headers apply (`securityHeaders`, `cors`, the `FRONTMCP_*` header env vars,
   `FRONTMCP_ALLOWED_HOSTS`): no `X-Frame-Options`, so the content can be framed — limit that with a

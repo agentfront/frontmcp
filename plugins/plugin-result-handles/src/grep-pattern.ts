@@ -4,6 +4,11 @@ import { InvalidInputError } from '@frontmcp/sdk';
 export const MAX_GREP_REPEAT = 100;
 /** The most instructions a grep regex compiles to. */
 export const MAX_GREP_PROGRAM = 2000;
+/**
+ * The most parts of a grep regex its compiler visits, once its repeats are spelled out: a bound on the work of
+ * compiling it, which a part that compiles to no instruction, such as an empty group, still costs.
+ */
+export const MAX_GREP_COMPILE_VISITS = 10 * MAX_GREP_PROGRAM;
 /** How many steps the regex of one `result_query` takes at most: a bound on its run time, whatever the data. */
 export const MAX_GREP_STEPS = 20_000_000;
 
@@ -42,7 +47,25 @@ const SHORTHANDS: Record<string, CharTest> = {
 };
 const CONTROL_ESCAPES: Record<string, string> = { n: '\n', r: '\r', t: '\t', f: '\f', v: '\v', '0': '\0' };
 const LINE_BREAKS = new Set(['\n', '\r', ' ', ' ']);
-const BOUNDS = /^\{(\d{1,4})(,(\d{0,4}))?\}/;
+// Any number of digits, so a count over the limit is refused, not read as the text `{10000}`.
+const BOUNDS = /^\{(\d+)(,(\d*))?\}/;
+
+/**
+ * How RegExp folds case without the `u` flag (ES Canonicalize): a character's upper case, unless that is more than one
+ * character or moves a non-ASCII character into ASCII. So `σ`, `ς` and `Σ` are one character to `ignoreCase`.
+ */
+function canonicalize(char: string): string {
+  const upper = char.toUpperCase();
+  if (upper.length !== 1) return char;
+  return char.charCodeAt(0) >= 128 && upper.charCodeAt(0) < 128 ? char : upper;
+}
+
+/** `text` with each character folded as {@link canonicalize} folds it, so its length stays the same. */
+function canonicalText(text: string): string {
+  let folded = '';
+  for (const char of text) folded += canonicalize(char);
+  return folded;
+}
 
 function refuse(pattern: string, problem: string): never {
   throw new InvalidInputError(`grep.pattern ${JSON.stringify(pattern)} has ${problem}`);
@@ -75,6 +98,13 @@ class PatternParser {
 
   private fold(test: CharTest): CharTest {
     return this.ignoreCase ? (char) => test(char) || test(char.toLowerCase()) || test(char.toUpperCase()) : test;
+  }
+
+  /** One character, which with `ignoreCase` is any character RegExp folds to the same one. */
+  private literal(char: string): CharTest {
+    if (!this.ignoreCase) return (next) => next === char;
+    const folded = canonicalize(char);
+    return (next) => next === char || canonicalize(next) === folded;
   }
 
   private alternation(): Node {
@@ -138,7 +168,7 @@ class PatternParser {
       case '?':
         return refuse(this.source, 'nothing to repeat');
       default:
-        return { kind: 'char', test: this.fold((next) => next === char) };
+        return { kind: 'char', test: this.literal(char) };
     }
   }
 
@@ -156,7 +186,7 @@ class PatternParser {
       return { kind: 'assert', at: char === 'b' ? 'word' : 'notWord' };
     }
     const escaped = this.escaped();
-    return { kind: 'char', test: typeof escaped === 'string' ? this.fold((next) => next === escaped) : escaped };
+    return { kind: 'char', test: typeof escaped === 'string' ? this.literal(escaped) : escaped };
   }
 
   /** The character or the shorthand class after a `\`. */
@@ -184,7 +214,7 @@ class PatternParser {
         if (typeof high !== 'string' || high < low) refuse(this.source, 'a range out of order');
         tests.push((char) => char >= low && char <= high);
       } else {
-        tests.push(typeof low === 'string' ? (char) => char === low : low);
+        tests.push(typeof low === 'string' ? this.literal(low) : low);
       }
     }
     const matches = this.fold((char) => tests.some((test) => test(char)));
@@ -197,7 +227,10 @@ class PatternParser {
   }
 }
 
-function compile(pattern: string, node: Node, program: Instruction[]): void {
+function compile(pattern: string, node: Node, program: Instruction[], visits = { count: 0 }): void {
+  if (++visits.count > MAX_GREP_COMPILE_VISITS) {
+    refuse(pattern, `more than ${MAX_GREP_COMPILE_VISITS} parts once its repeats are spelled out`);
+  }
   const emit = (instruction: Instruction): number => {
     if (program.length >= MAX_GREP_PROGRAM)
       refuse(pattern, `more than ${MAX_GREP_PROGRAM} steps once its repeats are spelled out`);
@@ -216,14 +249,14 @@ function compile(pattern: string, node: Node, program: Instruction[]): void {
       emit({ op: 'assert', at: node.at });
       return;
     case 'seq':
-      for (const item of node.items) compile(pattern, item, program);
+      for (const item of node.items) compile(pattern, item, program, visits);
       return;
     case 'alt': {
       const exits: Array<Extract<Instruction, { op: 'jmp' }>> = [];
       node.options.forEach((option, index) => {
-        if (index === node.options.length - 1) return compile(pattern, option, program);
+        if (index === node.options.length - 1) return compile(pattern, option, program, visits);
         const fork = split();
-        compile(pattern, option, program);
+        compile(pattern, option, program, visits);
         const exit = { op: 'jmp' as const, to: -1 };
         emit(exit);
         exits.push(exit);
@@ -233,11 +266,11 @@ function compile(pattern: string, node: Node, program: Instruction[]): void {
       return;
     }
     case 'repeat': {
-      for (let copy = 0; copy < node.min; copy++) compile(pattern, node.node, program);
+      for (let copy = 0; copy < node.min; copy++) compile(pattern, node.node, program, visits);
       if (node.max === Infinity) {
         const start = program.length;
         const loop = split();
-        compile(pattern, node.node, program);
+        compile(pattern, node.node, program, visits);
         emit({ op: 'jmp', to: start });
         loop.second = program.length;
         return;
@@ -245,7 +278,7 @@ function compile(pattern: string, node: Node, program: Instruction[]): void {
       const skips: Array<Extract<Instruction, { op: 'split' }>> = [];
       for (let copy = node.min; copy < node.max; copy++) {
         skips.push(split());
-        compile(pattern, node.node, program);
+        compile(pattern, node.node, program, visits);
       }
       for (const skip of skips) skip.second = program.length;
     }
@@ -324,6 +357,7 @@ export function grepMatcher({ pattern, regex, ignoreCase }: GrepQuery): (text: s
     return (text) => compiled.test(text);
   }
   if (!ignoreCase) return (text) => text.includes(pattern);
-  const needle = pattern.toLowerCase();
-  return (text) => text.toLowerCase().includes(needle);
+  // Folded as a regex folds them, on both sides: a lowercased Σ at a word's end is ς, which `σ` would miss.
+  const needle = canonicalText(pattern);
+  return (text) => canonicalText(text).includes(needle);
 }

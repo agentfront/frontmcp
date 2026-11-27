@@ -9,8 +9,9 @@ import * as path from 'node:path';
 import type { StorageWorkerResult } from '../fixture/storage-worker';
 import { killAll, runTogether, spawnWorker, type Worker } from './helpers/workers';
 
+// Quoted, so a checkout path with spaces stays one option: NODE_OPTIONS takes double-quoted, backslash-escaped values.
 const WITHOUT_BETTER_SQLITE3 = {
-  NODE_OPTIONS: `--require ${path.join(__dirname, 'helpers', 'without-better-sqlite3.cjs')}`,
+  NODE_OPTIONS: `--require ${JSON.stringify(path.join(__dirname, 'helpers', 'without-better-sqlite3.cjs'))}`,
 };
 const HOLD_MS = 1000;
 

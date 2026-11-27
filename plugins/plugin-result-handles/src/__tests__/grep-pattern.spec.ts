@@ -15,6 +15,10 @@ const texts = [
   'xxxxxxxxy',
   'Error [E42] at row 7',
   'überall',
+  'ΟΔΟΣ',
+  'οδος',
+  'σοφία',
+  'a{10000}',
 ];
 
 describe('GrepRegex', () => {
@@ -49,6 +53,12 @@ describe('GrepRegex', () => {
     ['', ''],
     ['ü', 'i'],
     ['(a|b)*c', ''],
+    ['σ', 'i'],
+    ['ς', 'i'],
+    ['Σ', 'i'],
+    ['[σ]', 'i'],
+    ['σ', ''],
+    ['a{,5}', ''],
   ])('matches %j (%s) as a JavaScript RegExp does', (pattern, flags) => {
     const grep = new GrepRegex(pattern, flags === 'i');
     const native = new RegExp(pattern, flags);
@@ -67,6 +77,10 @@ describe('GrepRegex', () => {
     ['(a)\\1', '"\\1", which grep does not run'],
     ['\\p{L}', '"\\p", which grep does not run'],
     ['a{1,101}', 'a repeat count over 100'],
+    ['a{10000}', 'a repeat count over 100'],
+    ['a{1,10000}', 'a repeat count over 100'],
+    ['a{100000000000000000000}', 'a repeat count over 100'],
+    ['(?:(?:(?:){100}){100}){100}', 'more than 20000 parts once its repeats are spelled out'],
     ['a{3,2}', 'a repeat range out of order'],
     ['[z-a]', 'a range out of order'],
     ['a\\', 'a "\\" at its end'],
@@ -104,6 +118,12 @@ describe('grepMatcher', () => {
   it('matches a literal in any case with ignoreCase', () => {
     expect(grepMatcher({ pattern: 'Disk' })('disk full')).toBe(false);
     expect(grepMatcher({ pattern: 'Disk', ignoreCase: true })('DISK full')).toBe(true);
+  });
+
+  it('folds case on both sides as RegExp does, so σ finds a final ς', () => {
+    expect(grepMatcher({ pattern: 'σ', ignoreCase: true })('ΟΔΟΣ')).toBe(true);
+    expect(grepMatcher({ pattern: 'σ', ignoreCase: true })('οδος')).toBe(true);
+    expect(grepMatcher({ pattern: 'σ' })('οδος')).toBe(false);
   });
 
   it('matches a regex with regex: true', () => {
