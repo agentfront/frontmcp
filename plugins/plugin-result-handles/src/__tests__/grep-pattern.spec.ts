@@ -73,11 +73,17 @@ describe('GrepRegex', () => {
     ['[σ]', 'i'],
     ['[^σ]', 'i'],
     ['[^i-k]', 'i'],
+    ['[ς-ς]', 'i'],
+    ['[^ς-ς]', 'i'],
+    ['[Σ-Σ]', 'i'],
+    ['[^σ-σ]', 'i'],
+    ['[µ-µ]', 'i'],
   ])('folds the case of a class member %j (%s) as a JavaScript RegExp does, once', (pattern, flags) => {
     const grep = new GrepRegex(pattern, flags === 'i');
     const native = new RegExp(pattern, flags);
     // ı (dotless i) upper-cases to I, which RegExp without the u flag does not fold it to: it leaves ASCII alone.
-    for (const text of ['i', 'I', 'ı', 'İ', 'ς', 'Σ', 'x']) {
+    // σ and ς both fold to Σ, and µ (micro sign) to Μ, so a range holding one takes the others.
+    for (const text of ['i', 'I', 'ı', 'İ', 'σ', 'ς', 'Σ', 'µ', 'μ', 'Μ', 'x']) {
       expect([text, grep.test(text)]).toEqual([text, native.test(text)]);
     }
   });

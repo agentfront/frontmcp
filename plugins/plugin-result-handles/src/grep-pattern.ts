@@ -60,6 +60,28 @@ function canonicalize(char: string): string {
   return char.charCodeAt(0) >= 128 && upper.charCodeAt(0) < 128 ? char : upper;
 }
 
+/** The characters {@link canonicalize} folds to each one, for those it folds others to; built on first use. */
+let caseForms: Map<string, string[]> | undefined;
+
+/** Every character that folds to `folded`, as RegExp folds case: `Σ` gives `Σ`, `σ` and `ς`. */
+function caseFormsOf(folded: string): readonly string[] {
+  if (!caseForms) {
+    caseForms = new Map();
+    for (let code = 0; code <= 0xffff; code++) {
+      if (code >= 0xd800 && code <= 0xdfff) continue;
+      const char = String.fromCharCode(code);
+      const canonical = canonicalize(char);
+      const forms = caseForms.get(canonical);
+      if (forms) forms.push(char);
+      else caseForms.set(canonical, [char]);
+    }
+    for (const [canonical, forms] of caseForms) {
+      if (forms.length === 1 && forms[0] === canonical) caseForms.delete(canonical);
+    }
+  }
+  return caseForms.get(folded) ?? [folded];
+}
+
 /** `text` with each character folded as {@link canonicalize} folds it, so its length stays the same. */
 function canonicalText(text: string): string {
   let folded = '';
@@ -222,12 +244,7 @@ class PatternParser {
   private range(low: string, high: string): CharTest {
     const within: CharTest = (char) => char >= low && char <= high;
     if (!this.ignoreCase) return within;
-    return (char) => {
-      const folded = canonicalize(char);
-      return [char, folded, folded.toLowerCase(), char.toLowerCase()].some(
-        (member) => member.length === 1 && within(member) && canonicalize(member) === folded,
-      );
-    };
+    return (char) => within(char) || caseFormsOf(canonicalize(char)).some(within);
   }
 
   private classMember(): string | CharTest {
