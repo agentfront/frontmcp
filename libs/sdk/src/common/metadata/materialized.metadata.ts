@@ -33,6 +33,26 @@ export interface ResourceKey<T = unknown> {
   subscribe(listener: (snapshot: ResourceSnapshot<T>) => void): () => void;
 }
 
+/** A key whose value a producer computes (`resourceStore().key(name, { produce })`). */
+export interface ProducedResourceKey<T = unknown> extends ResourceKey<T> {
+  /**
+   * The value is out of date: the producer runs again on the next read, and soon after this call while someone
+   * subscribes, no sooner than the key's throttle allows. A run whose output has the stored JSON keeps the revision.
+   */
+  markDirty(): void;
+}
+
+/**
+ * The keys of one resource store named by a URI template's parameters (`resourceStore().family(name)`), which
+ * `@ResourceTemplate({ from })` serves: each URI reads the key of its parameters.
+ */
+export interface ResourceKeyFamily<T = unknown, Key extends ResourceKey<T> = ResourceKey<T>> {
+  readonly name: string;
+  readonly store: ResourceStoreHandle;
+  /** The key of one set of parameters; the same parameters give the same key. */
+  key(params: Record<string, string>): Key;
+}
+
 export function isResourceKey(value: unknown): value is ResourceKey {
   const candidate = value as Partial<ResourceKey> | null | undefined;
   return (
@@ -50,4 +70,25 @@ export function isResourceKey(value: unknown): value is ResourceKey {
 
 export const resourceKeySchema = z.custom<ResourceKey>(isResourceKey, {
   message: "`from` must be a key of a resource store, such as resourceStore().key('board')",
+});
+
+export function isProducedResourceKey(key: ResourceKey): key is ProducedResourceKey {
+  return typeof (key as Partial<ProducedResourceKey>).markDirty === 'function';
+}
+
+export function isResourceKeyFamily(value: unknown): value is ResourceKeyFamily {
+  const candidate = value as Partial<ResourceKeyFamily> | null | undefined;
+  return (
+    typeof candidate === 'object' &&
+    candidate !== null &&
+    typeof candidate.name === 'string' &&
+    typeof candidate.key === 'function' &&
+    typeof candidate.store?.connect === 'function' &&
+    typeof candidate.store.close === 'function'
+  );
+}
+
+export const resourceKeyFamilySchema = z.custom<ResourceKeyFamily>(isResourceKeyFamily, {
+  message:
+    "`from` on @ResourceTemplate must be a key family of a resource store, such as resourceStore().family('table')",
 });

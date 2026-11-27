@@ -12,10 +12,23 @@ export interface WrittenBoard {
 }
 
 export function writeBoardFromAnotherProcess(boardDb: string, value: WrittenBoard['value']): Promise<WrittenBoard> {
+  return runWriter<WrittenBoard>(boardDb, [JSON.stringify(value)]);
+}
+
+/** Write the cards of `column` from another process: the key `board://columns/{column}` serves. */
+export function writeColumnFromAnotherProcess(
+  boardDb: string,
+  column: string,
+  cards: string[],
+): Promise<{ revision: number }> {
+  return runWriter(boardDb, [JSON.stringify(cards), column]);
+}
+
+function runWriter<Written>(boardDb: string, args: string[]): Promise<Written> {
   return new Promise((resolve, reject) => {
     execFile(
       process.execPath,
-      ['--import', 'tsx', writerScript, JSON.stringify(value)],
+      ['--import', 'tsx', writerScript, ...args],
       { cwd: workspaceRoot, env: { ...process.env, BOARD_DB: boardDb }, timeout: 90_000 },
       (error, stdout, stderr) => {
         if (error) {
@@ -23,7 +36,7 @@ export function writeBoardFromAnotherProcess(boardDb: string, value: WrittenBoar
           return;
         }
         const lines = stdout.trim().split('\n');
-        resolve(JSON.parse(lines[lines.length - 1] ?? '{}') as WrittenBoard);
+        resolve(JSON.parse(lines[lines.length - 1] ?? '{}') as Written);
       },
     );
   });
