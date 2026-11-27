@@ -22,6 +22,7 @@ import {
 } from '../../__test-utils__/helpers/oauth-flow.helpers';
 import { App, FlowHooksOf, Plugin, Tool, ToolContext, type FlowCtxOf, type FrontMcpConfigInput } from '../../common';
 import { type Scope } from '../../scope/scope.instance';
+import { type LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
 
 const RegisterHook = FlowHooksOf('oauth:register');
 
@@ -70,7 +71,10 @@ describe('DCR clients after a restart (#1478)', () => {
     await rm(directory, { recursive: true, force: true });
   });
 
-  async function startServer(tokenStorage: TokenStorage, dcr?: { enabled: boolean }): Promise<TestFetchServer> {
+  async function startServer(
+    tokenStorage: TokenStorage,
+    dcr?: { enabled?: boolean; maxDynamicClients?: number },
+  ): Promise<TestFetchServer> {
     const server = await createTestFetchServer({
       info: { name: 'dcr-restart', version: '1.0.0' },
       apps: [DeskApp],
@@ -123,6 +127,32 @@ describe('DCR clients after a restart (#1478)', () => {
   }
 
   const sqlite = (): TokenStorage => ({ sqlite: { path: path.join(directory, 'tokens.sqlite') } });
+
+  const localAuthOf = (server: TestFetchServer) => (server.instance.getScopes()[0] as Scope).auth as LocalPrimaryAuth;
+
+  /**
+   * Each load of `clientId` reads it, then a load of `other` drops it from memory again before the caller goes on: what
+   * a concurrent request for another client does once the clients read from the store reach `maxDynamicClients`.
+   */
+  function dropAfterLoad(server: TestFetchServer, clientId: string, other: string): void {
+    const registry = localAuthOf(server).dcrClientRegistry;
+    const load = registry.load.bind(registry);
+    jest.spyOn(registry, 'load').mockImplementation(async (id) => {
+      const client = await load(id);
+      if (id === clientId) await load(other);
+      return client;
+    });
+  }
+
+  /** Two clients registered before a restart, then a server on the same file that keeps one of them in memory. */
+  async function twoClientsAfterRestart(first: Record<string, unknown> = {}) {
+    const before = await startServer(sqlite());
+    const registration = await register(before, { redirect_uris: [REDIRECT], ...first });
+    const other = String((await register(before, { redirect_uris: [REDIRECT] }))['client_id']);
+    await stop(before);
+    const server = await startServer(sqlite(), { maxDynamicClients: 1 });
+    return { server, registration, clientId: String(registration['client_id']), other };
+  }
 
   it('authorizes a client registered before a restart on the same SQLite file', async () => {
     const first = await startServer(sqlite());
@@ -177,6 +207,52 @@ describe('DCR clients after a restart (#1478)', () => {
       client_secret: secret,
     });
     expect(refreshed.status).toBe(200);
+  });
+
+  describe('while another request drops the client from memory', () => {
+    afterEach(() => jest.restoreAllMocks());
+
+    it('authorizes it with the registration it read from the store', async () => {
+      const { server, clientId, other } = await twoClientsAfterRestart();
+      dropAfterLoad(server, clientId, other);
+
+      const page = await authorize(server, clientId);
+
+      expect(localAuthOf(server).dcrClientRegistry.has(clientId)).toBe(false);
+      expect(page.status).toBe(200);
+      expect(await authorize(server, clientId, 'http://127.0.0.1:5555/other')).toHaveProperty('status', 400);
+    });
+
+    it('records how the client authenticates on the code it issues', async () => {
+      const { server, clientId, other } = await twoClientsAfterRestart({
+        token_endpoint_auth_method: 'client_secret_post',
+      });
+      dropAfterLoad(server, clientId, other);
+
+      const code = await signIn(server, clientId);
+
+      const record = await localAuthOf(server).authorizationStore.getAuthorizationCode(code);
+      expect(record?.clientAuthMethod).toBe('client_secret_post');
+    });
+
+    it('authenticates it at the token endpoint with the registration it read from the store', async () => {
+      const { server, registration, clientId, other } = await twoClientsAfterRestart({
+        token_endpoint_auth_method: 'client_secret_post',
+      });
+      const code = await signIn(server, clientId);
+      dropAfterLoad(server, clientId, other);
+      const exchange = { grant_type: 'authorization_code', code, client_id: clientId, redirect_uri: REDIRECT };
+
+      expect((await token(server, { ...exchange, code_verifier: PKCE_VERIFIER, client_secret: 'wrong' })).body).toEqual(
+        expect.objectContaining({ error: 'invalid_client' }),
+      );
+      const issued = await token(server, {
+        ...exchange,
+        code_verifier: PKCE_VERIFIER,
+        client_secret: String(registration['client_secret']),
+      });
+      expect(issued.status).toBe(200);
+    });
   });
 
   it('keeps a client for another lifetime after each token grant', async () => {

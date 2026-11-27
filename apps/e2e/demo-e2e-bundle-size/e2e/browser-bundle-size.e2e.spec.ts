@@ -23,9 +23,11 @@ import {
 const BUDGETS: Array<{ entry: string; label: string; maxBytes: number }> = [
   // +3,221 and +3,216 bytes, the 1.13.2 batch: producer-backed resource keys (#1354, +2,033 / +2,027), the
   // http.userContent option and its warning (#1364, +943 / +944), the client metadata a transparent server publishes
-  // (#1360, +166) and the people session store option (#1355, +79)
-  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_348_046 },
-  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_355_272 },
+  // (#1360, +166) and the people session store option (#1355, +79). Then +237 and +236: keep-alive comments on every
+  // MCP stream (#1484, +151 / +151), the closest declared key at any depth (#1486, -13 / -13) and the review fixes on
+  // the stack (+99 / +98)
+  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_348_283 },
+  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_355_508 },
 ];
 
 // +413 bytes, the 1.13.2 batch: producer-backed resource keys (#1354, +241), the client metadata a transparent server

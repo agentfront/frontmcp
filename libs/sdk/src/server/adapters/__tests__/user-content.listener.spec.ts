@@ -7,6 +7,8 @@ import * as http from 'node:http';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
+import { mkdir, symlink } from '@frontmcp/utils';
+
 import type { UserContentOptions } from '../../../common/types/options/http/interfaces';
 import { UserContentConfigurationError } from '../../../errors/transport.errors';
 import { UserContentListener } from '../user-content.listener';
@@ -159,22 +161,18 @@ describe('UserContentListener', () => {
     });
 
     posixIt.each([
-      [
-        'a file symlink',
-        () => fs.symlinkSync(path.join(directory, 'outside.txt'), path.join(root, 'download')),
-        '/download',
-      ],
-      ['a directory symlink', () => fs.symlinkSync(directory, path.join(root, 'up')), '/up/outside.txt'],
+      ['a file symlink', () => symlink(path.join(directory, 'outside.txt'), path.join(root, 'download')), '/download'],
+      ['a directory symlink', () => symlink(directory, path.join(root, 'up')), '/up/outside.txt'],
       [
         "a directory's index.html symlink",
-        () => {
-          fs.mkdirSync(path.join(root, 'docs'));
-          fs.symlinkSync(path.join(directory, 'outside.txt'), path.join(root, 'docs', 'index.html'));
+        async () => {
+          await mkdir(path.join(root, 'docs'));
+          await symlink(path.join(directory, 'outside.txt'), path.join(root, 'docs', 'index.html'));
         },
         '/docs/',
       ],
     ])('never serves a file outside root through %s', async (_label, link, requestPath) => {
-      link();
+      await link();
       const target = await start();
 
       const res = await request(target, { path: requestPath });
@@ -184,8 +182,8 @@ describe('UserContentListener', () => {
     });
 
     posixIt('serves a symlink that stays inside root', async () => {
-      fs.symlinkSync(path.join(root, 'frame.html'), path.join(root, 'latest.html'));
-      fs.symlinkSync(path.join(root, 'site'), path.join(root, 'home'));
+      await symlink(path.join(root, 'frame.html'), path.join(root, 'latest.html'));
+      await symlink(path.join(root, 'site'), path.join(root, 'home'));
       const target = await start();
 
       expect((await request(target, { path: '/latest.html' })).body).toBe('<p>frame</p>');

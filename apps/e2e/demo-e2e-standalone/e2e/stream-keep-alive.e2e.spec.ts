@@ -29,18 +29,37 @@ async function readUntil(response: Response, done: (text: string) => boolean): P
   }
 }
 
-/** The JSON-RPC message of the stream's `event: message` that answers `id`. */
-function answerOf(text: string, id: number): { result?: { content?: { text?: string }[] } } {
-  const data = text
-    .split('\n\n')
+/** The whole SSE frames in `text`, without their blank-line ends; a frame still arriving is left out. */
+const framesOf = (text: string): string[] => text.split('\n\n').slice(0, -1);
+
+type Answer = { id?: unknown; result?: { content?: { text?: string }[] } };
+
+/** The JSON-RPC messages of the stream's whole `event: message` frames. */
+function messagesOf(text: string): Answer[] {
+  return framesOf(text)
     .filter((frame) => frame.startsWith('event: message'))
-    .map((frame) => JSON.parse(frame.slice(frame.indexOf('data: ') + 'data: '.length)))
-    .find((message) => message.id === id);
+    .map((frame) => JSON.parse(frame.slice(frame.indexOf('data: ') + 'data: '.length)) as Answer);
+}
+
+/** Whether the stream's whole frames so far hold the message that answers `id`. */
+const answered = (text: string, id: number): boolean => messagesOf(text).some((message) => message.id === id);
+
+/** The JSON-RPC message of the stream's `event: message` that answers `id`. */
+function answerOf(text: string, id: number): Answer {
+  const data = messagesOf(text).find((message) => message.id === id);
   if (!data) throw new Error(`no answer to request ${id} in: ${JSON.stringify(text)}`);
   return data;
 }
 
-const comments = (text: string, comment: string) => text.split(comment).length - 1;
+/** How many of `frames` are the comment `comment`. */
+const comments = (frames: string[], comment: string) => frames.filter((frame) => frame === comment).length;
+
+/** The whole frames before the first `event: message`. */
+function framesBeforeMessage(text: string): string[] {
+  const frames = framesOf(text);
+  const first = frames.findIndex((frame) => frame.startsWith('event: message'));
+  return first === -1 ? frames : frames.slice(0, first);
+}
 
 async function initializedSession(baseUrl: string): Promise<Record<string, string>> {
   const init = await fetch(`${baseUrl}/`, {
@@ -90,8 +109,8 @@ test.describe('MCP stream keep-alive', () => {
     });
 
     expect(response.headers.get('content-type')).toContain('text/event-stream');
-    const text = await readUntil(response, (sent) => sent.includes('"id":2'));
-    expect(comments(text.slice(0, text.indexOf('event: message')), ': keepalive\n\n')).toBeGreaterThanOrEqual(2);
+    const text = await readUntil(response, (sent) => answered(sent, 2));
+    expect(comments(framesBeforeMessage(text), ': keepalive')).toBeGreaterThanOrEqual(2);
     expect(answerOf(text, 2).result?.content?.[0]?.text).toContain('waited 1200 ms');
   });
 
@@ -102,7 +121,8 @@ test.describe('MCP stream keep-alive', () => {
     });
 
     expect(response.status).toBe(200);
-    expect(await readUntil(response, (sent) => comments(sent, ': keepalive\n\n') >= 2)).toMatch(/^(: keepalive\n\n)+$/);
+    const frames = framesOf(await readUntil(response, (sent) => comments(framesOf(sent), ': keepalive') >= 2));
+    expect(frames.filter((frame) => frame !== ': keepalive')).toEqual([]);
   });
 
   test('keeps a 2026-07-28 request stream alive while a quiet tool runs', async ({ server }) => {
@@ -133,8 +153,8 @@ test.describe('MCP stream keep-alive', () => {
     });
 
     expect(response.headers.get('content-type')).toContain('text/event-stream');
-    const text = await readUntil(response, (sent) => sent.includes('"id":3'));
-    expect(comments(text.slice(0, text.indexOf('event: message')), ': keep-alive\n\n')).toBeGreaterThanOrEqual(2);
+    const text = await readUntil(response, (sent) => answered(sent, 3));
+    expect(comments(framesBeforeMessage(text), ': keep-alive')).toBeGreaterThanOrEqual(2);
     expect(answerOf(text, 3).result?.content?.[0]?.text).toContain('waited 1200 ms');
   });
 
@@ -142,7 +162,11 @@ test.describe('MCP stream keep-alive', () => {
     const response = await fetch(`${server.info.baseUrl}/sse`, { headers: { accept: 'text/event-stream' } });
 
     expect(response.status).toBe(200);
-    const text = await readUntil(response, (sent) => comments(sent, ': keep-alive\n\n') >= 2);
-    expect(text).toMatch(/^id: 1\nevent: endpoint\ndata: [^\n]+\n\n(: keep-alive\n\n)+$/);
+    const [endpoint, ...rest] = framesOf(
+      await readUntil(response, (sent) => comments(framesOf(sent), ': keep-alive') >= 2),
+    );
+    expect(endpoint).toMatch(/^id: 1\nevent: endpoint\ndata: [^\n]+$/);
+    expect(rest.length).toBeGreaterThanOrEqual(2);
+    expect(rest.filter((frame) => frame !== ': keep-alive')).toEqual([]);
   });
 });

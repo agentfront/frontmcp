@@ -166,6 +166,7 @@ export class UserContentListener {
    * under `root` while the file is being served can still race it.
    */
   private confinedToRoot(root: string, realRoot: string): express.RequestHandler {
+    const rootPrefix = root.endsWith(path.sep) ? root : `${root}${path.sep}`;
     return (req, res, next) => {
       if (req.method !== 'GET' && req.method !== 'HEAD') return next();
       let pathname: string;
@@ -175,9 +176,9 @@ export class UserContentListener {
         // `send` answers a malformed path itself.
         return next();
       }
-      const target = path.join(root, pathname);
+      const target = path.resolve(root, `.${pathname}`);
       // A null byte or `..` out of root: `send` refuses those as written.
-      if (pathname.includes('\0') || !isUnder(target, root)) return next();
+      if (pathname.includes('\0') || (target !== root && !target.startsWith(rootPrefix))) return next();
       resolvesOutside(target, realRoot).then(
         (outside) => (outside ? res.status(404).type('text/plain').send('Not Found') : next()),
         next,

@@ -30,6 +30,7 @@ import {
   type FederatedAuthSessionStore,
   type JSONWebKeySet,
   type LocalSigningKeyConfig,
+  type RegisteredClient,
   type SecureStoreBackend,
   type SecureStoreConfig,
   type TokenRefreshCallback,
@@ -1188,12 +1189,13 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     // unregistered / CIMD clients ('none' / 'unknown') carry no secret and are
     // unaffected; a registered confidential client MUST present a matching
     // secret (timing-safe) — previously the secret was never checked.
-    await this.dcrClientRegistryImpl.load(clientId);
-    if (this.dcrClientRegistryImpl.verifyClientSecret(clientId, clientSecret) === 'invalid') {
+    // The registration load returns is the one checked: a load for another client can drop it from memory meanwhile
+    const client = await this.dcrClientRegistryImpl.load(clientId);
+    if (this.dcrClientRegistryImpl.verifyClientSecret(clientId, clientSecret, client) === 'invalid') {
       this.logger.warn('Client authentication failed at token endpoint (authorization_code)');
       return { error: 'invalid_client', error_description: 'Client authentication failed' };
     }
-    const declared = await this.checkDeclaredGrant(clientId, 'authorization_code', clientAssertion);
+    const declared = await this.checkDeclaredGrant(clientId, 'authorization_code', clientAssertion, client);
     if ('error' in declared) return declared;
 
     // Get the authorization code record
@@ -1352,12 +1354,14 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
    * `dcr.clients` entry or its client ID metadata document. A client that declared nothing (an unregistered
    * id under `requireRegisteredClients: false`, or one registered on another instance or before a restart
    * with a memory token storage) is not limited, and gets `grantTypes: undefined` and `authMethod: undefined`. A CIMD client whose document
-   * declares `private_key_jwt` must also present a valid client assertion.
+   * declares `private_key_jwt` must also present a valid client assertion. `registered` is the registration the token
+   * request read with `load`.
    */
   private async checkDeclaredGrant(
     clientId: string,
     grantType: 'authorization_code' | 'refresh_token',
     clientAssertion: ClientAssertionInput | undefined,
+    registered: RegisteredClient | undefined,
   ): Promise<
     { grantTypes: string[] | undefined; authMethod: string | undefined } | { error: string; error_description: string }
   > {
@@ -1378,7 +1382,6 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
         grantTypes = metadata?.grant_types;
         authMethod = metadata?.token_endpoint_auth_method ?? 'none';
       } else {
-        const registered = this.dcrClientRegistryImpl.get(clientId);
         grantTypes = registered?.grant_types;
         authMethod = registered?.token_endpoint_auth_method;
       }
@@ -1457,12 +1460,13 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   ): Promise<TokenResponse | { error: string; error_description: string }> {
     // Authenticate confidential clients on refresh too (RFC 6749 §6): a stolen
     // refresh token must not be redeemable with just the public client_id.
-    await this.dcrClientRegistryImpl.load(clientId);
-    if (this.dcrClientRegistryImpl.verifyClientSecret(clientId, clientSecret) === 'invalid') {
+    // The registration load returns is the one checked: a load for another client can drop it from memory meanwhile
+    const client = await this.dcrClientRegistryImpl.load(clientId);
+    if (this.dcrClientRegistryImpl.verifyClientSecret(clientId, clientSecret, client) === 'invalid') {
       this.logger.warn('Client authentication failed at token endpoint (refresh_token)');
       return { error: 'invalid_client', error_description: 'Client authentication failed' };
     }
-    const declared = await this.checkDeclaredGrant(clientId, 'refresh_token', clientAssertion);
+    const declared = await this.checkDeclaredGrant(clientId, 'refresh_token', clientAssertion, client);
     if ('error' in declared) return declared;
 
     const tokenRecord = await this.authorizationStore.getRefreshToken(refreshToken);

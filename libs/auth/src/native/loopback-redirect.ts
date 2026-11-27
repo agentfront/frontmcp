@@ -93,19 +93,21 @@ function readAuthorizationResponse(
 }
 
 /** The ports to try: one port, where `0` is any free one, or an inclusive range of ports from 1 to 65535. */
-function candidatePorts(port: number | readonly [number, number]): readonly [number, number] {
-  const isPort = (value: number, lowest: number) => Number.isInteger(value) && value >= lowest && value <= 65_535;
-  const [first, last] = typeof port === 'number' ? [port, port] : port;
-  const valid = typeof port === 'number' ? isPort(first, 0) : isPort(first, 1) && isPort(last, 1) && first <= last;
-  if (!valid) {
-    const given = typeof port === 'number' ? String(port) : `[${port.join(', ')}]`;
-    throw new NativeSignInError(
-      'invalid_port',
-      `redirectPort must be a port from 0 to 65535 (0 is any free port), or a range [first, last] of ports from 1 ` +
-        `to 65535 with first <= last; got ${given}`,
-    );
+function candidatePorts(port: unknown): readonly [number, number] {
+  const isPort = (value: unknown, lowest: number): value is number =>
+    typeof value === 'number' && Number.isInteger(value) && value >= lowest && value <= 65_535;
+  if (isPort(port, 0)) return [port, port];
+  // A JavaScript caller can pass anything: only a pair of ports is a range.
+  if (Array.isArray(port) && port.length === 2) {
+    const [first, last]: unknown[] = port;
+    if (isPort(first, 1) && isPort(last, 1) && first <= last) return [first, last];
   }
-  return [first, last];
+  const given = Array.isArray(port) ? `[${port.join(', ')}]` : typeof port === 'number' ? String(port) : typeof port;
+  throw new NativeSignInError(
+    'invalid_port',
+    `redirectPort must be a port from 0 to 65535 (0 is any free port), or a range [first, last] of ports from 1 ` +
+      `to 65535 with first <= last; got ${given}`,
+  );
 }
 
 async function listenOnFreePort(server: Server, [first, last]: readonly [number, number]): Promise<number> {

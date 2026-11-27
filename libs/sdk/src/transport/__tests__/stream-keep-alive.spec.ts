@@ -121,6 +121,37 @@ describe('withKeepAlive', () => {
     expect(jest.getTimerCount()).toBe(0);
   });
 
+  it('keeps no reaction per frame or per keep-alive on a promise that stays pending', async () => {
+    const source = controlledFrames();
+    const iterator = withKeepAlive(source.frames, 1_000)[Symbol.asyncIterator]();
+    // Every reaction a promise gets goes through its `then` (Promise.race calls it too), so count them per promise.
+    const reactions = new Map<object, number>();
+    const then = Promise.prototype.then;
+    Promise.prototype.then = function (this: Promise<unknown>, ...args: Parameters<typeof then>) {
+      reactions.set(this, (reactions.get(this) ?? 0) + 1);
+      return then.apply(this, args);
+    } as typeof then;
+    try {
+      for (let index = 0; index < 50; index++) {
+        const next = iterator.next();
+        source.push(`data: ${index}\n\n`);
+        await next;
+      }
+      // One source read, awaited across 50 quiet intervals.
+      for (let index = 0; index < 50; index++) {
+        const next = iterator.next();
+        await jest.advanceTimersByTimeAsync(1_000);
+        expect(decoder.decode((await next).value)).toBe(KEEP_ALIVE_COMMENT);
+      }
+    } finally {
+      Promise.prototype.then = then;
+    }
+
+    expect(Math.max(...reactions.values())).toBeLessThanOrEqual(2);
+    source.push('data: last\n\n');
+    expect(decoder.decode((await iterator.next()).value)).toBe('data: last\n\n');
+  });
+
   it('leaves the frames as they are when keep-alives are off', () => {
     const source = controlledFrames();
 

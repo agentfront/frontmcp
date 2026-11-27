@@ -216,6 +216,7 @@ describe('getNativeTokens', () => {
 
     const [a, b] = await Promise.all([getNativeTokens(options()), getNativeTokens(options())]);
 
+    expect(a).toMatchObject({ accessToken: expect.any(String), refreshToken: expect.any(String) });
     expect(a).toEqual(b);
     expect(a?.accessToken).not.toBe(first.accessToken);
     expect(a?.refreshToken).not.toBe(first.refreshToken);

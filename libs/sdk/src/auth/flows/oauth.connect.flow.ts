@@ -261,7 +261,7 @@ export default class OauthConnectFlow extends FlowBase<typeof name> {
 
   /** An HTML response with the built-in auth pages' security headers (#263). */
   private htmlPage(markup: string, status = 200): ReturnType<typeof httpRespond.html> {
-    return httpRespond.html(markup, status, builtInAuthPageHeaders());
+    return httpRespond.html(markup, status, builtInAuthPageHeaders({ csp: 'inline' }));
   }
 
   /** Render the single-field connect page (reusing the login field renderer). */

@@ -179,19 +179,21 @@ export class LoopbackTokenAuth {
       this.removeKept(key);
       return undefined;
     }
+    // The session this process made counts only while it still has it: not signed out or expired during the read.
+    const stillKnown = () => known !== undefined && known.expiresAt > Date.now() && this.sessions.includes(known);
     let raw: string | null;
     try {
       raw = await store.get(key);
     } catch (error) {
       this.report('a kept people session could not be read', error);
-      return known && toSession(known);
+      return known && stillKnown() ? toSession(known) : undefined;
     }
     if (this.isRevoked(key)) return undefined;
     const session = keptSession(raw);
     const signedIn = session !== undefined && session.expiresAt > Date.now();
     if (!known) return signedIn ? session : undefined;
-    if (signedIn) return toSession(known);
-    // Another process on the store signed it out.
+    if (signedIn && stillKnown()) return toSession(known);
+    // Signed out, here or by another process on the store, or expired.
     this.sessions = this.sessions.filter((stored) => stored !== known);
     return undefined;
   }

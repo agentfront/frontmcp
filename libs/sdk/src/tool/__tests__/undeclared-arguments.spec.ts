@@ -89,6 +89,52 @@ describe('declaredKeysAt', () => {
     expect(declaredKeysAt({ root: folder }, ['root', 'folders', '[]', 'folders', '[]'])).toEqual(['name', 'folders']);
   });
 
+  describe('below a recursive schema whose options each hold the same schema', () => {
+    type Step = { kind: 'and' | 'or'; next?: Step };
+    // Each option holds `next`, so without deduplication every segment doubles the definitions it looks at.
+    const and = z.object({
+      kind: z.literal('and'),
+      left: z.string(),
+      next: z.lazy((): z.ZodType<Step> => step).optional(),
+    });
+    const or = z.object({
+      kind: z.literal('or'),
+      right: z.string(),
+      next: z.lazy((): z.ZodType<Step> => step).optional(),
+    });
+    const step: z.ZodType<Step> = z.lazy(() => z.union([and, or])) as z.ZodType<Step>;
+    // The same, built anew each time the lazy schema is expanded.
+    const built: z.ZodType<Step> = z.lazy(() =>
+      z.union([
+        z.object({ kind: z.literal('and'), left: z.string(), next: built.optional() }),
+        z.object({ kind: z.literal('or'), right: z.string(), next: built.optional() }),
+      ]),
+    ) as z.ZodType<Step>;
+    const depth = 16;
+
+    /** declaredKeysAt's keys at `depth` segments of `next`, and how many definitions it looked up `next` in. */
+    function keysAndLookups(schema: z.ZodType<Step>): { keys: string[]; lookups: number } {
+      const hasOwn = jest.spyOn(Object.prototype, 'hasOwnProperty');
+      try {
+        const keys = declaredKeysAt(
+          { next: schema },
+          Array.from({ length: depth }, () => 'next'),
+        );
+        return { keys, lookups: hasOwn.mock.calls.filter(([key]) => key === 'next').length };
+      } finally {
+        hasOwn.mockRestore();
+      }
+    }
+
+    it('looks at each definition once per segment, so a deep path costs no more than its depth', () => {
+      for (const schema of [step, built]) {
+        const { keys, lookups } = keysAndLookups(schema);
+        expect(keys).toEqual(['kind', 'left', 'next', 'right']);
+        expect(lookups).toBeLessThanOrEqual(2 * depth);
+      }
+    });
+  });
+
   it('names no keys below a field that is not an object, or a key the schema does not declare', () => {
     expect(declaredKeysAt(shape, ['timeoutSec'])).toEqual([]);
     expect(declaredKeysAt(shape, ['lines'])).toEqual([]);

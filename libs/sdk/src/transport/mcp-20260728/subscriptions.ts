@@ -187,7 +187,7 @@ export function createSubscriptionStream(options: SubscriptionStreamOptions): {
   if (signal?.aborted) cleanup();
   else signal?.addEventListener('abort', cleanup, { once: true });
 
-  async function* generate(): AsyncIterable<Uint8Array> {
+  async function* generate(): AsyncGenerator<Uint8Array, void, undefined> {
     try {
       // MUST be the first message carrying this subscription's id.
       yield frame({
@@ -238,5 +238,22 @@ export function createSubscriptionStream(options: SubscriptionStreamOptions): {
     }
   }
 
-  return { acknowledged, stream: generate() };
+  // A reader that stops releases the listeners at once. The generator's own return() waits behind the read in
+  // progress, which with keep-alives off only the next update ends: a web response's cancel would leave them on.
+  const frames = generate();
+  const stream: AsyncIterableIterator<Uint8Array> = {
+    next: () => frames.next(),
+    return: (value?: unknown) => {
+      cleanup();
+      return frames.return(value as undefined);
+    },
+    throw: (error?: unknown) => {
+      cleanup();
+      return frames.throw(error);
+    },
+    [Symbol.asyncIterator]() {
+      return this;
+    },
+  };
+  return { acknowledged, stream };
 }
