@@ -164,3 +164,10 @@ export class SocketPermissionError extends InternalMcpError {
     super(`Could not make Unix socket ${socketPath} owner-only (0600): ${detail}.`, 'SOCKET_PERMISSION');
   }
 }
+
+/** Thrown at startup when the `http.userContent` listener cannot be served as configured. */
+export class UserContentConfigurationError extends InternalMcpError {
+  constructor(detail: string) {
+    super(`http.userContent: ${detail}`, 'USER_CONTENT_CONFIGURATION');
+  }
+}

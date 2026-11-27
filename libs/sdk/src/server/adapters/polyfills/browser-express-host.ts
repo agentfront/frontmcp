@@ -12,3 +12,9 @@ export class ExpressHostAdapter {
     throw new Error('ExpressHostAdapter is not available in browser environments');
   }
 }
+
+export class UserContentListener {
+  constructor(_options?: unknown) {
+    throw new Error('UserContentListener is not available in browser environments');
+  }
+}
