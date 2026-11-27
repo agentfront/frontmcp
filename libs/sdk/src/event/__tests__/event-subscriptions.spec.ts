@@ -8,6 +8,7 @@ import {
   EventSubscriptions,
   SUBSCRIPTION_SWEEP_INTERVAL_MS,
   subscriptionRefOf,
+  type EventSubscriptionEnding,
 } from '../subscription/event-subscriptions';
 
 jest.mock('@frontmcp/utils', () => {
@@ -52,10 +53,16 @@ function subscription(overrides: Partial<EventSubscriptionRecord> = {}): EventSu
 
 async function subscriptionsFor(
   events: EventEntry[],
-  overrides: { durable?: boolean; settings?: typeof settings } = {},
+  overrides: {
+    durable?: boolean;
+    settings?: typeof settings;
+    ended?: (ending: EventSubscriptionEnding) => Promise<unknown>;
+    /** Another node's storage, so two instances share one store. */
+    storage?: ReturnType<typeof createMemoryStorage>;
+  } = {},
 ) {
-  const storage = createMemoryStorage({ prefix: 'spec:events:' });
-  await storage.connect();
+  const storage = overrides.storage ?? createMemoryStorage({ prefix: 'spec:events:' });
+  if (!overrides.storage) await storage.connect();
   const store = new StorageEventSubscriptionStore({ storage });
   const warn = jest.fn();
   const logger = { child: () => ({ warn }) };
@@ -67,8 +74,9 @@ async function subscriptionsFor(
     settings: overrides.settings ?? settings,
     rotationGraceMs: 5 * MINUTE_MS,
     logger: logger as never,
+    ended: overrides.ended,
   });
-  return { subscriptions, store, warn };
+  return { subscriptions, store, storage, warn };
 }
 
 describe('EventSubscriptions', () => {
@@ -288,6 +296,70 @@ describe('EventSubscriptions', () => {
       await expect(
         subscriptions.notifyUnsubscribed(subscription({ eventName: 'removed.event' }), 'expired'),
       ).resolves.toBeUndefined();
+    });
+  });
+
+  describe('events:ended', () => {
+    it('runs once for an expired subscription, after its event was told', async () => {
+      const calls: string[] = [];
+      const onUnsubscribe = jest.fn(() => {
+        calls.push('onUnsubscribe');
+      });
+      const ended = jest.fn(async (ending: EventSubscriptionEnding) => {
+        calls.push(`ended:${ending.reason}`);
+      });
+      const { subscriptions, store } = await subscriptionsFor([eventNamed('order.created', { onUnsubscribe })], {
+        ended,
+      });
+      const expired = subscription({ expiresAt: NOW - 1 });
+      await store.upsert(expired);
+
+      await subscriptions.expire('sub_0001');
+      await subscriptions.expire('sub_0001');
+
+      expect(ended).toHaveBeenCalledTimes(1);
+      expect(ended).toHaveBeenCalledWith({ record: expired, reason: 'expired' });
+      expect(calls).toEqual(['onUnsubscribe', 'ended:expired']);
+    });
+
+    it('runs once per subscription when two nodes sweep one store at the same time', async () => {
+      const ended = jest.fn(async (_ending: EventSubscriptionEnding) => undefined);
+      const events = [eventNamed('order.created')];
+      const first = await subscriptionsFor(events, { ended });
+      const second = await subscriptionsFor(events, { ended, storage: first.storage });
+      await first.store.upsert(subscription({ id: 'sub_old_1', expiresAt: NOW - 2 }));
+      await first.store.upsert(subscription({ id: 'sub_old_2', expiresAt: NOW - 1 }));
+      await first.store.upsert(subscription({ id: 'sub_live' }));
+
+      await Promise.all([first.subscriptions.sweep(), second.subscriptions.sweep()]);
+
+      const endedIds = ended.mock.calls.map(([ending]) => ending.record.id).sort();
+      expect(endedIds).toEqual(['sub_old_1', 'sub_old_2']);
+    });
+
+    it('logs a failing events:ended instead of throwing, and the subscription stays ended', async () => {
+      const failure = new Error('the audit plugin failed');
+      const onUnsubscribe = jest.fn();
+      const { subscriptions, store, warn } = await subscriptionsFor([eventNamed('order.created', { onUnsubscribe })], {
+        ended: jest.fn().mockRejectedValue(failure),
+      });
+      await store.upsert(subscription({ expiresAt: NOW - 1 }));
+
+      await expect(subscriptions.expire('sub_0001')).resolves.toBeUndefined();
+
+      expect(onUnsubscribe).toHaveBeenCalledTimes(1);
+      await expect(store.listExpired(NOW)).resolves.toEqual([]);
+      expect(warn).toHaveBeenCalledWith('events:ended failed for subscription sub_0001 (expired)', failure);
+    });
+
+    it('does not run for a live subscription', async () => {
+      const ended = jest.fn();
+      const { subscriptions, store } = await subscriptionsFor([eventNamed('order.created')], { ended });
+      await store.upsert(subscription());
+
+      await subscriptions.expire('sub_0001');
+
+      expect(ended).not.toHaveBeenCalled();
     });
   });
 

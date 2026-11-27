@@ -20,7 +20,7 @@ const stateSchema = z.object({
   authInfo: z.any() as z.ZodType<Partial<AuthInfo>>,
   dialect: z.enum(['sep-3415', 'sketch']),
   owner: z.any() as z.ZodType<EventSubscriberIdentity>,
-  /** The id the request names: derived from the caller, the callback, the event and its arguments, as subscribe does. */
+  /** The id the request names, derived from the caller, the callback, the event and its arguments. */
   subscriptionId: z.string(),
   /** The subscription this request removed, as it was stored; undefined when none matched, which succeeds too. */
   removed: z.any() as z.ZodType<EventSubscriptionRecord | undefined>,
@@ -96,7 +96,7 @@ export default class EventUnsubscribeFlow extends FlowBase<typeof name> {
     this.state.set('owner', owner);
   }
 
-  /** Remove the subscription the caller's key names and tell its event, once; the state keeps what was removed. */
+  /** Remove the subscription the caller's key names, tell its event and `events:ended`; keep it in the state. */
   @Stage('removeSubscription')
   async removeSubscription() {
     const { name: eventName, delivery } = this.input.request.params;
@@ -108,6 +108,7 @@ export default class EventUnsubscribeFlow extends FlowBase<typeof name> {
     this.state.set({ subscriptionId: identity.id, removed });
     if (!removed) return;
     await this.subscriptions.notifyUnsubscribed(removed, 'unsubscribed', authInfo);
+    await this.subscriptions.notifyEnded({ record: removed, reason: 'unsubscribed' });
     this.logger.verbose(`removeSubscription: subscription ${removed.id} removed from event "${eventName}"`);
   }
 

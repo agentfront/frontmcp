@@ -40,7 +40,12 @@ export {
   deliveryStatusOf,
   subscriptionRefOf,
 } from './subscription/event-subscriptions';
-export type { EventSubscriptionIdentity, EventSubscriptionsOptions } from './subscription/event-subscriptions';
+export type {
+  EventSubscriptionEnding,
+  EventSubscriptionIdentity,
+  EventSubscriptionsOptions,
+} from './subscription/event-subscriptions';
+export type { EventTerminationError } from './subscription/event-subscription-termination';
 export { EVENT_COUNTERS, createEventMetrics } from './delivery/event-metrics';
 export type { EventCounter, EventMetrics } from './delivery/event-metrics';
 export { EventOutbox, OUTBOX_SWEEP_INTERVAL_MS } from './delivery/event-outbox';
