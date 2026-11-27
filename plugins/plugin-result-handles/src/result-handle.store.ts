@@ -54,6 +54,8 @@ export class ResultHandleStore implements OnShutdown {
   /** The size and expiry of each answer this store saved, least recently used first, while `maxStoredBytes` is set. */
   private readonly kept = new Map<string, { bytes: number; expiresAt: number }>();
   private keptBytes = 0;
+  /** The saves under `maxStoredBytes`, one at a time: each counts, drops and writes before the next counts. */
+  private saving: Promise<unknown> = Promise.resolve();
 
   constructor(
     private readonly storage: NamespacedStorage,
@@ -70,6 +72,17 @@ export class ResultHandleStore implements OnShutdown {
   async save(handle: string, value: unknown, owner: ResultOwner, ttlSeconds = this.ttlSeconds): Promise<void> {
     const encrypted = encryptAndSerialize(value, deriveFromHandle('key', handle, owner));
     const key = storageKeyOf(handle, owner);
+    if (this.retention.maxStoredBytes === undefined) {
+      await this.storage.set(key, encrypted, { ttlSeconds });
+      return;
+    }
+    // A save that counted and dropped while another was still writing could drop that one, which then stored uncounted.
+    const saved = this.saving.then(() => this.saveCounted(key, encrypted, ttlSeconds));
+    this.saving = saved.catch(() => undefined);
+    await saved;
+  }
+
+  private async saveCounted(key: string, encrypted: string, ttlSeconds: number): Promise<void> {
     await this.makeRoom(key, encrypted.length, ttlSeconds);
     try {
       await this.storage.set(key, encrypted, { ttlSeconds });
@@ -98,7 +111,10 @@ export class ResultHandleStore implements OnShutdown {
     return { value };
   }
 
-  /** Counts `bytes` under `key` and drops the least recently used answers past `maxStoredBytes`. */
+  /**
+   * Counts `bytes` under `key` and drops the least recently used answers past `maxStoredBytes`. The dropped ones stay
+   * counted until the storage has deleted them; when it cannot, `key` is not counted either, and the save fails.
+   */
   private async makeRoom(key: string, bytes: number, ttlSeconds: number): Promise<void> {
     const { maxStoredBytes } = this.retention;
     if (maxStoredBytes === undefined) return;
@@ -112,12 +128,20 @@ export class ResultHandleStore implements OnShutdown {
     const now = Date.now();
     for (const [expired, { expiresAt }] of this.kept) if (expiresAt <= now) this.forget(expired);
     const dropped: string[] = [];
-    for (const oldest of this.kept.keys()) {
-      if (this.keptBytes <= maxStoredBytes) break;
-      this.forget(oldest);
+    let remaining = this.keptBytes;
+    for (const [oldest, entry] of this.kept) {
+      if (remaining <= maxStoredBytes) break;
       dropped.push(oldest);
+      remaining -= entry.bytes;
     }
-    if (dropped.length > 0) await this.storage.mdelete(dropped);
+    if (dropped.length === 0) return;
+    try {
+      await this.storage.mdelete(dropped);
+    } catch (error) {
+      this.forget(key);
+      throw error;
+    }
+    for (const oldest of dropped) this.forget(oldest);
   }
 
   /** Marks the answer under `key` as just read: last to be dropped, and with `slidingTtl` its TTL started again. */

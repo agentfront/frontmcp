@@ -1,4 +1,4 @@
-import { normalizeIssuer, trimSlash } from '../jwks/jwks.utils';
+import { trimSlash } from '../jwks/jwks.utils';
 import { isLoopbackRedirectUri } from '../utils/redirect-uri.utils';
 import { NativeSignInError } from './native-sign-in.error';
 
@@ -28,8 +28,9 @@ export function authorizationServerMetadataUrls(issuer: string): string[] {
 }
 
 /**
- * The metadata of the authorization server `issuer` names: the first document found whose `issuer` is that
- * issuer (RFC 8414 §3.3), with endpoints this client may send credentials to, and S256 PKCE when it lists methods.
+ * The metadata of the authorization server `issuer` names: the first document found whose `issuer` is that issuer,
+ * character for character (RFC 8414 §3.3), with endpoints this client may send credentials to (see
+ * {@link assertSecureEndpoint}), well-typed security fields, and S256 PKCE when it lists methods.
  */
 export async function discoverAuthorizationServer(issuer: string): Promise<AuthorizationServerMetadata> {
   assertSecureUrl(issuer);
@@ -40,14 +41,16 @@ export async function discoverAuthorizationServer(issuer: string): Promise<Autho
       problems.push(`${metadataUrl}: no metadata`);
       continue;
     }
-    if (normalizeIssuer(metadata.issuer) !== normalizeIssuer(issuer)) {
+    if (metadata.issuer !== issuer) {
       problems.push(`${metadataUrl}: its issuer is "${metadata.issuer}"`);
       continue;
     }
-    assertSecureUrl(metadata.authorization_endpoint);
-    assertSecureUrl(metadata.token_endpoint);
+    assertSecureEndpoint(metadata.authorization_endpoint, issuer);
+    assertSecureEndpoint(metadata.token_endpoint, issuer);
+    const malformed = securityFieldProblem(metadata);
+    if (malformed) throw new NativeSignInError('discovery_failed', `${metadataUrl}: ${malformed}`);
     const methods = metadata.code_challenge_methods_supported;
-    if (Array.isArray(methods) && !methods.includes('S256')) {
+    if (methods && !methods.includes('S256')) {
       throw new NativeSignInError(
         'discovery_failed',
         `${issuer} does not support S256 PKCE (it lists ${methods.join(', ')})`,
@@ -61,16 +64,46 @@ export async function discoverAuthorizationServer(issuer: string): Promise<Autho
   );
 }
 
-/** HTTPS, or HTTP to a loopback host. */
+/** HTTPS, or HTTP to a loopback host: an issuer, which may be a local development server. */
 export function assertSecureUrl(url: string): void {
-  let parsed: URL;
+  if (protocolOf(url) === 'https:' || (protocolOf(url) === 'http:' && isLoopbackRedirectUri(url))) return;
+  throw new NativeSignInError('insecure_url', `${url} is not an https URL`);
+}
+
+/**
+ * An endpoint of `issuer` this client sends codes, verifiers, refresh tokens or a client secret to: HTTPS, or HTTP to
+ * a loopback host only when the issuer is itself an HTTP loopback URL, a local development server. An https issuer's
+ * metadata cannot send credentials in the clear to a port on this machine.
+ */
+export function assertSecureEndpoint(url: string, issuer: string): void {
+  assertSecureUrl(url);
+  if (protocolOf(url) === 'https:') return;
+  if (protocolOf(issuer) === 'http:' && isLoopbackRedirectUri(issuer)) return;
+  throw new NativeSignInError(
+    'insecure_url',
+    `${url} is not an https URL: only an http loopback issuer (a local development server) may use http endpoints`,
+  );
+}
+
+function protocolOf(url: string): string {
   try {
-    parsed = new URL(url);
+    return new URL(url).protocol;
   } catch {
     throw new NativeSignInError('insecure_url', `"${url}" is not a URL`);
   }
-  if (parsed.protocol === 'https:' || (parsed.protocol === 'http:' && isLoopbackRedirectUri(url))) return;
-  throw new NativeSignInError('insecure_url', `${url} is not an https URL`);
+}
+
+/** Why a security field the document carries does not have its RFC 8414 / RFC 9207 type, or `undefined`. */
+function securityFieldProblem(metadata: AuthorizationServerMetadata): string | undefined {
+  const { authorization_response_iss_parameter_supported: issSupported, code_challenge_methods_supported: methods } =
+    metadata as unknown as Record<string, unknown>;
+  if (issSupported !== undefined && typeof issSupported !== 'boolean') {
+    return 'authorization_response_iss_parameter_supported is not a boolean';
+  }
+  if (methods !== undefined && !(Array.isArray(methods) && methods.every((method) => typeof method === 'string'))) {
+    return 'code_challenge_methods_supported is not a list of strings';
+  }
+  return undefined;
 }
 
 export function requestWithTimeout(url: string, init: RequestInit): Promise<Response> {

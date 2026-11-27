@@ -101,7 +101,10 @@ interface RefreshTokenRecord {
   clientId: string;
   user: MockTestUser;
   scopes: string[];
+  /** The audience the authorization granted, which a refresh may narrow. */
   audience: string[];
+  /** The audience of the access token issued last, which a refresh that names none keeps. */
+  issuedAudience: string[];
   authTime: number;
   expiresAt: number;
 }
@@ -183,6 +186,9 @@ export class MockOAuthServer {
 
   /** Refresh token storage (token -> record) */
   private refreshTokens = new Map<string, RefreshTokenRecord>();
+
+  /** By `sub`, every user an access token was issued for, so userinfo answers for each of them. */
+  private readonly issuedUsers = new Map<string, MockTestUser>();
 
   /** Access token TTL in seconds */
   private readonly accessTokenTtlSeconds: number;
@@ -750,6 +756,7 @@ export class MockOAuthServer {
 
     // Mark code as used
     codeRecord.used = true;
+    this.issuedUsers.set(codeRecord.user.sub, codeRecord.user);
 
     // Generate tokens
     const accessToken = await this.tokenFactory.createTestToken({
@@ -785,6 +792,7 @@ export class MockOAuthServer {
       user: codeRecord.user,
       scopes: codeRecord.scopes,
       audience: codeRecord.audience,
+      issuedAudience: audience,
       authTime: codeRecord.authTime,
       expiresAt: Date.now() + this.refreshTokenTtlSeconds * 1000,
     });
@@ -857,7 +865,7 @@ export class MockOAuthServer {
       return;
     }
 
-    const audience = this.narrowTargets(params, tokenRecord.audience);
+    const audience = this.narrowTargets(params, tokenRecord.audience, tokenRecord.issuedAudience);
     if (typeof audience === 'string') {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'invalid_target', error_description: audience }));
@@ -883,6 +891,7 @@ export class MockOAuthServer {
     const newRefreshToken = this.generateCode();
     this.refreshTokens.set(newRefreshToken, {
       ...tokenRecord,
+      issuedAudience: audience,
       token: newRefreshToken,
       expiresAt: Date.now() + this.refreshTokenTtlSeconds * 1000,
     });
@@ -1157,16 +1166,19 @@ export class MockOAuthServer {
     return testUser ?? users[0];
   }
 
-  /** The listed user an access token names, read without verifying it: the mock issued it. */
+  /**
+   * The user an access token names, read without verifying it: one this mock issued a token for (`testUser` or a
+   * user from the manual form too, even after `setTestUser`), else a listed one.
+   */
   private userOfToken(token: string): MockTestUser | undefined {
+    let sub: unknown;
     try {
-      const payload = JSON.parse(Buffer.from(token.split('.')[1] ?? '', 'base64url').toString('utf8')) as {
-        sub?: unknown;
-      };
-      return this.options.users?.find((user) => user.sub === payload.sub);
+      ({ sub } = JSON.parse(Buffer.from(token.split('.')[1] ?? '', 'base64url').toString('utf8')) as { sub?: unknown });
     } catch {
       return undefined;
     }
+    if (typeof sub !== 'string') return undefined;
+    return this.issuedUsers.get(sub) ?? this.options.users?.find((user) => user.sub === sub);
   }
 
   /** A request's `resource` and `audience` values when `resourceIndicators` is set; else none, with one warning. */
@@ -1192,11 +1204,12 @@ export class MockOAuthServer {
 
   /**
    * The audience of a token request: the `resource` / `audience` values it names, which must be among those granted
-   * (or, when none were, allowed), else the granted ones. A string is the reason it is refused.
+   * (or, when none were, allowed), else `kept` (for a refresh, the audience of the token issued last). A string is the
+   * reason it is refused.
    */
-  private narrowTargets(params: URLSearchParams, granted: string[]): string[] | string {
+  private narrowTargets(params: URLSearchParams, granted: string[], kept: string[] = granted): string[] | string {
     const requested = this.requestedTargets(params);
-    if (requested.length === 0) return granted;
+    if (requested.length === 0) return kept;
     const outside = granted.length > 0 ? requested.find((target) => !granted.includes(target)) : undefined;
     if (outside) return `${outside} was not granted by the authorization`;
     return this.checkTargets(requested) ?? requested;

@@ -24,8 +24,9 @@ export interface LoopbackRedirect {
 
 /** A one-shot HTTP listener on 127.0.0.1 for the authorization response (RFC 8252 §7.3). */
 export async function listenForRedirect(options: LoopbackRedirectOptions): Promise<LoopbackRedirect> {
+  const candidates = candidatePorts(options.port ?? 0);
   const server = createServer();
-  const port = await listenOnFreePort(server, options.port ?? 0);
+  const port = await listenOnFreePort(server, candidates);
   const redirectUri = `http://${LOOPBACK_HOST}:${port}${options.path}`;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const close = () => {
@@ -40,7 +41,14 @@ export async function listenForRedirect(options: LoopbackRedirectOptions): Promi
       reject(new NativeSignInError('timeout', `No sign-in came back within ${Math.round(options.timeoutMs / 1000)}s`));
     }, options.timeoutMs);
     server.on('request', (req, res) => {
-      const url = new URL(req.url ?? '/', redirectUri);
+      let url: URL;
+      try {
+        url = new URL(req.url ?? '/', redirectUri);
+      } catch {
+        // A target that is no URL (`//`) is not the callback: refuse it, and keep waiting for the callback.
+        res.writeHead(400).end();
+        return;
+      }
       if (url.pathname !== options.path) {
         res.writeHead(404).end();
         return;
@@ -84,8 +92,23 @@ function readAuthorizationResponse(
   return { ok: true, code };
 }
 
-async function listenOnFreePort(server: Server, port: number | readonly [number, number]): Promise<number> {
+/** The ports to try: one port, where `0` is any free one, or an inclusive range of ports from 1 to 65535. */
+function candidatePorts(port: number | readonly [number, number]): readonly [number, number] {
+  const isPort = (value: number, lowest: number) => Number.isInteger(value) && value >= lowest && value <= 65_535;
   const [first, last] = typeof port === 'number' ? [port, port] : port;
+  const valid = typeof port === 'number' ? isPort(first, 0) : isPort(first, 1) && isPort(last, 1) && first <= last;
+  if (!valid) {
+    const given = typeof port === 'number' ? String(port) : `[${port.join(', ')}]`;
+    throw new NativeSignInError(
+      'invalid_port',
+      `redirectPort must be a port from 0 to 65535 (0 is any free port), or a range [first, last] of ports from 1 ` +
+        `to 65535 with first <= last; got ${given}`,
+    );
+  }
+  return [first, last];
+}
+
+async function listenOnFreePort(server: Server, [first, last]: readonly [number, number]): Promise<number> {
   let lastError: unknown;
   for (let candidate = first; candidate <= last; candidate++) {
     try {
@@ -101,15 +124,30 @@ async function listenOnFreePort(server: Server, port: number | readonly [number,
   );
 }
 
+/** One bind attempt, which leaves none of its handlers on the server, however it ends. */
 function listen(server: Server, port: number): Promise<number> {
   return new Promise((resolve, reject) => {
-    const onError = (error: Error) => reject(error);
-    server.once('error', onError);
-    server.listen(port, LOOPBACK_HOST, () => {
+    const settle = () => {
       server.off('error', onError);
+      server.off('listening', onListening);
+    };
+    const onError = (error: Error) => {
+      settle();
+      reject(error);
+    };
+    const onListening = () => {
+      settle();
       const address = server.address();
       resolve(typeof address === 'object' && address ? address.port : port);
-    });
+    };
+    server.once('error', onError);
+    server.once('listening', onListening);
+    try {
+      server.listen(port, LOOPBACK_HOST);
+    } catch (error) {
+      settle();
+      reject(error);
+    }
   });
 }
 

@@ -180,7 +180,11 @@ export class FrontMcpServerInstance extends FrontMcpServer {
   }
 
   override async stop(): Promise<void> {
-    const results = await Promise.allSettled([this.host.stop(), this.userContent?.stop()]);
+    // Each in its own async call, so a custom host's stop() that throws at once still lets the content listener stop.
+    const results = await Promise.allSettled([
+      (async () => this.host.stop())(),
+      (async () => this.userContent?.stop())(),
+    ]);
     const failure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
     if (failure) throw failure.reason;
   }

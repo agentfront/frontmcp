@@ -1,7 +1,8 @@
 /** The SQLite stores of 1.12 on a machine without better-sqlite3: they open their files with Node's node:sqlite. */
-import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+
+import { mkdtemp, readFileBuffer, rm } from '@frontmcp/utils';
 
 import { LeaseHolder } from '../../duty/lease-holder';
 import { leaseStorageConfig, openLeaseStore } from '../../duty/lease-store';
@@ -17,8 +18,8 @@ jest.mock('../../../../storage-sqlite/src/better-sqlite3-loader', () => ({
 
 const SQLITE_HEADER = 'SQLite format 3';
 
-function isSqliteFile(file: string): boolean {
-  return fs.readFileSync(file).subarray(0, SQLITE_HEADER.length).toString() === SQLITE_HEADER;
+async function isSqliteFile(file: string): Promise<boolean> {
+  return (await readFileBuffer(file)).subarray(0, SQLITE_HEADER.length).toString() === SQLITE_HEADER;
 }
 
 const posixOnly = process.platform === 'win32' ? it.skip : it;
@@ -28,17 +29,17 @@ describe('the SQLite stores without better-sqlite3', () => {
   const previousHome = process.env['FRONTMCP_HOME'];
   const previousDriver = process.env['FRONTMCP_SQLITE_DRIVER'];
 
-  beforeEach(() => {
-    home = fs.mkdtempSync(path.join(os.tmpdir(), 'sdk-node-sqlite-'));
+  beforeEach(async () => {
+    home = await mkdtemp(path.join(os.tmpdir(), 'sdk-node-sqlite-'));
     process.env['FRONTMCP_HOME'] = home;
     delete process.env['FRONTMCP_SQLITE_DRIVER'];
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     if (previousHome === undefined) delete process.env['FRONTMCP_HOME'];
     else process.env['FRONTMCP_HOME'] = previousHome;
     if (previousDriver !== undefined) process.env['FRONTMCP_SQLITE_DRIVER'] = previousDriver;
-    fs.rmSync(home, { recursive: true, force: true });
+    await rm(home, { recursive: true, force: true });
   });
 
   posixOnly("let one launcher of runShared() hold a key's start lock", async () => {
@@ -52,7 +53,7 @@ describe('the SQLite stores without better-sqlite3', () => {
       expect(await Promise.all([first.acquire(), second.acquire()])).toEqual([true, false]);
       await first.release();
       expect(await second.acquire()).toBe(true);
-      expect(isSqliteFile(files.lockFile)).toBe(true);
+      expect(await isSqliteFile(files.lockFile)).toBe(true);
     } finally {
       await one.disconnect();
       await two.disconnect();
@@ -85,7 +86,7 @@ describe('the SQLite stores without better-sqlite3', () => {
       await first.stop(() => true);
       await next.start();
       expect(acquired).toEqual(['first', 'next']);
-      expect(isSqliteFile(path.join(home, 'duties.sqlite'))).toBe(true);
+      expect(await isSqliteFile(path.join(home, 'duties.sqlite'))).toBe(true);
     } finally {
       for (const leaseHolder of [first, second, next]) await leaseHolder.stop(() => true);
       await one.disconnect();
@@ -115,7 +116,7 @@ describe('the SQLite stores without better-sqlite3', () => {
       expect(await reader.store.getRun('run-1')).toEqual(
         expect.objectContaining({ jobName: 'report', state: 'running' }),
       );
-      expect(isSqliteFile(file)).toBe(true);
+      expect(await isSqliteFile(file)).toBe(true);
     } finally {
       await writer.store.dispose();
       await reader.store.dispose();

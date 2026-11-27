@@ -1,242 +1,66 @@
-import { createServer } from 'node:http';
-
-import { sha256Base64url } from '@frontmcp/utils';
-
+/**
+ * Unit tests of native sign-in. The flows over real HTTP, against a small authorization server on a loopback port,
+ * are in apps/e2e/demo-e2e-transparent/e2e/native-sign-in-client.e2e.spec.ts.
+ */
 import {
   authorizationServerMetadataUrls,
+  discoverAuthorizationServer,
   getNativeTokens,
   memoryTokenStore,
   NativeSignInError,
   signInNative,
   signOutNative,
-  type NativeSignInOptions,
+  type NativeTokenOptions,
+  type NativeTokenSet,
   type NativeTokenStore,
 } from '..';
-import {
-  followRedirect,
-  startTestAuthorizationServer,
-  type TestAuthorizationServer,
-} from './test-authorization-server';
+import { listenForRedirect } from '../loopback-redirect';
 
-describe('signInNative', () => {
-  let as: TestAuthorizationServer;
-  let store: NativeTokenStore;
-  let pages: Response[];
+// The browser half is the loopback listener's own spec: here the callback comes back at once with a code.
+jest.mock('../loopback-redirect', () => ({
+  listenForRedirect: jest.fn(async () => ({
+    redirectUri: 'http://127.0.0.1:5555/callback',
+    code: Promise.resolve('the-code'),
+    close: jest.fn(),
+  })),
+}));
 
-  const options = (overrides: Partial<NativeSignInOptions> = {}): NativeSignInOptions => ({
-    issuer: as.issuer,
-    clientId: 'notes-cli',
-    scopes: ['openid', 'notes:read'],
-    resource: 'https://notes.example.com/mcp',
-    store,
-    openBrowser: async (url) => void pages.push(await followRedirect(url)),
+const ISSUER = 'https://auth.example.com/tenant';
+const RFC8414_URL = 'https://auth.example.com/.well-known/oauth-authorization-server/tenant';
+
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+}
+
+/** Answers each URL with its document, and every other with 404. */
+function serve(documents: Record<string, unknown>): jest.SpyInstance {
+  return jest.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    return url in documents ? json(documents[url]) : json({ error: 'not_found' }, 404);
+  });
+}
+
+function metadata(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    issuer: ISSUER,
+    authorization_endpoint: `${ISSUER}/authorize`,
+    token_endpoint: `${ISSUER}/token`,
+    code_challenge_methods_supported: ['S256'],
     ...overrides,
-  });
+  };
+}
 
-  const requestsTo = (path: string) => as.requests.filter((request) => request.path === path);
+async function rejection(attempt: Promise<unknown>): Promise<NativeSignInError> {
+  const error = await attempt.then(
+    () => undefined,
+    (reason: unknown) => reason,
+  );
+  expect(error).toBeInstanceOf(NativeSignInError);
+  return error as NativeSignInError;
+}
 
-  beforeEach(async () => {
-    as = await startTestAuthorizationServer();
-    store = memoryTokenStore();
-    pages = [];
-  });
-
-  afterEach(async () => {
-    await as.close();
-  });
-
-  it('signs in through discovery, S256 PKCE and a loopback redirect, and keeps the tokens', async () => {
-    const tokens = await signInNative(options({ audience: 'notes-api' }));
-
-    expect(tokens).toMatchObject({
-      accessToken: expect.stringMatching(/^access-/),
-      refreshToken: expect.stringMatching(/^refresh-/),
-      tokenType: 'Bearer',
-      scope: 'notes:read',
-      issuer: as.issuer,
-      tokenEndpoint: `${as.issuer}/token`,
-      clientId: 'notes-cli',
-      resource: ['https://notes.example.com/mcp'],
-    });
-    expect(tokens.expiresAt).toBeGreaterThan(Date.now() + 3_500_000);
-    expect(pages[0].status).toBe(200);
-    expect(await pages[0].text()).toContain('Signed in');
-
-    const [authorize] = requestsTo('/authorize');
-    expect(authorize.params.get('code_challenge_method')).toBe('S256');
-    expect(authorize.params.get('redirect_uri')).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/callback$/);
-    expect(authorize.params.get('scope')).toBe('openid notes:read');
-    expect(authorize.params.getAll('resource')).toEqual(['https://notes.example.com/mcp']);
-    expect(authorize.params.get('audience')).toBe('notes-api');
-    expect(authorize.params.get('state')).toHaveLength(43);
-
-    const [token] = requestsTo('/token');
-    expect(sha256Base64url(token.params.get('code_verifier') as string)).toBe(authorize.params.get('code_challenge'));
-    expect(token.params.get('client_id')).toBe('notes-cli');
-    expect(token.params.getAll('resource')).toEqual(['https://notes.example.com/mcp']);
-
-    expect(await store.get(`${as.issuer} notes-cli https://notes.example.com/mcp`)).toEqual(tokens);
-  });
-
-  it('takes the first free port of a range for the redirect', async () => {
-    const busy = createServer();
-    await new Promise<void>((resolve) => busy.listen(0, '127.0.0.1', resolve));
-    const busyPort = (busy.address() as { port: number }).port;
-    try {
-      await signInNative(options({ redirectPort: [busyPort, busyPort + 1], redirectPath: '/cb' }));
-      expect(requestsTo('/authorize')[0].params.get('redirect_uri')).toBe(`http://127.0.0.1:${busyPort + 1}/cb`);
-    } finally {
-      busy.close();
-    }
-  });
-
-  it('refuses a response whose state is not the one it sent', async () => {
-    as.redirectExtras = { state: 'forged' };
-    await expect(signInNative(options())).rejects.toMatchObject({ code: 'state_mismatch' });
-    expect(pages[0].status).toBe(400);
-    expect(requestsTo('/token')).toHaveLength(0);
-  });
-
-  it('reports the error the authorization server redirected with', async () => {
-    as.redirectExtras = { error: 'access_denied', error_description: 'The user said no' };
-    await expect(signInNative(options())).rejects.toEqual(
-      new NativeSignInError('access_denied', 'access_denied: The user said no'),
-    );
-  });
-
-  it('refuses a response from another issuer (RFC 9207)', async () => {
-    as.redirectExtras = { iss: 'https://evil.example.com' };
-    await expect(signInNative(options())).rejects.toMatchObject({ code: 'issuer_mismatch' });
-  });
-
-  it('requires iss when the server promises it', async () => {
-    as.metadata['authorization_response_iss_parameter_supported'] = true;
-    await expect(signInNative(options())).rejects.toMatchObject({ code: 'issuer_mismatch' });
-
-    as.redirectExtras = { iss: as.issuer };
-    await expect(signInNative(options())).resolves.toMatchObject({ issuer: as.issuer });
-  });
-
-  it('stops waiting after timeoutMs and frees the port', async () => {
-    let redirectUri = '';
-    await expect(
-      signInNative(
-        options({
-          timeoutMs: 50,
-          openBrowser: (url) => void (redirectUri = new URL(url).searchParams.get('redirect_uri') as string),
-        }),
-      ),
-    ).rejects.toMatchObject({ code: 'timeout' });
-    await expect(fetch(redirectUri)).rejects.toThrow();
-  });
-
-  it('closes the redirect listener when the browser cannot be opened', async () => {
-    let redirectUri = '';
-    const openBrowser = async (url: string) => {
-      redirectUri = new URL(url).searchParams.get('redirect_uri') as string;
-      throw new Error('no browser');
-    };
-    await expect(signInNative(options({ openBrowser }))).rejects.toThrow('no browser');
-    await expect(fetch(redirectUri)).rejects.toThrow();
-  });
-
-  it('refuses metadata that names another issuer', async () => {
-    as.metadata['issuer'] = 'https://other.example.com';
-    await expect(signInNative(options())).rejects.toMatchObject({ code: 'discovery_failed' });
-  });
-
-  it('refuses a server that does not list S256', async () => {
-    as.metadata['code_challenge_methods_supported'] = ['plain'];
-    await expect(signInNative(options())).rejects.toMatchObject({ code: 'discovery_failed' });
-  });
-
-  it('refuses endpoints that are not https or loopback', async () => {
-    await expect(signInNative(options({ issuer: 'http://auth.example.com' }))).rejects.toMatchObject({
-      code: 'insecure_url',
-    });
-    as.metadata['token_endpoint'] = 'http://auth.example.com/token';
-    await expect(signInNative(options())).rejects.toMatchObject({ code: 'insecure_url' });
-  });
-
-  it('reports the token endpoint error', async () => {
-    as.metadata['token_endpoint'] = `${as.issuer}/missing`;
-    await expect(signInNative(options())).rejects.toMatchObject({ code: 'not_found' });
-  });
-});
-
-describe('getNativeTokens', () => {
-  let as: TestAuthorizationServer;
-  let store: NativeTokenStore;
-
-  const options = (): NativeSignInOptions => ({
-    issuer: as.issuer,
-    clientId: 'notes-cli',
-    store,
-    openBrowser: async (url) => void (await followRedirect(url)),
-  });
-  const tokenRequests = () => as.requests.filter((request) => request.path === '/token');
-
-  beforeEach(async () => {
-    as = await startTestAuthorizationServer();
-    store = memoryTokenStore();
-  });
-
-  afterEach(async () => {
-    await as.close();
-  });
-
-  it('is undefined before sign-in and after sign-out', async () => {
-    expect(await getNativeTokens(options())).toBeUndefined();
-    await signInNative(options());
-    expect(await getNativeTokens(options())).toBeDefined();
-    await signOutNative(options());
-    expect(await getNativeTokens(options())).toBeUndefined();
-  });
-
-  it('returns fresh tokens without a request', async () => {
-    const tokens = await signInNative(options());
-    expect(await getNativeTokens(options())).toEqual(tokens);
-    expect(tokenRequests()).toHaveLength(1);
-  });
-
-  it('refreshes tokens about to expire, once for concurrent callers, and keeps the new ones', async () => {
-    as.expiresIn = 30;
-    const first = await signInNative(options());
-    as.expiresIn = 3600;
-
-    const [a, b] = await Promise.all([getNativeTokens(options()), getNativeTokens(options())]);
-
-    expect(a).toEqual(b);
-    expect(a?.accessToken).not.toBe(first.accessToken);
-    expect(a?.refreshToken).not.toBe(first.refreshToken);
-    const refreshes = tokenRequests().filter((request) => request.params.get('grant_type') === 'refresh_token');
-    expect(refreshes).toHaveLength(1);
-    expect(refreshes[0].params.get('refresh_token')).toBe(first.refreshToken);
-    expect(refreshes[0].params.get('client_id')).toBe('notes-cli');
-    expect(await getNativeTokens(options())).toEqual(a);
-  });
-
-  it('drops the tokens when the server refuses the refresh token', async () => {
-    as.expiresIn = 30;
-    await signInNative(options());
-    as.refreshTokens.clear();
-
-    expect(await getNativeTokens(options())).toBeUndefined();
-    expect(await store.get(`${as.issuer} notes-cli`)).toBeUndefined();
-    expect(tokenRequests()).toHaveLength(2);
-  });
-
-  it('is undefined for expired tokens without a refresh token', async () => {
-    await store.set(`${as.issuer} notes-cli`, {
-      accessToken: 'old',
-      tokenType: 'Bearer',
-      expiresAt: Date.now() - 1000,
-      issuer: as.issuer,
-      tokenEndpoint: `${as.issuer}/token`,
-      clientId: 'notes-cli',
-    });
-    expect(await getNativeTokens(options())).toBeUndefined();
-  });
+afterEach(() => {
+  jest.restoreAllMocks();
 });
 
 describe('authorizationServerMetadataUrls', () => {
@@ -254,4 +78,382 @@ describe('authorizationServerMetadataUrls', () => {
       'https://auth.example.com/tenants/acme/.well-known/openid-configuration',
     ]);
   });
+});
+
+describe('discoverAuthorizationServer', () => {
+  it('takes the document whose issuer is the issuer, as written', async () => {
+    serve({ [RFC8414_URL]: metadata() });
+
+    await expect(discoverAuthorizationServer(ISSUER)).resolves.toMatchObject({ token_endpoint: `${ISSUER}/token` });
+  });
+
+  it.each([
+    ['a trailing slash the issuer lacks', ISSUER, `${ISSUER}/`],
+    ['no trailing slash where the issuer has one', 'https://auth.example.com/', 'https://auth.example.com'],
+  ])('refuses a document whose issuer differs by %s (RFC 8414 §3.3)', async (_case, issuer, named) => {
+    const documents: Record<string, unknown> = {};
+    for (const url of authorizationServerMetadataUrls(issuer)) documents[url] = metadata({ issuer: named });
+    serve(documents);
+
+    expect((await rejection(discoverAuthorizationServer(issuer))).code).toBe('discovery_failed');
+  });
+
+  it.each([
+    ['authorization_response_iss_parameter_supported', 'true'],
+    ['authorization_response_iss_parameter_supported', null],
+    ['code_challenge_methods_supported', 'plain'],
+    ['code_challenge_methods_supported', ['S256', 7]],
+  ])('refuses a document whose %s is %p, not the type RFC 8414 gives it', async (field, value) => {
+    serve({ [RFC8414_URL]: metadata({ [field]: value }) });
+
+    const error = await rejection(discoverAuthorizationServer(ISSUER));
+
+    expect(error.code).toBe('discovery_failed');
+    expect(error.message).toContain(field);
+  });
+
+  it.each(['authorization_endpoint', 'token_endpoint'])(
+    'refuses an http loopback %s of an https issuer, whose credentials would go unencrypted',
+    async (field) => {
+      serve({ [RFC8414_URL]: metadata({ [field]: 'http://127.0.0.1:8080/oauth' }) });
+
+      expect((await rejection(discoverAuthorizationServer(ISSUER))).code).toBe('insecure_url');
+    },
+  );
+
+  it('takes http loopback endpoints from an http loopback issuer, a local development server', async () => {
+    const local = 'http://127.0.0.1:8080';
+    serve({
+      [`${local}/.well-known/oauth-authorization-server`]: metadata({
+        issuer: local,
+        authorization_endpoint: `${local}/authorize`,
+        token_endpoint: `http://localhost:8080/token`,
+      }),
+    });
+
+    await expect(discoverAuthorizationServer(local)).resolves.toMatchObject({ issuer: local });
+  });
+});
+
+describe('getNativeTokens refresh endpoint', () => {
+  it('refuses to send a refresh token over http for an https issuer', async () => {
+    const fetchSpy = serve({});
+    const store = memoryTokenStore();
+    const tokens: NativeTokenSet = {
+      accessToken: 'old',
+      tokenType: 'Bearer',
+      refreshToken: 'refresh-1',
+      expiresAt: Date.now() - 1000,
+      issuer: ISSUER,
+      tokenEndpoint: 'http://127.0.0.1:8080/token',
+      clientId: 'notes-cli',
+    };
+    await store.set(`${ISSUER} notes-cli`, tokens);
+
+    expect((await rejection(getNativeTokens({ issuer: ISSUER, clientId: 'notes-cli', store }))).code).toBe(
+      'insecure_url',
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve: () => void = () => undefined;
+  const promise = new Promise<void>((settle) => (resolve = settle));
+  return { promise, resolve };
+}
+
+/** Lets the code under test run its next steps, which a held request then waits behind. */
+const settle = () => new Promise((resolve) => setImmediate(resolve));
+
+/**
+ * An authorization server behind `fetch`: its metadata, and a token endpoint that rotates refresh tokens, so a
+ * refresh token works once. `holdNextRefresh` keeps the next refresh's answer until released.
+ */
+function fakeIdp() {
+  let counter = 0;
+  let held: Promise<void> | undefined;
+  const idp = {
+    tokenRequests: [] as URLSearchParams[],
+    refreshTokens: new Set<string>(),
+    codeExchanged: deferred(),
+    refreshRequests: () => idp.tokenRequests.filter((params) => params.get('grant_type') === 'refresh_token'),
+    holdNextRefresh() {
+      const arrived = deferred();
+      const release = deferred();
+      held = release.promise;
+      const onArrival = arrived.resolve;
+      idp.onRefresh = () => {
+        idp.onRefresh = undefined;
+        onArrival();
+      };
+      return { arrived: arrived.promise, release: release.resolve };
+    },
+    onRefresh: undefined as (() => void) | undefined,
+  };
+  jest.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    if (url === RFC8414_URL) return json(metadata());
+    if (url !== `${ISSUER}/token`) return json({ error: 'not_found' }, 404);
+    const params = new URLSearchParams(String(init?.body));
+    idp.tokenRequests.push(params);
+    if (params.get('grant_type') === 'refresh_token') {
+      idp.onRefresh?.();
+      const wait = held;
+      held = undefined;
+      await wait;
+      if (!idp.refreshTokens.delete(params.get('refresh_token') ?? '')) return json({ error: 'invalid_grant' }, 400);
+    } else {
+      idp.codeExchanged.resolve();
+    }
+    const refreshToken = `refresh-${++counter}`;
+    idp.refreshTokens.add(refreshToken);
+    return json({
+      access_token: `access-${counter}`,
+      token_type: 'Bearer',
+      expires_in: 3600,
+      refresh_token: refreshToken,
+    });
+  });
+  return idp;
+}
+
+/** A store in memory whose `stallGet(n)` holds the n-th read, with what was stored when it was made, until released. */
+function testStore() {
+  const entries = new Map<string, NativeTokenSet>();
+  let gets = 0;
+  let stalled: { at: number; until: Promise<void> } | undefined;
+  let failSets = 0;
+  const store: NativeTokenStore = {
+    async get(key) {
+      const snapshot = entries.get(key);
+      if (++gets === stalled?.at) await stalled.until;
+      return snapshot;
+    },
+    async set(key, tokens) {
+      if (failSets > 0) {
+        failSets--;
+        throw new Error('store down');
+      }
+      entries.set(key, tokens);
+    },
+    async delete(key) {
+      entries.delete(key);
+    },
+  };
+  return {
+    store,
+    entries,
+    stallGet(at: number) {
+      const release = deferred();
+      stalled = { at, until: release.promise };
+      return release.resolve;
+    },
+    failNextSet: () => void failSets++,
+  };
+}
+
+const KEY = `${ISSUER} notes-cli`;
+
+describe('getNativeTokens, signInNative and signOutNative on one store and key', () => {
+  let idp: ReturnType<typeof fakeIdp>;
+  let kept: ReturnType<typeof testStore>;
+  let options: NativeTokenOptions;
+
+  /** Tokens about to expire, with a refresh token the server takes once. */
+  function expiring(): NativeTokenSet {
+    idp.refreshTokens.add('refresh-0');
+    return {
+      accessToken: 'access-0',
+      tokenType: 'Bearer',
+      refreshToken: 'refresh-0',
+      expiresAt: Date.now() + 30_000,
+      issuer: ISSUER,
+      tokenEndpoint: `${ISSUER}/token`,
+      clientId: 'notes-cli',
+    };
+  }
+
+  beforeEach(() => {
+    idp = fakeIdp();
+    kept = testStore();
+    options = { issuer: ISSUER, clientId: 'notes-cli', store: kept.store };
+  });
+
+  it('shares one read and refresh between callers, even a caller whose read the store answers late', async () => {
+    kept.entries.set(KEY, expiring());
+    const releaseRead = kept.stallGet(2);
+
+    const first = getNativeTokens(options);
+    const second = getNativeTokens(options);
+    const refreshed = await first;
+    releaseRead();
+
+    expect(await second).toEqual(refreshed);
+    expect(refreshed?.refreshToken).toBe('refresh-1');
+    expect(await getNativeTokens(options)).toEqual(refreshed);
+    expect(idp.refreshRequests()).toHaveLength(1);
+  });
+
+  it('lets a sign-out during a refresh win: the refresh does not sign the caller back in', async () => {
+    kept.entries.set(KEY, expiring());
+    const refresh = idp.holdNextRefresh();
+
+    const reading = getNativeTokens(options);
+    await refresh.arrived;
+    const signingOut = signOutNative(options);
+    await settle();
+    refresh.release();
+    await Promise.all([reading, signingOut]);
+
+    expect(kept.entries.get(KEY)).toBeUndefined();
+    expect(await getNativeTokens(options)).toBeUndefined();
+  });
+
+  it.each([
+    ['new tokens', false],
+    ['invalid_grant', true],
+  ])('keeps a newer sign-in when the refresh before it answers with %s', async (_answer, refused) => {
+    kept.entries.set(KEY, expiring());
+    const refresh = idp.holdNextRefresh();
+
+    const reading = getNativeTokens(options);
+    await refresh.arrived;
+    if (refused) idp.refreshTokens.clear();
+    const signingIn = signInNative({ ...options, openBrowser: () => undefined });
+    await idp.codeExchanged.promise;
+    await settle();
+    refresh.release();
+    const [, signedIn] = await Promise.all([reading, signingIn]);
+
+    expect(kept.entries.get(KEY)?.accessToken).toBe(signedIn.accessToken);
+    expect(await getNativeTokens(options)).toEqual(signedIn);
+  });
+
+  it('keeps refreshed tokens the store could not save, and saves them before it refreshes again', async () => {
+    kept.entries.set(KEY, expiring());
+    kept.failNextSet();
+
+    await expect(getNativeTokens(options)).rejects.toThrow('store down');
+    const next = await getNativeTokens(options);
+
+    expect(next).toMatchObject({ accessToken: 'access-1', refreshToken: 'refresh-1' });
+    expect(kept.entries.get(KEY)).toEqual(next);
+    expect(idp.refreshRequests()).toHaveLength(1);
+  });
+
+  it('drops refreshed tokens the store could not save once the caller signs out', async () => {
+    kept.entries.set(KEY, expiring());
+    kept.failNextSet();
+    await expect(getNativeTokens(options)).rejects.toThrow('store down');
+
+    await signOutNative(options);
+
+    expect(await getNativeTokens(options)).toBeUndefined();
+    expect(kept.entries.get(KEY)).toBeUndefined();
+  });
+});
+
+describe('getNativeTokens without a refresh token', () => {
+  it('returns the access token while it is still valid, then undefined once it expires', async () => {
+    const idp = fakeIdp();
+    const kept = testStore();
+    const options = { issuer: ISSUER, clientId: 'notes-cli', store: kept.store };
+    const tokens: NativeTokenSet = {
+      accessToken: 'access-short',
+      tokenType: 'Bearer',
+      expiresAt: Date.now() + 30_000,
+      issuer: ISSUER,
+      tokenEndpoint: `${ISSUER}/token`,
+      clientId: 'notes-cli',
+    };
+    kept.entries.set(KEY, tokens);
+
+    expect(await getNativeTokens(options)).toEqual(tokens);
+
+    kept.entries.set(KEY, { ...tokens, expiresAt: Date.now() - 1 });
+    expect(await getNativeTokens(options)).toBeUndefined();
+    expect(idp.tokenRequests).toHaveLength(0);
+  });
+});
+
+describe('the default store key', () => {
+  it('keeps the tokens of two audiences apart, for sign-in, lookup and sign-out', async () => {
+    fakeIdp();
+    const kept = testStore();
+    const base = { issuer: ISSUER, clientId: 'notes-cli', store: kept.store, openBrowser: () => undefined };
+    const forNotes = { ...base, audience: 'notes-api' };
+    const forTasks = { ...base, audience: 'tasks-api' };
+
+    const notes = await signInNative(forNotes);
+    const tasks = await signInNative(forTasks);
+
+    expect(await getNativeTokens(forNotes)).toEqual(notes);
+    expect(await getNativeTokens(forTasks)).toEqual(tasks);
+    await signOutNative(forNotes);
+    expect(await getNativeTokens(forNotes)).toBeUndefined();
+    expect(await getNativeTokens(forTasks)).toEqual(tasks);
+  });
+
+  it('is unchanged without an audience, and an explicit storeKey still wins', async () => {
+    fakeIdp();
+    const kept = testStore();
+    const base = { issuer: ISSUER, clientId: 'notes-cli', store: kept.store, openBrowser: () => undefined };
+
+    const plain = await signInNative(base);
+    const named = await signInNative({ ...base, audience: 'notes-api', storeKey: 'mine' });
+
+    expect(kept.entries.get(KEY)).toEqual(plain);
+    expect(kept.entries.get('mine')).toEqual(named);
+    expect(kept.entries.get(`${KEY} audience=notes-api`)).toBeUndefined();
+  });
+});
+
+describe('signInNative with a launcher that never settles', () => {
+  const never = () => new Promise<void>(() => undefined);
+
+  it('ends with the callback timeout', async () => {
+    fakeIdp();
+    const timedOut = new Promise<string>((_resolve, reject) =>
+      setTimeout(() => reject(new NativeSignInError('timeout', 'No sign-in came back within 0s')), 20),
+    );
+    timedOut.catch(() => undefined);
+    jest.mocked(listenForRedirect).mockResolvedValueOnce({
+      redirectUri: 'http://127.0.0.1:5555/callback',
+      code: timedOut,
+      close: jest.fn(),
+    });
+
+    const error = await rejection(signInNative({ issuer: ISSUER, clientId: 'notes-cli', openBrowser: never }));
+
+    expect(error.code).toBe('timeout');
+  }, 2_000);
+
+  it('signs in once the callback comes back', async () => {
+    fakeIdp();
+    const store = memoryTokenStore();
+
+    const tokens = await signInNative({ issuer: ISSUER, clientId: 'notes-cli', store, openBrowser: never });
+
+    expect(tokens.accessToken).toBe('access-1');
+  }, 2_000);
+
+  it('reports a launcher that fails before the callback comes back', async () => {
+    fakeIdp();
+    jest.mocked(listenForRedirect).mockResolvedValueOnce({
+      redirectUri: 'http://127.0.0.1:5555/callback',
+      code: new Promise<string>(() => undefined),
+      close: jest.fn(),
+    });
+
+    await expect(
+      signInNative({
+        issuer: ISSUER,
+        clientId: 'notes-cli',
+        openBrowser: async () => {
+          throw new Error('no browser');
+        },
+      }),
+    ).rejects.toThrow('no browser');
+  }, 2_000);
 });

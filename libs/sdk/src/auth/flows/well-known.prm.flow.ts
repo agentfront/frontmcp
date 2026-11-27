@@ -194,7 +194,7 @@ export default class WellKnownPrmFlow extends FlowBase<typeof name> {
 
 /**
  * The `client_id` and `audience` a transparent server publishes when `auth.resourceMetadata` asks (#1360): `true`
- * publishes `auth.clientId`, and the first audience the token check accepts for this request.
+ * publishes `auth.clientId`, and the first audience the token check accepts for this request that is not empty.
  */
 function transparentSignInDetails(
   options: TransparentAuthOptions,
@@ -205,6 +205,9 @@ function transparentSignInDetails(
   const requestBaseUrl = getRequestBaseUrl(request, normalizeEntryPrefix(scope.entryPath));
   return {
     clientId: (clientId === true ? options.clientId : clientId) || undefined,
-    audience: audience === true ? transparentTokenAudiences(options, requestBaseUrl, scope)[0] : audience,
+    audience:
+      audience === true
+        ? transparentTokenAudiences(options, requestBaseUrl, scope).find((value) => value.length > 0)
+        : audience,
   };
 }

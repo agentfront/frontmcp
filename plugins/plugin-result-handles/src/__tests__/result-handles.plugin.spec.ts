@@ -650,7 +650,24 @@ describe('ResultHandlesPlugin', () => {
       }
     }
 
-    const resources = [RowsResource, PlainResource, SkippedResource, PageResource, PairResource, SmallResource];
+    const quote = 'x'.repeat(5000);
+
+    @Resource({ name: 'quote', uri: 'exports://quote', mimeType: 'application/json' })
+    class QuoteResource extends ResourceContext {
+      async execute(uri: string) {
+        return { contents: [{ uri, mimeType: 'application/json', text: JSON.stringify(quote) }] };
+      }
+    }
+
+    const resources = [
+      RowsResource,
+      PlainResource,
+      SkippedResource,
+      PageResource,
+      PairResource,
+      SmallResource,
+      QuoteResource,
+    ];
     const resourcePolicy = jest.fn(
       (uri: string, _answer: unknown, _context: FoldContext) => uri !== 'exports://skipped',
     );
@@ -747,10 +764,29 @@ describe('ResultHandlesPlugin', () => {
       });
     });
 
+    it('folds a JSON resource whose value is a string as that string, not its JSON text', async () => {
+      const client = await openLibrary(FoldingLibraryApp);
+      const { handle, shape } = JSON.parse((await read(client, 'exports://quote')).contents[0].text) as FoldedAnswer;
+
+      expect(shape.type).toBe('string');
+      expect(resourcePolicy.mock.calls[0][1]).toBe(quote);
+      expect((await call(client, 'result_query', { handle, limit: 3 })).structuredContent).toMatchObject({
+        value: 'xxx',
+        total: 5000,
+      });
+    });
+
     it('binds a resource handle to the session and the caller it was read by', async () => {
-      const alice = await openLibrary(FoldingLibraryApp, { id: 'library-session', user: { sub: 'alice' } });
-      const mallory = await openLibrary(FoldingLibraryApp, { id: 'library-session', user: { sub: 'mallory' } });
-      const other = await openLibrary(FoldingLibraryApp, { id: 'other-session', user: { sub: 'alice' } });
+      // One config, so the three clients share one server and one store: Mallory's query reaches Alice's answer.
+      const libraryConfig = { ...serverConfig, apps: [FoldingLibraryApp] };
+      const sessionOf = async (session: { id: string; user: { sub: string } }) => {
+        const client = await connect(libraryConfig, { session });
+        clients.push(client);
+        return client;
+      };
+      const alice = await sessionOf({ id: 'library-session', user: { sub: 'alice' } });
+      const mallory = await sessionOf({ id: 'library-session', user: { sub: 'mallory' } });
+      const other = await sessionOf({ id: 'other-session', user: { sub: 'alice' } });
       const { handle } = JSON.parse((await read(alice, 'exports://rows')).contents[0].text) as FoldedAnswer;
 
       expect((await call(alice, 'result_query', { handle, path: 'total' })).structuredContent).toMatchObject({

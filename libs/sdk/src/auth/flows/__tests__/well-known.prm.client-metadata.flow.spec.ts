@@ -126,6 +126,18 @@ describe('Well-known PRM flow — transparent auth.resourceMetadata (#1360)', ()
     expect(body['audience']).toBe('https://api.lens.example');
   });
 
+  it('skips an empty expectedAudience entry for resourceMetadata.audience: true', async () => {
+    const body = await fetchPrm({ expectedAudience: ['', 'my-api'], resourceMetadata: { audience: true } });
+
+    expect(body['audience']).toBe('my-api');
+  });
+
+  it('publishes no audience when every expectedAudience entry is empty', async () => {
+    const body = await fetchPrm({ expectedAudience: [''], resourceMetadata: { audience: true } });
+
+    expect(body).not.toHaveProperty('audience');
+  });
+
   it('publishes the pinned FRONTMCP_PUBLIC_URL with the entry path, whatever the Host header says', async () => {
     process.env['FRONTMCP_PUBLIC_URL'] = 'https://lens.example';
     const body = await fetchPrm({ resourceMetadata: { audience: true } }, { host: 'evil.example', entryPath: '/mcp' });

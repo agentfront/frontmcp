@@ -378,7 +378,9 @@ frontmcp skills export --from-entry src/main.ts --all --provider claude,codex --
   directory, comma-separated for several. Given alone, it writes only those
   folders (`skills.provider` in `frontmcp.config` doesn't apply); with
   `--provider`, the providers' folders too. `--check`, the marker and the
-  removal of orphans work the same there.
+  removal of orphans work the same there; the marker names the entry relative
+  to the skills folder, so projects that export entries at the same path
+  (`src/main.ts`) to one skills folder never remove each other's skills.
 - `--all-folders` copies every folder beside a skill's `SKILL.md` (a skill
   whose `instructions: { file }` is a `SKILL.md`), `rules/` say, besides the
   declared `references`, `examples`, `scripts` and `assets`. Files beside it

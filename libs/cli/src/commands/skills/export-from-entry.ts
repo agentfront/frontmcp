@@ -92,6 +92,12 @@ async function filesUnder(root: string): Promise<{ files: Array<{ name: string; 
   return { files, outside };
 }
 
+/** `copy` with the entry named `to` in its marker, where it was rendered with `from`. */
+function withMarkerSource(copy: SkillCopy, from: string, to: string): SkillCopy {
+  if (from === to) return copy;
+  return { ...copy, skillMd: copy.skillMd.replace(markerLine(from, copy.hash), markerLine(to, copy.hash)) };
+}
+
 /** Put the marker on the line after the frontmatter, where agents skip it and people see it first. */
 function withMarker(skillMd: string, marker: string): string {
   const frontmatterEnd = skillMd.indexOf('\n---', 3);
@@ -325,11 +331,19 @@ export async function exportSkillsFromEntry(options: ExportFromEntryOptions): Pr
   // A skill skipped above, or left out by --name, is still in the source: its earlier copy stays
   const kept = new Set(manifest.skills.map((skill) => skill.name));
   const drift: string[] = [];
-  const bases = new Map<string, string>();
-  for (const provider of options.providers) bases.set(path.join(outDir, PROVIDER_DIRS[provider]), provider);
-  for (const dir of options.skillsDirs ?? []) bases.set(path.resolve(cwd, dir), dir);
-  for (const base of bases.keys()) {
-    for (const copy of copies) {
+  const bases = new Map<string, { label: string; marker: string }>();
+  for (const provider of options.providers) {
+    bases.set(path.join(outDir, PROVIDER_DIRS[provider]), { label: provider, marker: markerSource });
+  }
+  // A skills folder can be shared by projects whose entries have the same path in each (src/main.ts): an entry
+  // there is named relative to the folder, so one project's export never takes another's copies for its orphans
+  for (const dir of options.skillsDirs ?? []) {
+    const base = path.resolve(cwd, dir);
+    bases.set(base, { label: dir, marker: path.relative(base, entry).split(path.sep).join('/') });
+  }
+  for (const [base, { marker }] of bases) {
+    for (const rendered of copies) {
+      const copy = withMarkerSource(rendered, markerSource, marker);
       const targetDir = path.join(base, copy.name);
       const label = path.relative(cwd, targetDir);
       const refusal = await refusalOf(copy, targetDir, options.check === true);
@@ -347,7 +361,7 @@ export async function exportSkillsFromEntry(options: ExportFromEntryOptions): Pr
       }
     }
     if (!options.all) continue;
-    for (const orphan of await orphansOf(base, markerSource, kept)) {
+    for (const orphan of await orphansOf(base, marker, kept)) {
       const label = path.relative(cwd, orphan);
       if (options.check) {
         drift.push(`${label}: removed from the source`);
@@ -359,7 +373,7 @@ export async function exportSkillsFromEntry(options: ExportFromEntryOptions): Pr
   }
 
   if (skipped > 0) process.exitCode = 1;
-  const providers = [...new Set(bases.values())].join(', ');
+  const providers = [...new Set([...bases.values()].map(({ label }) => label))].join(', ');
   if (!options.check) {
     console.log(c('bold', `\n${copies.length} skill(s) exported from ${source} to ${providers}.\n`));
     return;

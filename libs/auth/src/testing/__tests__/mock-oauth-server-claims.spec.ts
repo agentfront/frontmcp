@@ -127,6 +127,23 @@ describe('MockOAuthServer tokens: auth_time, resource indicators and several use
       expect(refreshOutside).toMatchObject({ status: 400, body: { error: 'invalid_target' } });
     });
 
+    it('keeps across a refresh the audience the code exchange chose', async () => {
+      await start({ testUser: { sub: 'u' }, resourceIndicators: true });
+
+      const chosen = await signIn({}, { resource: NOTES });
+      const narrowed = await signIn({ resource: [NOTES, TASKS] }, { resource: TASKS });
+      const refresh = (refreshToken: string, extra: Record<string, string> = {}) =>
+        token({ grant_type: 'refresh_token', refresh_token: refreshToken, ...extra });
+      const chosenRefreshed = await refresh(chosen.body.refresh_token);
+      const narrowedRefreshed = await refresh(narrowed.body.refresh_token);
+      const widenedAgain = await refresh(narrowedRefreshed.body.refresh_token, { resource: NOTES });
+
+      expect(decode(chosen.body.access_token)['aud']).toBe(NOTES);
+      expect(decode(chosenRefreshed.body.access_token)['aud']).toBe(NOTES);
+      expect(decode(narrowedRefreshed.body.access_token)['aud']).toBe(TASKS);
+      expect(decode(widenedAgain.body.access_token)['aud']).toBe(NOTES);
+    });
+
     it('a list, accepts those values only, and redirects any other back with invalid_target', async () => {
       await start({ testUser: { sub: 'u' }, resourceIndicators: [NOTES] });
 
@@ -185,6 +202,32 @@ describe('MockOAuthServer tokens: auth_time, resource indicators and several use
 
       expect(await (await userinfo(body.access_token)).json()).toMatchObject({ sub: 'bob', email: 'bob@example.com' });
       expect((await userinfo('not-a-jwt')).status).toBe(401);
+    });
+
+    it('answers userinfo for every user it issued a token for, listed or not', async () => {
+      await start({ users: [ada], testUser: bob, autoApprove: false });
+      const userinfo = async (token: string) =>
+        (await fetch(`${server.info.baseUrl}/userinfo`, { headers: { Authorization: `Bearer ${token}` } })).json();
+      const submit = async (sub: string) => {
+        const form = new URLSearchParams({ client_id: 'c', redirect_uri: REDIRECT_URI, sub, action: 'approve' });
+        const submitted = await fetch(`${server.info.baseUrl}/oauth/authorize/submit`, {
+          method: 'POST',
+          body: form,
+          redirect: 'manual',
+        });
+        const code = new URL(submitted.headers.get('location') as string).searchParams.get('code') as string;
+        return (await token({ grant_type: 'authorization_code', code, redirect_uri: REDIRECT_URI })).body;
+      };
+
+      server.setAutoApprove(true);
+      const asBob = (await signIn()).body;
+      server.setTestUser({ sub: 'dan' });
+      server.setAutoApprove(false);
+      const asCarol = await submit('carol');
+
+      expect(decode(asBob.access_token)['sub']).toBe('bob');
+      expect(await userinfo(asBob.access_token)).toMatchObject({ sub: 'bob', email: 'bob@example.com' });
+      expect(await userinfo(asCarol.access_token)).toMatchObject({ sub: 'carol' });
     });
 
     it("signs in, from the manual form, the listed user with the form's user ID", async () => {

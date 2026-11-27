@@ -37,6 +37,21 @@ function parsedJsonText(text: string): unknown {
   }
 }
 
+/**
+ * What a resource's text holds: for a JSON media type (`application/json`, `+json`), any JSON value, a string or a
+ * number included; else an object or a list its text spells, as for a tool's text. The text itself when it does not
+ * parse.
+ */
+function resourceAnswerOf(text: string, mimeType: string | undefined): unknown {
+  const media = mimeType?.split(';')[0].trim().toLowerCase();
+  if (media !== 'application/json' && !media?.endsWith('+json')) return parsedJsonText(text) ?? text;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
 /** Whether `text` only repeats `structured` as the SDK writes it: its JSON, or the primitive `{ content }` wraps. */
 function repeatsStructuredContent(text: string, structured: Record<string, unknown>): boolean {
   if (JSON.stringify(parsedJsonText(text) ?? text) === JSON.stringify(structured)) return true;
@@ -167,7 +182,7 @@ export default class ResultHandlesPlugin extends DynamicPlugin<
     const [content, ...others] = output.contents;
     if (!content || others.length > 0 || !('text' in content) || typeof content.text !== 'string') return;
     if (content.mimeType?.startsWith('text/html')) return;
-    const answer = parsedJsonText(content.text) ?? content.text;
+    const answer = resourceAnswerOf(content.text, content.mimeType);
     const bytes = jsonBytes(answer);
     if (bytes <= this.options.thresholdBytes) return;
     const owner = resultOwnerOf(resourceContext);

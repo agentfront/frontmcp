@@ -437,6 +437,14 @@ export class InvalidResourceStoreError extends InternalMcpError {
   }
 }
 
+/** A producer run on a resource store that closed before the run could store its output; the next read runs it again. */
+export class ResourceStoreClosedError extends InternalMcpError {
+  constructor(key?: string) {
+    const subject = key === undefined ? 'a key' : `key "${key}"`;
+    super(`resourceStore(): the store closed while ${subject} was being produced`, 'RESOURCE_STORE_CLOSED');
+  }
+}
+
 /** The environment that offers an entry: each missing axis set to a value its `availableWhen` allows, if any does. */
 function availabilityRemedy(entryType: string, availability: unknown, missingAxes: string[]): ErrorRemedy | undefined {
   const requirements = missingAxes.map((axis) => {

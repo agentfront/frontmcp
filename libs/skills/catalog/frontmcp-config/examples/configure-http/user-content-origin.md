@@ -17,6 +17,12 @@ Serve user content (rendered frames, uploads) from a second listener on an origi
 
 ## Code
 
+The content directory must exist when the server starts, as `root` does, so create it first:
+
+```bash
+mkdir -p var/frames
+```
+
 ```typescript
 // src/server.ts
 import { writeFile } from 'node:fs/promises';
