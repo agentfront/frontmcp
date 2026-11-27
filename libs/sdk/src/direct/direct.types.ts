@@ -16,6 +16,7 @@ import type {
 } from '@frontmcp/protocol';
 import type { EntryAvailability } from '@frontmcp/utils';
 
+import type { ScopeEntry } from '../common/entries/scope.entry';
 import type { EventPublisher } from '../common/interfaces/event.interface';
 import type { ToolAnnotations } from '../common/metadata/tool.metadata';
 import type { ConnectOptions, DirectClient } from './client.types';
@@ -385,6 +386,13 @@ export interface DirectMcpServer {
    * Publishing on a server without events rejects with `EventsNotEnabledError`.
    */
   readonly events: EventPublisher;
+
+  /**
+   * The scope this server serves, to read its state in a spec without casts: `server.scope?.events?.listSubscriptions()`
+   * lists the event subscriptions it holds. Read-only. Always set on a server `create()` returns; optional so a test
+   * double that implements `DirectMcpServer` keeps compiling.
+   */
+  readonly scope?: ScopeEntry;
 
   // ─────────────────────────────────────────────────────────────────
   // Lifecycle

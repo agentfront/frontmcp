@@ -278,6 +278,29 @@ describe('Events subscriptions E2E', () => {
       expect(refused.error?.code).toBe(-32024);
       expect(receiver.requests).toHaveLength(0);
     });
+
+    it('lists the subscription to a tool, with the host of its callback and none of its secrets', async () => {
+      const client = await connectAs('pia');
+      const created = await rpc(client, 'events/subscribe', subscription('listed'));
+      const id = created.result?.['id'];
+
+      const audit = await client.tools.call('subscription-audit', {});
+      const { subscriptions } = audit.json<{ subscriptions: Array<Record<string, unknown>> }>();
+
+      expect(subscriptions.filter((entry) => entry['id'] === id)).toEqual([
+        expect.objectContaining({
+          eventName: 'order.created',
+          mode: 'webhook',
+          subscriber: expect.objectContaining({ sub: 'pia' }),
+          arguments: { status: 'listed' },
+          active: true,
+          delivery: { host: new URL(receiver.url).host, failures: 0 },
+        }),
+      ]);
+      const serialized = JSON.stringify(subscriptions);
+      expect(serialized).not.toContain(secret);
+      expect(serialized).not.toContain(receiver.url);
+    });
   });
 
   describe('dialects', () => {
@@ -338,6 +361,22 @@ describe('Events subscriptions E2E', () => {
       expect(again.result).toEqual({});
       expect(recreated.result?.['id']).toBe(first.result?.['id']);
       expect(recreated.result?.['deliveryStatus']).toBeUndefined();
+    });
+
+    it('tells a plugin hooked on events:ended which subscription went away, once', async () => {
+      const client = await connectAs('olga');
+      const key = { name: 'order.created', arguments: { status: 'audited' }, delivery: { url: receiver.url } };
+      const created = await rpc(client, 'events/subscribe', subscription('audited'));
+      const id = created.result?.['id'];
+
+      await rpc(client, 'events/unsubscribe', key);
+      await rpc(client, 'events/unsubscribe', key);
+
+      const audit = await client.tools.call('subscription-audit', {});
+      const { ended } = audit.json<{ ended: Array<{ id: string; eventName: string; reason: string }> }>();
+      expect(ended.filter((end) => end.id === id)).toEqual([
+        { id, eventName: 'order.created', reason: 'unsubscribed' },
+      ]);
     });
 
     it('refuses an anonymous caller', async () => {

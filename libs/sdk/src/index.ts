@@ -400,7 +400,19 @@ export type {
 } from './channel';
 
 // Event exports - MCP Events (SEP-3415): event types clients list and subscribe to
-export { EventInstance, EventRegistry } from './subsystems';
+export {
+  EventInstance,
+  EventRegistry,
+  // The limits of subscriptions: how long a poll lease lasts, how often lapsed ones are swept, how many are held
+  MAX_OPEN_STREAMS,
+  MAX_POLL_LEASES,
+  POLL_LEASE_INTERVALS,
+  POLL_LEASE_MIN_MS,
+  POLL_LEASE_SWEEP_INTERVAL_MS,
+  SUBSCRIPTION_SWEEP_INTERVAL_MS,
+  SUSPEND_AFTER_FAILURES,
+  pollLeaseMs,
+} from './subsystems';
 export type {
   EventCapabilities,
   EventRegistryInterface,
@@ -409,6 +421,7 @@ export type {
   EventCapabilitiesResult,
   EventDialect,
   EventSubscriberIdentity,
+  EventSubscriptionEnding,
   EventSubscriptionRecord,
   EventSubscriptionStatus,
   EventSubscriptionStore,
@@ -428,6 +441,14 @@ export type {
   EventStreams,
   EventReplays,
   EventReplayState,
+  EventTerminationError,
+  EventPollSubscriptionInfo,
+  EventStreamSubscriptionInfo,
+  EventSubscriberSummary,
+  EventSubscriptionInfo,
+  EventSubscriptionInfoBase,
+  EventWebhookSubscriptionDelivery,
+  EventWebhookSubscriptionInfo,
 } from './event';
 export { EVENTS_EXTENSION_ID } from '@frontmcp/protocol';
 export type { EventDefinition, EventDeliveryMode, EventOccurrence } from '@frontmcp/protocol';
@@ -650,6 +671,9 @@ export const EventPublishHook = /* @__PURE__ */ FlowHooksOf('events:publish');
 export type { default as EventPublishFlow } from './event/flows/event-publish.flow';
 export const EventDeliverHook = /* @__PURE__ */ FlowHooksOf('events:deliver');
 export type { default as EventDeliverFlow } from './event/flows/event-deliver.flow';
+// Every end of a webhook subscription: unsubscribed, expired or terminated, once across every process (#1489)
+export const EventEndedHook = /* @__PURE__ */ FlowHooksOf('events:ended');
+export type { default as EventEndedFlow } from './event/flows/event-ended.flow';
 export const EventPublishHttpHook = /* @__PURE__ */ FlowHooksOf('events:publish-http');
 export type { default as EventPublishHttpFlow } from './event/flows/event-publish-http.flow';
 export const EventPollHook = /* @__PURE__ */ FlowHooksOf('events:poll');

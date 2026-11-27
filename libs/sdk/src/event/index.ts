@@ -2,6 +2,15 @@ export { EventInstance } from './event.instance';
 export { default as EventRegistry } from './event.registry';
 export type { EventCapabilities, EventRegistryInterface, ServedEvent } from './event.registry';
 export { normalizeEvent } from './event.utils';
+export type {
+  EventPollSubscriptionInfo,
+  EventStreamSubscriptionInfo,
+  EventSubscriberSummary,
+  EventSubscriptionInfo,
+  EventSubscriptionInfoBase,
+  EventWebhookSubscriptionDelivery,
+  EventWebhookSubscriptionInfo,
+} from './event-subscription-info';
 export { registerEventCapabilities } from './event-scope.helper';
 export type { RegisterEventCapabilitiesArgs, EventCapabilitiesResult } from './event-scope.helper';
 export { EVENT_DIALECTS, callerPlatformOf, resolveEventDialect } from './event-dialect';
@@ -40,7 +49,12 @@ export {
   deliveryStatusOf,
   subscriptionRefOf,
 } from './subscription/event-subscriptions';
-export type { EventSubscriptionIdentity, EventSubscriptionsOptions } from './subscription/event-subscriptions';
+export type {
+  EventSubscriptionEnding,
+  EventSubscriptionIdentity,
+  EventSubscriptionsOptions,
+} from './subscription/event-subscriptions';
+export type { EventTerminationError } from './subscription/event-subscription-termination';
 export { EVENT_COUNTERS, createEventMetrics } from './delivery/event-metrics';
 export type { EventCounter, EventMetrics } from './delivery/event-metrics';
 export { EventOutbox, OUTBOX_SWEEP_INTERVAL_MS } from './delivery/event-outbox';

@@ -17,7 +17,7 @@ import {
 } from '@frontmcp/protocol';
 import { randomUUID, runRequestExclusive, sha256Hex } from '@frontmcp/utils';
 
-import { FlowControl, type EventPublisher } from '../common';
+import { FlowControl, type EventPublisher, type ScopeEntry } from '../common';
 import { type CallSurface } from '../common/availability';
 import { listAllPages } from '../common/utils/list-all-pages.utils';
 import { ErrorHandler, EventsNotEnabledError, InternalMcpError, toMcpError } from '../errors';
@@ -89,7 +89,7 @@ function callerSessionId(authContext: DirectAuthContext | undefined, defaultSess
  * and invokes flows directly on a Scope instance.
  */
 export class DirectMcpServerImpl implements DirectMcpServer {
-  private readonly scope: Scope;
+  private readonly servedScope: Scope;
   readonly ready: Promise<void>;
   private _isDisposed = false;
   private readonly defaultSessionId: string;
@@ -103,16 +103,21 @@ export class DirectMcpServerImpl implements DirectMcpServer {
    * @param options - Server-wide defaults: the `workerEnv` a call or client without its own reads
    */
   constructor(scope: Scope, disposeOwner?: () => Promise<void>, options?: DirectServerOptions) {
-    this.scope = scope;
+    this.servedScope = scope;
     this.disposeOwner = disposeOwner;
     this.defaultWorkerEnv = options?.workerEnv;
     this.defaultSessionId = `direct:${randomUUID()}`;
     this.ready = Promise.resolve(); // Scope is already initialized
   }
 
+  /** The scope this server serves, read-only. */
+  get scope(): ScopeEntry {
+    return this.servedScope;
+  }
+
   /** The publisher of this server's events; on a server without events, one that rejects. */
   get events(): EventPublisher {
-    return this.scope.events?.publisher ?? { publish: () => Promise.reject(new EventsNotEnabledError()) };
+    return this.servedScope.events?.publisher ?? { publish: () => Promise.reject(new EventsNotEnabledError()) };
   }
 
   /**
@@ -131,7 +136,7 @@ export class DirectMcpServerImpl implements DirectMcpServer {
     // The call's bindings, else the server's (#706): the request context the flow registry creates
     // for this call holds them as `platformEnv`, which `this.workerEnv` reads.
     const platformEnv = options?.workerEnv ?? this.defaultWorkerEnv;
-    return withMcpSurface(this.scope, {
+    return withMcpSurface(this.servedScope, {
       authInfo,
       metadata: options?.metadata,
       ...(platformEnv !== undefined ? { platformEnv } : {}),
@@ -161,14 +166,14 @@ export class DirectMcpServerImpl implements DirectMcpServer {
 
       // Each call is its own request: in a browser build without AsyncContext, calls take turns so
       // an overlapping call never reads this one's request context (a no-op on Node).
-      return await runRequestExclusive(() => this.scope.runFlowForOutput(flowName as any, { request, ctx }));
+      return await runRequestExclusive(() => this.servedScope.runFlowForOutput(flowName as any, { request, ctx }));
     } catch (e) {
       if (e instanceof FlowControl && e.type === 'respond') {
         return e.output as T;
       }
       // Logged here, once, since no request handler reports a direct call's failure
       const failure = toDirectFailure(e);
-      this.errorHandler ??= new ErrorHandler({ logger: this.scope.logger.child('direct-server') });
+      this.errorHandler ??= new ErrorHandler({ logger: this.servedScope.logger.child('direct-server') });
       this.errorHandler.logError(toMcpError(failure), { flowName });
       throw failure;
     }
@@ -219,7 +224,7 @@ export class DirectMcpServerImpl implements DirectMcpServer {
     if (this._isDisposed) {
       throw new InternalMcpError('DirectMcpServer has been disposed');
     }
-    return registerRuntimeTool(this.scope, definition);
+    return registerRuntimeTool(this.servedScope, definition);
   }
 
   // ─────────────────────────────────────────────────────────────────
@@ -333,7 +338,7 @@ export class DirectMcpServerImpl implements DirectMcpServer {
 
     // No release callback: the scope belongs to this server, so closing a client leaves it to the others
     const { DirectClientImpl } = await import('./direct-client.js');
-    return DirectClientImpl.create(this.scope, options);
+    return DirectClientImpl.create(this.servedScope, options);
   }
 
   // ─────────────────────────────────────────────────────────────────
@@ -345,12 +350,12 @@ export class DirectMcpServerImpl implements DirectMcpServer {
     this._isDisposed = true;
 
     // Let plugins release what they hold outside the scope (e.g. WebMCP registrations)
-    await this.scope.emitDispose();
+    await this.servedScope.emitDispose();
 
     // Cleanup transport service if exists
-    if (this.scope.transportService) {
+    if (this.servedScope.transportService) {
       try {
-        await this.scope.transportService.destroy();
+        await this.servedScope.transportService.destroy();
       } catch (err) {
         // Log but don't throw - cleanup should be best-effort
         console.debug('DirectMcpServer cleanup warning:', err);

@@ -382,8 +382,9 @@ when no such subscription exists, so a client can repeat it. An anonymous caller
 
 - `onSubscribe(args, subscription)` runs once, when a subscription is created, never on a refresh. When it throws, the
   subscription is removed and the client gets the error.
-- `onUnsubscribe(args, subscription, reason)` runs once when it ends, with `'unsubscribed'` or `'expired'`. When it
-  throws, the error is logged.
+- `onUnsubscribe(args, subscription, reason)` runs once when it ends, with `'unsubscribed'`, `'expired'` or
+  `'terminated'` (the server ended it, see [Over a subscription's life](#over-a-subscriptions-life)). When it throws,
+  the error is logged.
 - `subscription` is `{ id, name, mode, subscriber }`.
 
 ### Where subscriptions are kept
@@ -395,7 +396,48 @@ refuses to start. Vercel KV is refused: it has no atomic compare-and-set. On Clo
 runs in a Durable Object, on the object's own SQLite database (see `setup-sqlite`).
 
 `scope.events.subscriptions` is the server's `EventSubscriptions`, with its `store` (`get`, `listByEvent`,
-`countByPrincipal`, `update`, `delete`).
+`countByPrincipal`, `update`, `delete`). The store's records hold the webhook secret and the full callback URL: to
+show who is subscribed (a settings page, a health check, an admin tool), use `listSubscriptions()` instead.
+
+### Listing subscriptions
+
+`await scope.events.listSubscriptions(eventName?)` lists the subscriptions of every registered event, or of one. It
+only reads: nothing is swept or changed. Each entry has `id`, `eventName`, `mode` (`'webhook'`, `'poll'` or `'push'`,
+as `subscription.mode` in `onSubscribe`), `principalKey` (`undefined` for the lease or stream anonymous callers share),
+`subscriber` (`sub`, and `iss` and `tenantId` when known) and `arguments`:
+
+- `'webhook'`: from the store every process shares, with `dialect`, `createdAt`, `updatedAt` (the last
+  `events/subscribe`), `expiresAt` (`null` for no expiry), `verifiedAt`, `lastAuthorizedAt`, `active` (`false` while
+  suspended) and `delivery`: `host` (the callback's host and port), `failures`, and `suspendedSince`, `lastDeliveryAt`,
+  `lastError` and `failedSince` when set.
+- `'poll'`: a lease this process holds (see [The poll subscription](#the-poll-subscription)), with `expiresAt`, when it
+  lapses unless a poll renews it.
+- `'push'`: an `events/stream` this process holds open.
+
+An entry has no webhook secret or signing key, no callback URL beyond its host, and none of the owner's claims, roles,
+permissions or scopes. `arguments` are listed as the event's input schema parsed them, so keep secrets out of them.
+`scope.events.pollLeases.list(eventName?)` and `scope.events.streams.list(eventName?)` list the two kinds this process
+holds on their own.
+
+Reach `scope.events` without casts: a tool or a resource reads `this.scope.events`, a flow hook
+`ctx.get(ScopeEntry).events` (the flow's own `scope` is protected), a provider takes `ScopeEntry` in `inject`. The limits are exported from `@frontmcp/sdk`: `POLL_LEASE_MIN_MS` (5 minutes),
+`POLL_LEASE_INTERVALS` (5), `pollLeaseMs(nextPollMs)` (the lease of a poll interval), `POLL_LEASE_SWEEP_INTERVAL_MS`,
+`MAX_POLL_LEASES` and `MAX_OPEN_STREAMS` (per process), `SUBSCRIPTION_SWEEP_INTERVAL_MS` (the webhook expiry sweep)
+and `SUSPEND_AFTER_FAILURES` (20).
+
+```typescript
+import { EventEndedHook, Plugin, ScopeEntry, type FlowCtxOf } from '@frontmcp/sdk';
+
+@Plugin({ name: 'listeners' })
+class ListenersPlugin {
+  @EventEndedHook.Did('notifyEnded')
+  async countListeners(ctx: FlowCtxOf<'events:ended'>) {
+    const { eventName } = ctx.state.required.record;
+    const listening = (await ctx.get(ScopeEntry).events?.listSubscriptions(eventName)) ?? [];
+    console.log(`${listening.length} subscription(s) to ${eventName} left`);
+  }
+}
+```
 
 ### Hooks
 
@@ -405,8 +447,35 @@ Both requests run hookable flows. `events:subscribe` (`EventSubscribeHook`) has 
 `verifyCallback`, `grantTtl`, `upsertSubscription`, `notifySubscribed`, `startReplay` (for an event with `check()`,
 see [Events with `check()` over webhook](#events-with-check-over-webhook)), `buildResult` and `finalize`.
 `events:unsubscribe` (`EventUnsubscribeHook`) has `parseInput`, `resolveDialect`, `requireSubscriber`,
-`removeSubscription`, `buildResult` and `finalize`. `finalize` runs after a success or a failure: attach a
-`Finally` hook there for work that must see refused requests too.
+`removeSubscription`, `buildResult` and `finalize`. From `removeSubscription` on, its state has `subscriptionId`, the
+id the request names, and `removed`, the subscription it removed as it was stored, or `undefined` when none matched
+(the request succeeds either way). The subscribe flow's state has the stored subscription in `record`. `finalize` runs
+after a success or a failure: attach a `Finally` hook there for work that must see refused requests too.
+
+Every end of a webhook subscription runs `events:ended` (`EventEndedHook`): the client's `events/unsubscribe`
+(`'unsubscribed'`), its lifetime running out, found by the sweep or by a refresh (`'expired'`), and the server ending
+it, because its owner was refused when checked again or it stayed suspended too long (`'terminated'`). It runs right
+after the event's `onUnsubscribe`, with the stages `parseInput`, `notifyEnded`, `buildResult` and `finalize`, and its
+state has `record` (the subscription as it was stored, as `removed` above), `subscription` (what `onUnsubscribe` got),
+`reason`, and for `'terminated'` `termination`, the error its callback is told (`{ code, message, data: { reason } }`).
+
+- It runs once per subscription across every process: only the process whose store removed the subscription runs
+  it, as with `onUnsubscribe`. Like `onUnsubscribe` it is not retried: a process that stops between the two loses it.
+- What a hook throws is logged. The subscription stays ended, and `events/unsubscribe` answers `{}` as before.
+- A subscription whose `onSubscribe` threw never started, so it runs nothing. Poll leases and streams do not run it.
+
+```typescript
+import { EventEndedHook, Plugin, type FlowCtxOf } from '@frontmcp/sdk';
+
+@Plugin({ name: 'subscription-audit' })
+class SubscriptionAuditPlugin {
+  @EventEndedHook.Did('notifyEnded')
+  recordEnd(ctx: FlowCtxOf<'events:ended'>) {
+    const { record, reason } = ctx.state.required;
+    console.log(`subscription ${record.id} to ${record.eventName} ended: ${reason}`);
+  }
+}
+```
 
 ```typescript
 import { EventSubscribeHook, Plugin, PublicMcpError, type FlowCtxOf } from '@frontmcp/sdk';
@@ -1147,7 +1216,9 @@ and arguments (anonymous callers share one):
   they hold at most that many.
 - Two first polls at the same time start one lease: `onSubscribe` runs once, and the second poll waits for it.
 
-Leases are in memory and never stored: after a restart, the next poll runs `onSubscribe` again.
+Leases are in memory and never stored: after a restart, the next poll runs `onSubscribe` again. With several
+processes, each holds the leases of the polls it served. `scope.events.listSubscriptions()` lists this process's
+leases, each with when it lapses, and `pollLeaseMs(nextPollMs)` is the lease length.
 `publish(event, data, { subscriptionId: subscription.id })` reaches that poll subscription alone.
 
 ### Hooks
@@ -1466,7 +1537,8 @@ published them; on a serverless deployment the server warns at startup, see
 
 With `enabled: false`, the server logs `Events are disabled (events.enabled: false), so the 2 event(s) apps declare are
 not served.` and `scope.events` is `undefined`. Otherwise `scope.events` is the `EventRegistry`: `getEvents()`,
-`findByName(name)`, `servesEvents()`.
+`findByName(name)`, `servesEvents()`, `listSubscriptions(eventName?)` (see
+[Listing subscriptions](#listing-subscriptions)).
 
 ## Typed Arguments and Payloads
 
@@ -1621,7 +1693,7 @@ Each example is a runnable app with a README and a smoke test in the FrontMCP re
 - [Conformance matrix](https://github.com/agentfront/frontmcp/blob/main/apps/e2e/demo-e2e-events/CONFORMANCE.md): each
   requirement of the SEP-3415 conformance suite, the test that covers it, and the known deviations
 - Related skills: `decorators-guide`, `create-plugin-hooks` (`ListEventsHook`, `EventSubscribeHook`,
-  `EventUnsubscribeHook`, `EventPublishHook`, `EventPublishHttpHook`, `EventDeliverHook`, `EventPollHook`,
-  `EventStreamHook`), `frontmcp-authorities`, `frontmcp-channels` (`channel-claude-code`, `app-event` sources),
+  `EventUnsubscribeHook`, `EventEndedHook`, `EventPublishHook`, `EventPublishHttpHook`, `EventDeliverHook`,
+  `EventPollHook`, `EventStreamHook`), `frontmcp-authorities`, `frontmcp-channels` (`channel-claude-code`, `app-event` sources),
   `create-job`, `create-duty`,
   `create-worker` (publishing, `watchFiles`), `create-workflow` (the request signature, `trigger: 'event'`)

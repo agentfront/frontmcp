@@ -1,6 +1,7 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 
 import { EventsApp } from './apps/events';
+import { SubscriptionAuditPlugin } from './apps/events/plugins/subscription-audit.plugin';
 
 const port = parseInt(process.env['PORT'] ?? '3150', 10);
 const idpProviderUrl = process.env['IDP_PROVIDER_URL'] || 'https://sample-app.frontegg.com';
@@ -22,6 +23,8 @@ const nextPollMs = parseInt(process.env['EVENTS_NEXT_POLL_MS'] ?? '30000', 10);
 @FrontMcp({
   info: { name: 'Demo E2E Events', version: '0.1.0' },
   apps: [EventsApp],
+  // Hears every end of a webhook subscription (events:ended), which the subscription-audit tool answers
+  plugins: [SubscriptionAuditPlugin],
   logging: { level: LogLevel.Warn },
   http: { port },
   auth: {

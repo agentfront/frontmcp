@@ -280,6 +280,7 @@ These are the flow names with pre-built hook decorator exports in `@frontmcp/sdk
 | `events:publish`                    | Publishing an event       | `EventPublishHook`          |
 | `events:publish-http`               | The HTTP publish endpoint | `EventPublishHttpHook`      |
 | `events:deliver`                    | One delivery attempt      | `EventDeliverHook`          |
+| `events:ended`                      | Webhook subscription end  | `EventEndedHook`            |
 | `events:poll`                       | Polling an event          | `EventPollHook`             |
 | `events:stream`                     | Opening an event stream   | `EventStreamHook`           |
 
@@ -413,6 +414,7 @@ import {
   ChannelSendHook, // FlowHooksOf('channels:send-notification')
   CompletionHook, // FlowHooksOf('completion:complete')
   EventDeliverHook, // FlowHooksOf('events:deliver')
+  EventEndedHook, // FlowHooksOf('events:ended')
   EventPollHook, // FlowHooksOf('events:poll')
   EventPublishHook, // FlowHooksOf('events:publish')
   EventPublishHttpHook, // FlowHooksOf('events:publish-http')
@@ -482,10 +484,10 @@ The entry flows also name their entry:
 
 A hook that stands in for a stage hands its result over through the flow, never by splicing the state:
 
-| Flow                      | Method                                  | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| ------------------------- | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Flow                      | Method                                  | Description                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `resources:read-resource` | `resolveResource({ resource, params })` | Settles the resource the read gets, with its URI template `params`, as `findResource` does: its `availableWhen` is checked (a surface it is not offered on answers "Resource not found"), and the stages after it (`enabled`, authorities) check it as usual. Call it from an `@Around('findResource')` hook that does not call `next()`. The handed resource's app and `static` hooks run from the `useResourceHooks` stage on, its guards included. |
-| `tools:list-tools`        | `removeTool(name)`                      | Leaves a tool out of this listing, by its listed name or its own: from a hook on any stage up to `parseTools`.                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `tools:list-tools`        | `removeTool(name)`                      | Leaves a tool out of this listing, by its listed name or its own: from a hook on any stage up to `parseTools`.                                                                                                                                                                                                                                                                                                                                        |
 
 ```typescript
 @ResourceHook.Around('findResource')

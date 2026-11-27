@@ -8,6 +8,7 @@ import { App, event, Plugin, type FlowCtxOf } from '../../common';
 import { EventForbiddenError } from '../../errors';
 import { EventUnsubscribeHook } from '../../index';
 import { type Scope } from '../../scope/scope.instance';
+import { type EventSubscriptionRecord } from '../subscription/event-subscription.store';
 import { type EventSubscriptions } from '../subscription/event-subscriptions';
 
 const CALLBACK = 'https://hooks.example.com/mcp';
@@ -21,6 +22,7 @@ const asBob = { authInfo: bob, surface: 'mcp' };
 
 const onUnsubscribe = jest.fn();
 const removals = jest.fn();
+const removedStates = jest.fn<void, [{ subscriptionId?: string; removed?: EventSubscriptionRecord }]>();
 
 const orderCreated = event({
   name: 'order.created',
@@ -34,6 +36,11 @@ class RemovalAuditPlugin {
   @EventUnsubscribeHook.Did('removeSubscription')
   recordRemoval(ctx: FlowCtxOf<'events:unsubscribe'>) {
     removals(ctx.rawInput.request.params.name);
+  }
+
+  @EventUnsubscribeHook.Did('buildResult')
+  recordRemovedState(ctx: FlowCtxOf<'events:unsubscribe'>) {
+    removedStates({ subscriptionId: ctx.state.subscriptionId, removed: ctx.state.removed });
   }
 }
 
@@ -87,6 +94,7 @@ describe('events:unsubscribe', () => {
   beforeEach(() => {
     onUnsubscribe.mockClear();
     removals.mockClear();
+    removedStates.mockClear();
   });
 
   afterAll(async () => {
@@ -158,5 +166,25 @@ describe('events:unsubscribe', () => {
     await unsubscribe({ arguments: { status: 'hooked' } });
 
     expect(removals).toHaveBeenCalledWith('order.created');
+  });
+
+  it('puts the removed subscription in the state, for the hooks after removeSubscription', async () => {
+    const id = await subscribe({ arguments: { status: 'audited' } });
+    const stored = await subscriptions().store.get(id);
+
+    await unsubscribe({ arguments: { status: 'audited' } });
+
+    expect(removedStates).toHaveBeenCalledTimes(1);
+    expect(removedStates).toHaveBeenCalledWith({ subscriptionId: id, removed: stored });
+  });
+
+  it('names the subscription the request asked for, and nothing removed, when none matched', async () => {
+    const id = await subscribe({ arguments: { status: 'audited-twice' } });
+    await unsubscribe({ arguments: { status: 'audited-twice' } });
+    removedStates.mockClear();
+
+    await unsubscribe({ arguments: { status: 'audited-twice' } });
+
+    expect(removedStates).toHaveBeenCalledWith({ subscriptionId: id, removed: undefined });
   });
 });

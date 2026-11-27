@@ -9,6 +9,7 @@ import {
 } from '../../common';
 import { type EventsConfig } from '../../common/metadata/event.metadata';
 import { type EventCallbackVerifier } from './event-callback-verifier';
+import { type EventTerminationError } from './event-subscription-termination';
 import {
   type EventSubscriptionRecord,
   type EventSubscriptionStore,
@@ -26,6 +27,18 @@ export interface EventSubscriptionsOptions {
   /** `events.webhook.rotationGraceMs`. */
   rotationGraceMs: number;
   logger: FrontMcpLogger;
+  /** Runs the `events:ended` flow for a subscription that ended; the scope sets it. */
+  ended?: (ending: EventSubscriptionEnding) => Promise<unknown>;
+}
+
+/** A webhook subscription that ended, and why: what the `events:ended` flow runs with. */
+export interface EventSubscriptionEnding {
+  /** The subscription as it was stored when it was removed. */
+  record: EventSubscriptionRecord;
+  /** `'unsubscribed'`, `'expired'` or `'terminated'` for a webhook subscription. */
+  reason: EventUnsubscribeReason;
+  /** For `'terminated'`: the error its callback is told, access revoked or a callback that kept failing. */
+  termination?: EventTerminationError;
 }
 
 export interface EventSubscriptionIdentity {
@@ -152,10 +165,27 @@ export class EventSubscriptions {
     }
   }
 
-  /** End one subscription whose lifetime is over, telling its event once across every node. */
+  /**
+   * Run the `events:ended` flow for a subscription this caller removed, after its event was told. Only the caller the
+   * store gave the removed subscription to calls it, so it runs once across every node. A failure there is logged,
+   * never thrown.
+   */
+  async notifyEnded(ending: EventSubscriptionEnding): Promise<void> {
+    const { ended } = this.options;
+    if (!ended) return;
+    try {
+      await ended(ending);
+    } catch (error) {
+      this.logger.warn(`events:ended failed for subscription ${ending.record.id} (${ending.reason})`, error);
+    }
+  }
+
+  /** End one subscription whose lifetime is over, telling its event and `events:ended`, once across every node. */
   async expire(id: string, now = Date.now()): Promise<void> {
     const removed = await this.store.deleteExpired(id, now);
-    if (removed) await this.notifyUnsubscribed(removed, 'expired');
+    if (!removed) return;
+    await this.notifyUnsubscribed(removed, 'expired');
+    await this.notifyEnded({ record: removed, reason: 'expired' });
   }
 
   /** End every subscription whose lifetime is over. */

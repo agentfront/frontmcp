@@ -25,9 +25,9 @@ const BUDGETS: Array<{ entry: string; label: string; maxBytes: number }> = [
   // http.userContent option and its warning (#1364, +943 / +944), the client metadata a transparent server publishes
   // (#1360, +166) and the people session store option (#1355, +79). Then +237 and +236: keep-alive comments on every
   // MCP stream (#1484, +151 / +151), the closest declared key at any depth (#1486, -13 / -13) and the review fixes on
-  // the stack (+99 / +98)
-  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_348_283 },
-  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_355_508 },
+  // the stack (+99 / +98). Then +102 and +102: the read-only DirectMcpServer.scope getter (#1492)
+  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_348_385 },
+  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_355_610 },
 ];
 
 // +413 bytes, the 1.13.2 batch: producer-backed resource keys (#1354, +241), the client metadata a transparent server
