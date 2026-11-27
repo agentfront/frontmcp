@@ -14,6 +14,9 @@ import * as path from 'node:path';
 
 import { expect, TestServer } from '@frontmcp/testing';
 
+// As long as TestServer waits for a server to exit (SERVER_EXIT_TIMEOUT_MS).
+const EXIT_RECORD_TIMEOUT_MS = 12_000;
+
 const SERVER_ENTRY = 'apps/e2e/demo-e2e-standalone/src/main-user-content.ts';
 
 const INITIALIZE = {
@@ -227,7 +230,11 @@ describe('User-content listener (#1364)', () => {
 
     // TestServer.stop() resolves on any exit, a SIGKILL after 5 s included. The server writes the code it exits with:
     // 0 once its graceful shutdown completed, 1 when a step failed or it outlasted its deadline, nothing when killed.
-    expect(fs.existsSync(exitCodeFile) && fs.readFileSync(exitCodeFile, 'utf8')).toBe('0');
+    // The server writes it in its 'exit' listener, which can run after the wrapper exits and the port closes.
+    const exitCode = async () => (fs.existsSync(exitCodeFile) ? fs.readFileSync(exitCodeFile, 'utf8') : '');
+    const deadline = Date.now() + EXIT_RECORD_TIMEOUT_MS;
+    while (!(await exitCode()) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(await exitCode()).toBe('0');
 
     await expect(fetch(`${contentUrl}/frame.html`)).rejects.toThrow();
     await expect(fetch(`${mcpUrl}/healthz`)).rejects.toThrow();
