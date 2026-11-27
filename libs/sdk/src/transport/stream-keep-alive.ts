@@ -19,38 +19,52 @@ export function withKeepAlive(frames: AsyncIterable<Uint8Array>, idleMs: number)
   return {
     [Symbol.asyncIterator](): AsyncIterator<Uint8Array> {
       const source = frames[Symbol.asyncIterator]();
-      let pending: Promise<IteratorResult<Uint8Array>> | undefined;
+      // One source read, however many keep-alives go out while it is awaited; its outcome waits here for `next()`.
+      let reading = false;
+      let read: { result: IteratorResult<Uint8Array> } | { error: unknown } | undefined;
+      // Wakes the waiting `next()`: the read settled, the quiet interval passed or the reader returned. One waiter at a
+      // time, so a long stream keeps no reaction per frame or per keep-alive on a promise that stays pending.
+      let wake: (() => void) | undefined;
       let timer: ReturnType<typeof setTimeout> | undefined;
       let ended = false;
-      let stopWaiting: () => void = () => undefined;
-      const stopped = new Promise<'stopped'>((resolve) => (stopWaiting = () => resolve('stopped')));
       return {
         next: async () => {
           if (ended) return { value: undefined, done: true };
-          const step = (pending ??= source.next());
-          const idle = new Promise<'idle'>((resolve) => {
-            timer = setTimeout(() => resolve('idle'), idleMs);
-            timer.unref?.();
-          });
-          let outcome: IteratorResult<Uint8Array> | 'idle' | 'stopped';
-          try {
-            outcome = await Promise.race([step, idle, stopped]);
-          } catch (error) {
-            pending = undefined;
-            throw error;
-          } finally {
+          if (!reading) {
+            reading = true;
+            void source.next().then(
+              (result) => {
+                read = { result };
+                wake?.();
+              },
+              (error: unknown) => {
+                read = { error };
+                wake?.();
+              },
+            );
+          }
+          if (!read) {
+            await new Promise<void>((resolve) => {
+              wake = resolve;
+              timer = setTimeout(resolve, idleMs);
+              timer.unref?.();
+            });
+            wake = undefined;
             clearTimeout(timer);
           }
-          if (ended || outcome === 'stopped') return { value: undefined, done: true };
-          if (outcome === 'idle') return { value: KEEP_ALIVE_FRAME, done: false };
-          pending = undefined;
-          if (outcome.done) ended = true;
-          return outcome;
+          if (ended) return { value: undefined, done: true };
+          if (!read) return { value: KEEP_ALIVE_FRAME, done: false };
+          const settled = read;
+          read = undefined;
+          reading = false;
+          if ('error' in settled) throw settled.error;
+          if (settled.result.done) ended = true;
+          return settled.result;
         },
         return: async () => {
           ended = true;
           clearTimeout(timer);
-          stopWaiting();
+          wake?.();
           await source.return?.();
           return { value: undefined, done: true };
         },
