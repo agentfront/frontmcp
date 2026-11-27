@@ -23,7 +23,8 @@ export interface HttpRouteCtorArgs extends ExecutionContextBaseArgs {
 export type HttpRouteType = abstract new (args: HttpRouteCtorArgs) => HttpRouteInterface;
 
 /**
- * The base of an `@HttpRoute` class. `this.get()` resolves the providers of the route's app, the ones its tools get.
+ * The base of an `@HttpRoute` class. `this.get()` resolves the providers of the route's app, the ones its tools get. On
+ * an `auth: 'bearer'` route, `this.auth` is the caller the server's auth verified, as in a tool.
  *
  * @example
  * ```typescript
@@ -31,6 +32,13 @@ export type HttpRouteType = abstract new (args: HttpRouteCtorArgs) => HttpRouteI
  * export class BoardPage extends HttpRouteContext {
  *   async handle() {
  *     return this.get(BoardService).find(this.params['id']);
+ *   }
+ * }
+ *
+ * @HttpRoute({ method: 'GET', path: '/projects/:projectId', auth: 'bearer', authorities: 'projectMember' })
+ * export class ProjectApi extends HttpRouteContext {
+ *   async handle() {
+ *     return this.get(Projects).find(this.params['projectId'], this.auth.user.sub);
  *   }
  * }
  * ```

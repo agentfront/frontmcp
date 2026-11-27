@@ -2,6 +2,7 @@ import { App } from '@frontmcp/sdk';
 
 import AdminConfigResource from './resources/admin-config.resource';
 import PublicInfoResource from './resources/public-info.resource';
+import TenantReportRoute from './routes/tenant-report.route';
 import AdminOnlyTool from './tools/admin-only.tool';
 import CombinatorTool from './tools/combinator.tool';
 import EditorOrAdminTool from './tools/editor-or-admin.tool';
@@ -25,5 +26,6 @@ import TenantScopedTool from './tools/tenant-scoped.tool';
     CombinatorTool,
   ],
   resources: [AdminConfigResource, PublicInfoResource],
+  routes: [TenantReportRoute],
 })
 export class AuthoritiesApp {}

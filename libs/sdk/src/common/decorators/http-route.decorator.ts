@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 
+import type { AuthoritiesMetadata } from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
 
 import { InvalidDecoratorMetadataError } from '../../errors/decorator.errors';
@@ -21,7 +22,14 @@ const httpRouteMetadataSchema = z
       message: HTTP_ROUTE_PATH_MESSAGE,
     }),
     auth: z
-      .enum(['people', 'subject', 'public'], { message: "auth must be 'people', 'subject' or 'public'" })
+      .enum(['people', 'subject', 'bearer', 'public'], {
+        message: "auth must be 'people', 'subject', 'bearer' or 'public'",
+      })
+      .optional(),
+    authorities: z
+      .custom<AuthoritiesMetadata>((rule) => typeof rule === 'string' || (typeof rule === 'object' && rule !== null), {
+        message: 'authorities must be a profile name, a list of names or a policy',
+      })
       .optional(),
     sse: z
       .object({
@@ -42,11 +50,16 @@ const httpRouteMetadataSchema = z
   .refine((metadata) => !metadata.sse || metadata.method === 'GET', {
     message: 'an sse route must use method GET',
     path: ['sse'],
+  })
+  .refine((metadata) => metadata.authorities === undefined || metadata.auth === 'bearer', {
+    message: "authorities need auth: 'bearer', whose token names the caller they check",
+    path: ['authorities'],
   });
 
 /**
  * Marks a class as an HTTP route of its app, served beside the MCP endpoint through the hookable `http:route` flow:
- * the IP filter, a same-origin check on mutations, people auth, then `handle()`. List it in `@App({ routes })`.
+ * the IP filter, a same-origin check on mutations, people or bearer auth, the route's `authorities`, then `handle()`.
+ * List it in `@App({ routes })`.
  */
 export function HttpRoute(metadata: HttpRouteMetadata): (target: HttpRouteType) => void {
   return (target) => {
