@@ -76,6 +76,30 @@ deployments: [
 - `oauth` sets the defaults of `<bin> login` (server URL, client ID, scope,
   callback `portRange`). `login` exists only with `authRequired: true`; the build
   warns when `oauth` is set without it.
+- By default `login` posts to `<serverUrl>/oauth/authorize` and `/oauth/token`
+  and stores the access token; it never refreshes it. `oauth.nativeSignIn: true`
+  makes it sign in with `signInNative` from `@frontmcp/auth/native` instead (see
+  `configure-auth` in `frontmcp-config`): the endpoints come from the RFC 8414 /
+  OpenID metadata of `oauth.issuer` (default: the server URL, which must then be
+  that metadata's `issuer`), the requests carry `oauth.resource` (RFC 8707), and
+  each command refreshes a token that expires within a minute before it calls
+  the server, saying `The session expired. Run "<bin> login" again.` when the
+  provider refuses the refresh token. The callback stays on `portRange` (default
+  17830-17850). The CLI bundle then includes `@frontmcp/auth/native`, so
+  `@frontmcp/auth` must resolve from the project (add it as a dependency under
+  pnpm).
+
+  ```ts
+  oauth: {
+    serverUrl: 'https://mcp.example.com',
+    clientId: 'help-desk-cli',
+    defaultScope: 'openid read',
+    nativeSignIn: true,
+    issuer: 'https://idp.example.com',
+    resource: 'https://mcp.example.com/mcp',
+  },
+  ```
+
 - With `authRequired: true`, commands that talk to the server (tools,
   resources, prompts, skills, jobs) refuse to run until the active session has a
   stored credential: they exit 1 with

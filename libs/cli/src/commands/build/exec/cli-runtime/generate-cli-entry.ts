@@ -154,6 +154,7 @@ function generateHeader(
   httpEntryPath?: string,
 ): string {
   const hasOAuth = !!oauthConfig;
+  const nativeSignIn = authRequired && !!oauthConfig?.nativeSignIn;
 
   // Build the group routing map dynamically
   const skillsRouting = skillCommands.length > 0 ? `\n      else if (${JSON.stringify(skillCommands)}.indexOf(name) !== -1) groups['Skills'].push(sub);` : '';
@@ -235,6 +236,7 @@ var fmt = require('./output-formatter');
 var elicitation = require('./terminal-elicitation');
 ${authRequired ? "var sessions = require('./session-manager');\nvar creds = require('./credential-store');" : ''}
 ${hasOAuth ? "var oauthHelper = require('./oauth-helper');" : ''}
+${nativeSignIn ? generateNativeTokenStore() : ''}
 
 var APP_NAME = ${JSON.stringify(appName)};
 var SCRIPT_DIR = __dirname;
@@ -260,7 +262,16 @@ var QUESTION_OPTIONS = {
 };
 
 async function connectOptions() {${authRequired ? `
-  var credBlob = await creds.createCredentialStore().get(sessions.getActiveSessionName());
+  var sessionName = sessions.getActiveSessionName();
+  var credBlob = await creds.createCredentialStore().get(sessionName);${nativeSignIn ? `
+  var nativeTokens = credBlob && credBlob.metadata && credBlob.metadata.nativeTokens;
+  if (nativeTokens) {
+    var fresh = await nativeAuth.getNativeTokens({ issuer: nativeTokens.issuer, clientId: nativeTokens.clientId, resource: nativeTokens.resource, store: nativeTokenStore(sessionName) });
+    if (!fresh) {
+      throw new Error('The session expired. Run "' + APP_NAME + ' login" again.');
+    }
+    credBlob = { token: fresh.accessToken };
+  }` : ''}
   if (!credBlob || !credBlob.token) {
     throw new Error('Not logged in. Run "' + APP_NAME + ' login" or "' + APP_NAME + ' connect --token <token>" first.');
   }
@@ -1285,6 +1296,29 @@ subscribeCmd
   });`;
 }
 
+/** signInNative's token store over the CLI's credential store: one session's credential holds its tokens. */
+function generateNativeTokenStore(): string {
+  return `var nativeAuth = require('@frontmcp/auth/native');
+function nativeTokenStore(sessionName) {
+  var store = creds.createCredentialStore();
+  return {
+    get: async function() {
+      var blob = await store.get(sessionName);
+      return (blob && blob.metadata && blob.metadata.nativeTokens) || undefined;
+    },
+    set: async function(_key, tokens) {
+      await store.set(sessionName, {
+        token: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        expiresAt: tokens.expiresAt ? new Date(tokens.expiresAt).toISOString() : undefined,
+        metadata: { scope: tokens.scope, serverUrl: tokens.issuer, nativeTokens: tokens }
+      });
+    },
+    delete: async function() { await store.delete(sessionName); }
+  };
+}`;
+}
+
 function generateLoginCommand(appName: string, oauthConfig?: OAuthConfig): string {
   const serverUrl = oauthConfig?.serverUrl || '';
   const clientId = oauthConfig?.clientId || appName;
@@ -1292,6 +1326,42 @@ function generateLoginCommand(appName: string, oauthConfig?: OAuthConfig): strin
   const portStart = oauthConfig?.portRange?.[0] ?? 17830;
   const portEnd = oauthConfig?.portRange?.[1] ?? 17850;
   const timeout = oauthConfig?.timeout ?? 120000;
+  const signIn = oauthConfig?.nativeSignIn
+    ? `var sessionName = opts.session || 'default';
+      var scope = opts.scope || ${JSON.stringify(defaultScope)};
+      await nativeAuth.signInNative({
+        issuer: ${JSON.stringify(oauthConfig.issuer ?? '')} || serverUrl,
+        clientId: ${JSON.stringify(clientId)},
+        scopes: scope ? scope.split(' ').filter(Boolean) : undefined,
+        resource: ${JSON.stringify(oauthConfig.resource)},
+        store: nativeTokenStore(sessionName),
+        redirectPort: [${portStart}, ${portEnd}],
+        timeoutMs: ${timeout},
+        openBrowser: async function(url) {
+          if (opts.browser) {
+            console.log('Opening browser for authentication...');
+            await nativeAuth.openSystemBrowser(url).catch(function() {});
+            console.log('If the browser did not open, visit:\\n  ' + url + '\\n');
+          } else {
+            console.log('Open this URL in your browser:\\n\\n  ' + url + '\\n');
+          }
+        }
+      });
+      sessions.getOrCreateSession(sessionName);`
+    : `var oauthHelper = require('./oauth-helper');
+      var result = await oauthHelper.startOAuthLogin({
+        serverUrl: serverUrl,
+        clientId: ${JSON.stringify(clientId)},
+        scope: opts.scope || ${JSON.stringify(defaultScope)},
+        portStart: ${portStart},
+        portEnd: ${portEnd},
+        timeout: ${timeout},
+        noBrowser: !opts.browser
+      });
+      var sessionName = opts.session || 'default';
+      var store = creds.createCredentialStore();
+      await store.set(sessionName, result);
+      sessions.getOrCreateSession(sessionName);`;
 
   return `program
   .command('login')
@@ -1308,20 +1378,7 @@ function generateLoginCommand(appName: string, oauthConfig?: OAuthConfig): strin
       return;
     }
     try {
-      var oauthHelper = require('./oauth-helper');
-      var result = await oauthHelper.startOAuthLogin({
-        serverUrl: serverUrl,
-        clientId: ${JSON.stringify(clientId)},
-        scope: opts.scope || ${JSON.stringify(defaultScope)},
-        portStart: ${portStart},
-        portEnd: ${portEnd},
-        timeout: ${timeout},
-        noBrowser: !opts.browser
-      });
-      var sessionName = opts.session || 'default';
-      var store = creds.createCredentialStore();
-      await store.set(sessionName, result);
-      sessions.getOrCreateSession(sessionName);
+      ${signIn}
       console.log('Logged in successfully. Session: ' + sessionName);
     } catch (err) {
       console.error('Login failed:', err.message || err);

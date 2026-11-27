@@ -227,6 +227,27 @@ describe('frontmcpConfigSchema', () => {
       });
       expect(result.success).toBe(true);
     });
+
+    it('accepts the native sign-in options of cli.oauth', () => {
+      const result = frontmcpConfigSchema.safeParse({
+        name: 'my-server',
+        deployments: [
+          {
+            target: 'cli',
+            cli: {
+              authRequired: true,
+              oauth: {
+                serverUrl: 'https://mcp.example.com',
+                nativeSignIn: true,
+                issuer: 'https://idp.example.com',
+                resource: 'https://mcp.example.com/mcp',
+              },
+            },
+          },
+        ],
+      });
+      expect(result.success).toBe(true);
+    });
   });
 
   describe('invalid configs', () => {
