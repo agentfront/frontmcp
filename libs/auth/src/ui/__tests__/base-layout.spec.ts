@@ -13,6 +13,7 @@ import {
   DEFAULT_THEME,
   escapeHtml,
   extraWideLayout,
+  INLINE_AUTH_PAGE_CSP,
   wideLayout,
 } from '../base-layout';
 
@@ -361,6 +362,12 @@ describe('authLayout', () => {
   });
 });
 
+/** The sources a CSP directive allows. */
+function sourcesOf(csp: string, directive: string): string[] {
+  const entry = csp.split('; ').find((part) => part.startsWith(`${directive} `));
+  return entry ? entry.split(' ').slice(1) : [];
+}
+
 describe('builtInAuthPageHeaders (#263)', () => {
   it('sends CSP, anti-framing, nosniff, referrer and no-store headers', () => {
     expect(builtInAuthPageHeaders()).toEqual({
@@ -372,12 +379,26 @@ describe('builtInAuthPageHeaders (#263)', () => {
     });
   });
 
-  it('allows no third-party script, style or font, and forbids framing (#1480)', () => {
-    expect(BUILT_IN_AUTH_PAGE_CSP).toContain("script-src 'self' 'unsafe-inline';");
-    expect(BUILT_IN_AUTH_PAGE_CSP).toContain("style-src 'self' 'unsafe-inline';");
-    expect(BUILT_IN_AUTH_PAGE_CSP).not.toContain('font-src');
-    expect(BUILT_IN_AUTH_PAGE_CSP).not.toMatch(/https?:\/\//);
-    expect(BUILT_IN_AUTH_PAGE_CSP).toContain("frame-ancestors 'none'");
+  it('still allows what a baseLayout page without inlineStyles loads, as in 1.13.1, so a page that sends it keeps its styles', () => {
+    const csp = builtInAuthPageHeaders()['Content-Security-Policy'];
+    const html = baseLayout('<div class="bg-white">x</div>', { title: 'Custom' });
+
+    expect(html).toContain(CDN.tailwind);
+    expect(sourcesOf(csp, 'script-src')).toContain(new URL(CDN.tailwind).origin);
+    expect(sourcesOf(csp, 'style-src')).toContain(new URL(CDN.fonts.stylesheet).origin);
+    expect(sourcesOf(csp, 'font-src')).toContain('https://fonts.gstatic.com');
+  });
+
+  it("sends the built-in pages' policy with csp: 'inline': no third-party script, style or font (#1480)", () => {
+    const headers = builtInAuthPageHeaders({ csp: 'inline' });
+
+    expect(headers['Content-Security-Policy']).toBe(INLINE_AUTH_PAGE_CSP);
+    expect(INLINE_AUTH_PAGE_CSP).toContain("script-src 'self' 'unsafe-inline';");
+    expect(INLINE_AUTH_PAGE_CSP).toContain("style-src 'self' 'unsafe-inline';");
+    expect(INLINE_AUTH_PAGE_CSP).not.toContain('font-src');
+    expect(INLINE_AUTH_PAGE_CSP).not.toMatch(/https?:\/\//);
+    expect(INLINE_AUTH_PAGE_CSP).toContain("frame-ancestors 'none'");
+    expect(headers['X-Frame-Options']).toBe('DENY');
   });
 
   it('leaves out the CSP for markup the server did not write', () => {

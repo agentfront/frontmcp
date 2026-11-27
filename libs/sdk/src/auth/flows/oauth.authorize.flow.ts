@@ -1100,7 +1100,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     // the other security headers still apply.
     const auth = this.scope.metadata.auth;
     const customRender = !!(auth && auth.mode === 'local' && (auth as { login?: LoginConfig }).login?.render);
-    this.respond(httpRespond.html(loginHtml, 200, builtInAuthPageHeaders({ csp: !customRender })));
+    this.respond(httpRespond.html(loginHtml, 200, builtInAuthPageHeaders({ csp: customRender ? false : 'inline' })));
   }
 
   /**
@@ -1270,7 +1270,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
 
   /** An HTML response with the built-in auth pages' security headers (#263). */
   private htmlPage(markup: string, status = 200): ReturnType<typeof httpRespond.html> {
-    return httpRespond.html(markup, status, builtInAuthPageHeaders());
+    return httpRespond.html(markup, status, builtInAuthPageHeaders({ csp: 'inline' }));
   }
 
   /**

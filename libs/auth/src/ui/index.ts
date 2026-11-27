@@ -16,6 +16,7 @@ export {
   extraWideLayout,
   escapeHtml,
   BUILT_IN_AUTH_PAGE_CSP,
+  INLINE_AUTH_PAGE_CSP,
   builtInAuthPageHeaders,
 } from './base-layout';
 export type { ThemeColors, ThemeFonts, ThemeConfig, BaseLayoutOptions } from './base-layout';

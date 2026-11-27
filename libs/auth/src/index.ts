@@ -58,6 +58,7 @@ export {
   extraWideLayout,
   escapeHtml,
   BUILT_IN_AUTH_PAGE_CSP,
+  INLINE_AUTH_PAGE_CSP,
   builtInAuthPageHeaders,
   // Templates
   buildConsentPage,
