@@ -135,5 +135,19 @@
       'ChannelReplyTool',
     ],
   );
-  defineLazyExports(() => require('./event'), ['EventInstance', 'EventRegistry']);
+  defineLazyExports(
+    () => require('./event'),
+    [
+      'EventInstance',
+      'EventRegistry',
+      'MAX_OPEN_STREAMS',
+      'MAX_POLL_LEASES',
+      'POLL_LEASE_INTERVALS',
+      'POLL_LEASE_MIN_MS',
+      'POLL_LEASE_SWEEP_INTERVAL_MS',
+      'SUBSCRIPTION_SWEEP_INTERVAL_MS',
+      'SUSPEND_AFTER_FAILURES',
+      'pollLeaseMs',
+    ],
+  );
 }

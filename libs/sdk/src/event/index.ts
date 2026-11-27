@@ -2,6 +2,15 @@ export { EventInstance } from './event.instance';
 export { default as EventRegistry } from './event.registry';
 export type { EventCapabilities, EventRegistryInterface, ServedEvent } from './event.registry';
 export { normalizeEvent } from './event.utils';
+export type {
+  EventPollSubscriptionInfo,
+  EventStreamSubscriptionInfo,
+  EventSubscriberSummary,
+  EventSubscriptionInfo,
+  EventSubscriptionInfoBase,
+  EventWebhookSubscriptionDelivery,
+  EventWebhookSubscriptionInfo,
+} from './event-subscription-info';
 export { registerEventCapabilities } from './event-scope.helper';
 export type { RegisterEventCapabilitiesArgs, EventCapabilitiesResult } from './event-scope.helper';
 export { EVENT_DIALECTS, callerPlatformOf, resolveEventDialect } from './event-dialect';

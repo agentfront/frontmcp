@@ -101,6 +101,11 @@ export class EventStream implements AsyncIterable<EventStreamNotification> {
     return this.options.event.name;
   }
 
+  /** The stream's arguments, as the event's input schema parsed them. */
+  get arguments(): Record<string, unknown> {
+    return this.options.arguments;
+  }
+
   /** The owner's key; undefined for an anonymous reader. */
   get principalKey(): string | undefined {
     return this.options.reader.principalKey;
