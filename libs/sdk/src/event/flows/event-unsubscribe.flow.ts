@@ -6,6 +6,7 @@ import { EventForbiddenError } from '../../errors';
 import { callerPlatformOf, EVENT_DIALECTS, resolveEventDialect } from '../event-dialect';
 import { eventSubscriberOf, type EventSubscriberIdentity } from '../event-subscriber';
 import type EventRegistry from '../event.registry';
+import { type EventSubscriptionRecord } from '../subscription/event-subscription.store';
 import { type EventSubscriptions } from '../subscription/event-subscriptions';
 
 const inputSchema = z.object({
@@ -19,6 +20,10 @@ const stateSchema = z.object({
   authInfo: z.any() as z.ZodType<Partial<AuthInfo>>,
   dialect: z.enum(['sep-3415', 'sketch']),
   owner: z.any() as z.ZodType<EventSubscriberIdentity>,
+  /** The id the request names: derived from the caller, the callback, the event and its arguments, as subscribe does. */
+  subscriptionId: z.string(),
+  /** The subscription this request removed, as it was stored; undefined when none matched, which succeeds too. */
+  removed: z.any() as z.ZodType<EventSubscriptionRecord | undefined>,
 });
 
 const plan = {
@@ -91,7 +96,7 @@ export default class EventUnsubscribeFlow extends FlowBase<typeof name> {
     this.state.set('owner', owner);
   }
 
-  /** Remove the subscription the caller's key names and tell its event, once. */
+  /** Remove the subscription the caller's key names and tell its event, once; the state keeps what was removed. */
   @Stage('removeSubscription')
   async removeSubscription() {
     const { name: eventName, delivery } = this.input.request.params;
@@ -100,6 +105,7 @@ export default class EventUnsubscribeFlow extends FlowBase<typeof name> {
     this.subscriptions.sweepIfDue();
 
     const removed = await this.subscriptions.store.delete(identity.id);
+    this.state.set({ subscriptionId: identity.id, removed });
     if (!removed) return;
     await this.subscriptions.notifyUnsubscribed(removed, 'unsubscribed', authInfo);
     this.logger.verbose(`removeSubscription: subscription ${removed.id} removed from event "${eventName}"`);
