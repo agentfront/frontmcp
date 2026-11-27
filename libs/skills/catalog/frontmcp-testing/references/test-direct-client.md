@@ -78,6 +78,22 @@ A `DirectClient` also subscribes to MCP Events: `client.events.subscribe(name, a
 connection when the event offers it, else poll, and yields the occurrences a tool publishes (see `create-event`,
 "Subscribing From a Client").
 
+To check what the server holds, read `server.scope`, the read-only `ScopeEntry` the server serves (no cast needed):
+`server.scope?.events?.listSubscriptions()` lists its subscriptions (see `create-event`, "Listing subscriptions"),
+and `server.scope?.events?.outbox` its pending webhook deliveries. It is set on every server `create()` returns, and
+optional on the `DirectMcpServer` type so a test double that implements it keeps compiling.
+
+```typescript
+// reportReady is offered by poll and has an onSubscribe, so the server keeps a lease for each poll subscription
+const server = await create({ info: { name: 'reports', version: '1.0.0' }, eventDefinitions: [reportReady] });
+const client = await server.connect({ session: { id: 'spec', user: { sub: 'ada' } } });
+const subscription = await client.events.subscribe('report.ready', { team: 'ops' });
+
+const listed = (await server.scope?.events?.listSubscriptions('report.ready')) ?? [];
+expect(listed).toEqual([expect.objectContaining({ mode: 'poll', arguments: { team: 'ops' } })]);
+await subscription.cancel();
+```
+
 ## Examples
 
 | Example                                                                                    | Level        | Description                                                                                                                   |
