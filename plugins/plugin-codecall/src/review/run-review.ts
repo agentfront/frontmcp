@@ -68,22 +68,33 @@ function refusalMessageOf(record: ReviewRecord): string {
 }
 
 /**
- * The call refusal a run ended with, uncaught: the one it threw (its message names it; else the last refusal), or the
- * first in call order a failed `parallel()` it threw listed.
+ * The call refusals a run ended with, uncaught, in call order: those whose message is the ReviewError's it threw, or
+ * those a failed `parallel()` it threw listed. A refusal whose message the error does not carry whole is not one.
+ */
+export function refusalsEndedWith(
+  decisions: readonly ReviewRecord[],
+  runError?: { name?: string; message?: string },
+): ReviewRecord[] {
+  const refusals = decisions.filter(isCallRefusal);
+  const listed = parallelFailuresOf(runError?.message);
+  const ended =
+    runError?.name === REVIEW_ERROR_NAME
+      ? refusals.filter((record) => refusalMessageOf(record) === runError.message)
+      : refusals.filter((record) => listed?.(refusalMessageOf(record)) === true);
+  return ended.sort((left, right) => (left.callIndex ?? 0) - (right.callIndex ?? 0));
+}
+
+/**
+ * The call refusal a run ended with, uncaught: the first it threw or a failed `parallel()` listed, else, for a
+ * ReviewError whose message names none of them, the last refusal.
  */
 function uncaughtRefusalOf(
   decisions: readonly ReviewRecord[],
   runError?: { name?: string; message?: string },
 ): ReviewRecord | undefined {
-  const refusals = decisions.filter(isCallRefusal);
-  if (runError?.name === REVIEW_ERROR_NAME) {
-    return [...refusals].reverse().find((record) => refusalMessageOf(record) === runError.message) ?? refusals.at(-1);
-  }
-  const listed = parallelFailuresOf(runError?.message);
-  if (!listed) return undefined;
-  return refusals
-    .filter((record) => listed(refusalMessageOf(record)))
-    .sort((left, right) => (left.callIndex ?? 0) - (right.callIndex ?? 0))[0];
+  const [first] = refusalsEndedWith(decisions, runError);
+  if (first || runError?.name !== REVIEW_ERROR_NAME) return first;
+  return decisions.filter(isCallRefusal).at(-1);
 }
 
 /**

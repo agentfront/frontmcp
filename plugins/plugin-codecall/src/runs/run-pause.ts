@@ -27,9 +27,9 @@ const FAILURE_STATUSES: ReadonlySet<string> = new Set(['tool_error', 'runtime_er
 
 /**
  * The call the run stopped at, before it ran: the first `needs_approval` (Enclave stops the run there); or the first
- * refusal the run ended with, uncaught: a call-phase `needs_changes` or `denied`, or a call the call flow refused before
- * its tool ran (its input, or a budget as it entered the tool), whose failure the script threw, alone or in a failed
- * `parallel()`. A refusal after which another call reached the host was caught: the run did not stop there.
+ * refusal the run ended with, uncaught, alone or in a failed `parallel()`'s error: a call-phase `needs_changes` or
+ * `denied`, or a call the call flow refused before its tool ran (its input, or a budget as it entered the tool). A
+ * refusal the error does not name, or after which another call reached the host, was caught: the run did not stop there.
  */
 function stoppedAtOf(
   status: CodeCallRunStatus,
@@ -40,9 +40,9 @@ function stoppedAtOf(
   if (status === 'needs_approval') return entries.find((entry) => entry.decision?.decision === status);
   const refusedThere = (entry: CodeCallJournalEntry): boolean => {
     const callIndex = entry.position - 1;
+    if (!replay.endedWithCallAt(callIndex)) return false;
     if (DECISION_STATUSES.has(status)) return entry.decision?.decision === status;
-    if (!FAILURE_STATUSES.has(status) || entry.decision) return false;
-    return replay.refusedBeforeToolAt(callIndex) && replay.endedWithCallAt(callIndex);
+    return FAILURE_STATUSES.has(status) && !entry.decision && replay.refusedBeforeToolAt(callIndex);
   };
   return entries.find((entry) => refusedThere(entry) && replay.releasedLast(entry.position - 1));
 }
