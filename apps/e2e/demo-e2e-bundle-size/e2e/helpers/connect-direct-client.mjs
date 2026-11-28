@@ -2,8 +2,7 @@
 import { registerHooks } from 'node:module';
 import { pathToFileURL } from 'node:url';
 
-const CLIENT_MODULE =
-  /\/@modelcontextprotocol\/sdk\/dist\/(esm|cjs)\/client\/|\/protocol\/dist\/(esm\/)?(clients?|lazy-client)\.m?js$/;
+const CLIENT_MODULE = /\/@modelcontextprotocol\/client\/dist\/|\/protocol\/dist\/(esm\/)?(clients?|lazy-client)\.m?js$/;
 const loadedClientModules = [];
 registerHooks({
   load(url, context, nextLoad) {

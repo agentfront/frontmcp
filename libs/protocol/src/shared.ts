@@ -1,2 +1,2 @@
-export type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
-export type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
+export type { Transport } from '@modelcontextprotocol/server';
+export type { RequestHandlerExtra } from './compat-types';

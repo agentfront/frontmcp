@@ -1,1 +1,1 @@
-export { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+export { InMemoryTransport } from '@modelcontextprotocol/server';

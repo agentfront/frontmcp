@@ -2,11 +2,10 @@
 Object.defineProperties(exports, {
   StreamableHTTPServerTransport: {
     enumerable: true,
-    get: () => require('@modelcontextprotocol/sdk/server/streamableHttp.js').StreamableHTTPServerTransport,
+    get: () => require('@modelcontextprotocol/node').NodeStreamableHTTPServerTransport,
   },
   WebStandardStreamableHTTPServerTransport: {
     enumerable: true,
-    get: () =>
-      require('@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js').WebStandardStreamableHTTPServerTransport,
+    get: () => require('@modelcontextprotocol/server').WebStandardStreamableHTTPServerTransport,
   },
 });

@@ -4,7 +4,8 @@ const CLIENT_EXPORTS = [
   'SSEClientTransport',
   'StdioClientTransport',
 ] as const;
-const MCP_CLIENT_MODULE = '@modelcontextprotocol/sdk/client/index.js';
+// The compat Client, which loads `@modelcontextprotocol/client`
+const MCP_CLIENT_MODULE = '../compat-client';
 
 describe('lazy-client', () => {
   afterEach(() => {

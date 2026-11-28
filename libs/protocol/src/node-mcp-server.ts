@@ -1,2 +1,2 @@
-export { Server, type ServerOptions } from '@modelcontextprotocol/sdk/server/index.js';
-export { AjvJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/ajv-provider.js';
+export { Server, type ServerOptions } from './compat-server';
+export { AjvJsonSchemaValidator } from '@modelcontextprotocol/server/validators/ajv';

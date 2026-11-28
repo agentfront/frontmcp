@@ -2,15 +2,15 @@
 Object.defineProperties(exports, {
   Client: {
     enumerable: true,
-    get: () => require('@modelcontextprotocol/sdk/client/index.js').Client,
+    get: () => require('./compat-client').Client,
   },
   StreamableHTTPClientTransport: {
     enumerable: true,
-    get: () => require('@modelcontextprotocol/sdk/client/streamableHttp.js').StreamableHTTPClientTransport,
+    get: () => require('./compat-client').StreamableHTTPClientTransport,
   },
   SSEClientTransport: {
     enumerable: true,
-    get: () => require('@modelcontextprotocol/sdk/client/sse.js').SSEClientTransport,
+    get: () => require('@modelcontextprotocol/client').SSEClientTransport,
   },
   StdioClientTransport: {
     enumerable: true,

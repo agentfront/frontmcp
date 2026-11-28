@@ -40,8 +40,7 @@ const VITE_INITIAL_CHUNK_MAX_BYTES = 791_117;
 // What create() never needs: the parser behind @enclave-vm/ast (#885), the MCP client (#886) and server-only code
 const NEVER_BUNDLED: Record<string, RegExp> = {
   'JavaScript parser': /(^|\/)node_modules\/(acorn|acorn-walk|astring)\//,
-  'MCP client':
-    /(^|\/)node_modules\/@modelcontextprotocol\/sdk\/dist\/esm\/client\/|^libs\/protocol\/dist\/esm\/clients?\.mjs$/,
+  'MCP client': /(^|\/)node_modules\/@modelcontextprotocol\/client\/|^libs\/protocol\/dist\/esm\/clients?\.mjs$/,
   'single-file utils and auth': /^libs\/(utils|auth)\/dist\/(esm\/index\.mjs|index\.js)$/,
   'CLI task runner':
     /^libs\/sdk\/dist\/browser\/task\/helpers\/cli-task-runner\.mjs$|^libs\/utils\/dist\/browser\/process\/(owned-process|child-process)\.mjs$/,

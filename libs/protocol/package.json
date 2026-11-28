@@ -26,7 +26,10 @@
     "node": ">=24.0.0"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.32.1"
+    "@modelcontextprotocol/client": "2.4.0",
+    "@modelcontextprotocol/core": "2.4.0",
+    "@modelcontextprotocol/node": "2.1.2",
+    "@modelcontextprotocol/server": "2.4.0"
   },
   "peerDependencies": {
     "@frontmcp/lazy-zod": "1.13.2"
@@ -37,26 +40,31 @@
       "workerd": "./src/node-mcp-streamable-http.ts",
       "browser": "./src/browser-mcp-streamable-http.ts",
       "require": "./src/lazy-mcp-streamable-http.ts",
+      "import": "./src/node-mcp-streamable-http.ts",
       "default": "./src/node-mcp-streamable-http.ts"
     },
     "#mcp-server": {
       "workerd": "./src/node-mcp-server.ts",
       "browser": "./src/browser-mcp-server.ts",
+      "import": "./src/node-mcp-server.ts",
       "default": "./src/node-mcp-server.ts"
     },
     "#server-types": {
       "workerd": "./src/node-server-types.ts",
       "browser": "./src/browser-server-types.ts",
+      "import": "./src/node-server-types.ts",
       "default": "./src/node-server-types.ts"
     },
     "#stdio-client": {
       "worker": "./src/browser-stdio-client.ts",
       "browser": "./src/browser-stdio-client.ts",
+      "import": "./src/node-stdio-client.ts",
       "default": "./src/node-stdio-client.ts"
     },
     "#stdio-server": {
       "worker": "./src/browser-stdio-server.ts",
       "browser": "./src/browser-stdio-server.ts",
+      "import": "./src/node-stdio-server.ts",
       "default": "./src/node-stdio-server.ts"
     },
     "#client": {
