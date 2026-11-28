@@ -1359,7 +1359,7 @@ With `observability.stalls` on, a stall names the `@HttpRoute` requests (`http G
 
 **Codemod available:** no
 
-## BC-065: 1.14: runShared() serves the config's HTTP routes and people pages, and its fallback listens
+## BC-063: 1.14: runShared() serves the config's HTTP routes and people pages, and its fallback listens
 
 **Package:** `@frontmcp/sdk` | **Category:** change | **Severity:** low
 

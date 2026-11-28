@@ -660,7 +660,7 @@
     "codemod": "no"
   },
   {
-    "id": "BC-065",
+    "id": "BC-063",
     "title": "1.14: runShared() serves the config's HTTP routes and people pages, and its fallback listens",
     "package": "@frontmcp/sdk",
     "category": "change",
