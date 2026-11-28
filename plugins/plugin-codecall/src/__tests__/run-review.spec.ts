@@ -3,7 +3,7 @@ import { analyzeScript, type PreReviewInput, type ReviewDecision, type ReviewRec
 import { codeCallReviewRulesSchema } from '../codecall.types';
 import { ReviewApprovals, type ApprovalServiceView } from '../review/review-approvals';
 import { ReviewRules } from '../review/review-rules';
-import { reviewOutcomeOf, RunReview, type CodeCallPreReviewer } from '../review/run-review';
+import { refusalsEndedWith, reviewOutcomeOf, RunReview, type CodeCallPreReviewer } from '../review/run-review';
 
 function record(overrides: Partial<ReviewRecord>): ReviewRecord {
   return { phase: 'script', decision: 'allow', durationMs: 1, ...overrides };
@@ -125,6 +125,34 @@ describe('reviewOutcomeOf', () => {
     expect(reviewOutcomeOf(decisions, { name: 'Error', message: '1 of 4 parallel operations failed:\nboom' })).toBe(
       undefined,
     );
+  });
+});
+
+describe('refusalsEndedWith', () => {
+  const refusals = [
+    record({ phase: 'call', toolName: 'orders.void', callIndex: 3, decision: 'denied', reason: 'no' }),
+    record({ phase: 'call', toolName: 'orders.void', callIndex: 1, decision: 'denied', reason: 'not allowed' }),
+  ];
+
+  it('names only the refusals whose whole message the error carries, in call order', () => {
+    const listed = '2 of 4 parallel operations failed:\nReview denied the call to orders.void: not allowed\nboom';
+
+    expect(refusalsEndedWith(refusals, { name: 'Error', message: listed }).map((r) => r.callIndex)).toEqual([1]);
+    expect(
+      refusalsEndedWith(refusals, { name: 'ReviewError', message: 'Review denied the call to orders.void: no' }).map(
+        (r) => r.callIndex,
+      ),
+    ).toEqual([3]);
+  });
+
+  it('names none for a ReviewError whose message is no refusal of the run, or any other error', () => {
+    expect(refusalsEndedWith(refusals, { name: 'ReviewError', message: 'Review denied the call to x: no' })).toEqual(
+      [],
+    );
+    expect(
+      refusalsEndedWith(refusals, { name: 'Error', message: 'Review denied the call to orders.void: no' }),
+    ).toEqual([]);
+    expect(refusalsEndedWith(refusals)).toEqual([]);
   });
 });
 

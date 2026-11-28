@@ -11,6 +11,7 @@ import { createPublicToolCallError, TOOL_CALL_ERROR_CODES } from '../errors';
 import { isKeptValueCall } from '../kept-values/kept-value-script';
 import type CodeCallConfig from '../providers/code-call.config';
 import { extractionThresholdOf, MAX_ITERATIONS_PER_LOOP } from '../providers/code-call.config';
+import { refusalsEndedWith } from '../review/run-review';
 import { isRefusedBeforeTool } from '../runs/call-stage';
 import { RunJournal } from '../runs/run-journal';
 import { callOrReplay, journaledReviewHooks, replayedEnvironment, type RunReplay } from '../runs/run-replay';
@@ -106,6 +107,11 @@ function callsEndedWith(result: CodeCallRunResult, toolFailures: readonly ToolFa
   const listed = thrown.length > 0 ? undefined : parallelFailuresOf(reported.message);
   const ended = listed ? toolFailures.filter((failure) => listed(failure.message)) : thrown;
   return ended.flatMap((failure) => (failure.callIndex === undefined ? [] : [failure.callIndex]));
+}
+
+/** A review record's call position, as a list: none for a record of the script. */
+function callIndexOf(record: { callIndex?: number }): number[] {
+  return record.callIndex === undefined ? [] : [record.callIndex];
 }
 
 /** The message the sandbox gives a script for an error the tool handler threw (as its tool bridge reads it). */
@@ -482,6 +488,7 @@ export default class EnclaveService {
       // The calls still running in their tools: a refusal held while they settle is not one (see `releaseRefusal`).
       const pendingToolCalls = journal.running();
       replay?.endedWith(callsEndedWith(result, toolFailures));
+      replay?.endedWith(refusalsEndedWith(result.review?.decisions ?? [], result.error).flatMap(callIndexOf));
       const mapped = this.mapEnclaveResult(result, logs, toolFailures, script, pendingToolCalls);
       const ended = replay ? replayEndOf(replay, result, mapped, runner.reportsRefusals === true) : mapped;
       return result.review ? { ...ended, review: result.review } : ended;

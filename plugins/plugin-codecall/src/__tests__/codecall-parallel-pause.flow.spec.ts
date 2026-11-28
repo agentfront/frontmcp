@@ -357,6 +357,34 @@ describe.each<CodeCallVmRuntime>(['node-vm', 'interpreter'])(
       expect(['o1', 'o2', 'o3', 'o4', 'o5'].map((id) => ran('orders.refund', id))).toEqual([1, 1, 1, 1, 1]);
     });
 
+    it('pauses at the refused call the script did not catch, not at one beside it that it caught', async () => {
+      const client = await open(reviewed(), `caught-${runtime}`);
+      const script =
+        "const wrong = { o2: 'twelve', o4: 4 };\n" +
+        "return await parallel(['o1', 'o2', 'o3', 'o4'], async (id) => {\n" +
+        "  if (id === 'o2') {\n" +
+        '    try {\n' +
+        "      return await callTool('orders.refund', { id, cents: wrong[id] });\n" +
+        '    } catch (error) {\n' +
+        "      return 'caught';\n" +
+        '    }\n' +
+        '  }\n' +
+        "  return await callTool('orders.note', { id: id === 'o4' ? wrong[id] : id });\n" +
+        '});';
+
+      const paused = await call(client, 'codecall:execute', { script });
+
+      expect(paused).toMatchObject({ status: 'needs_changes', paused: { call: { position: 4, tool: 'orders.note' } } });
+      const resumed = await call(client, 'codecall:resume', { runId: paused.runId, arguments: { id: 'o4' } });
+
+      expect(resumed).toMatchObject({
+        status: 'ok',
+        result: [{ noted: 'o1' }, 'caught', { noted: 'o3' }, { noted: 'o4' }],
+      });
+      expect(['o1', 'o3', 'o4'].map((id) => ran('orders.note', id))).toEqual([1, 1, 1]);
+      expect(ran('orders.refund')).toBe(0);
+    });
+
     it('does not pause when a call beside it outlives the script timeout, and never runs the paused call', async () => {
       const client = await open(reviewed({ vm: { ...vm, timeoutMs: 600 } }), `timeout-${runtime}`);
       const script =

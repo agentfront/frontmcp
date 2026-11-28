@@ -366,16 +366,28 @@ describe('pausing inside a parallel()', () => {
     expect(resumeSourceOf(journal, pending).journal.map((entry) => entry.position)).toEqual([4]);
   });
 
-  it('pauses at an uncaught refusal the script got last, not at one it caught and went on from', () => {
+  it('pauses at the refusal the run ended with, not at one the script caught and went on from', () => {
     const journal = journalWithReplay();
     journal.replay?.decisionOf(0, 'orders.note', {});
     journal.refuse('orders.note', {}, 0, DENIAL);
     journal.replay?.decisionOf(1, 'orders.get', {});
     journal.begin('orders.get', {}, 1).succeed({ id: 'o1' });
-    for (const index of [2, 3]) journal.replay?.decisionOf(index, 'orders.void', { index });
-    journal.refuse('orders.void', { index: 2 }, 2, DENIAL);
-    journal.refuse('orders.void', { index: 3 }, 3, DENIAL);
+    journal.replay?.decisionOf(2, 'orders.void', {});
+    journal.refuse('orders.void', {}, 2, DENIAL);
+    journal.replay?.endedWith([0, 2]);
 
+    expect(pendingCallOf('denied', journal)).toMatchObject({ position: 3 });
+  });
+
+  it('pauses at the second of two refusals a parallel() got at once when the script caught the first', () => {
+    const journal = journalWithReplay();
+    for (const index of [0, 1, 2]) journal.replay?.decisionOf(index, 'orders.void', { index });
+    journal.begin('orders.void', { index: 0 }, 0).succeed({ voided: 0 });
+    journal.refuse('orders.void', { index: 1 }, 1, DENIAL);
+    journal.refuse('orders.void', { index: 2 }, 2, DENIAL);
+
+    expect(pendingCallOf('denied', journal)).toBeUndefined();
+    journal.replay?.endedWith([2]);
     expect(pendingCallOf('denied', journal)).toMatchObject({ position: 3 });
   });
 
@@ -385,6 +397,7 @@ describe('pausing inside a parallel()', () => {
     journal.refuse('orders.void', {}, 0, DENIAL);
     journal.replay?.decisionOf(1, 'orders.get', {});
     journal.begin('orders.get', {}, 1).succeed({});
+    journal.replay?.endedWith([0]);
 
     expect(pendingCallOf('denied', journal)).toBeUndefined();
   });
