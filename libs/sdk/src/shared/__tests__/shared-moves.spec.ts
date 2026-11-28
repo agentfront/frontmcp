@@ -12,7 +12,7 @@ import { PassThrough } from 'node:stream';
 import { mkdtemp, readFile, rm, writeFile } from '@frontmcp/utils';
 
 import { callTool, clientOf, initialize, structuredOf } from '../../__test-utils__/helpers/shared-session-client';
-import { App, LogLevel, Tool, ToolContext, type FrontMcpConfigInput } from '../../common';
+import { App, FlowHooksOf, LogLevel, Tool, ToolContext, type FrontMcpConfigInput } from '../../common';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import {
   attachSharedSession,
@@ -21,7 +21,7 @@ import {
   type AttachSharedSessionOptions,
   type SharedSession,
 } from '../shared-attach';
-import { bootEmbeddedServer } from '../shared-embedded';
+import { bootEmbeddedServer, type BootedEmbeddedServer } from '../shared-embedded';
 import { serveShared, type SharedServerHandle } from '../shared-serve';
 import { parseSharedServerOptions, type ResolvedSharedServerOptions } from '../shared-server.options';
 
@@ -48,11 +48,27 @@ function labelledApp(label: string) {
   return LabelledApp;
 }
 
-function configOf(label: string): FrontMcpConfigInput {
+const { Will } = FlowHooksOf('http:request');
+
+/** The JSON-RPC methods a server was sent; it holds an `initialize` until `initializeGate` opens. */
+class RequestLog {
+  readonly methods: string[] = [];
+  initializeGate: Promise<void> = Promise.resolve();
+
+  @Will('traceRequest')
+  async watch(run: { rawInput: { request?: { body?: { method?: string } } } }): Promise<void> {
+    const method = String(run.rawInput.request?.body?.method);
+    this.methods.push(method);
+    if (method === 'initialize') await this.initializeGate;
+  }
+}
+
+function configOf(label: string, extra: Partial<FrontMcpConfigInput> = {}): FrontMcpConfigInput {
   return {
     info: { name: 'moves-spec', version: '1.0.0' },
     apps: [labelledApp(label)],
     logging: { level: LogLevel.Off, enableConsole: false },
+    ...extra,
   };
 }
 
@@ -101,9 +117,14 @@ posixOnly('a shared session that moves to another key', () => {
     return parseSharedServerOptions({ key, transport, idleTimeoutMs: false, checkout: false });
   }
 
-  async function serve(transport: 'unix' | 'http', key: string, label = key): Promise<SharedServerHandle> {
+  async function serve(
+    transport: 'unix' | 'http',
+    key: string,
+    label = key,
+    extra: Partial<FrontMcpConfigInput> = {},
+  ): Promise<SharedServerHandle> {
     const server = await serveShared({
-      config: configOf(label),
+      config: configOf(label, extra),
       options: optionsFor(transport, key),
       create,
       exit: jest.fn(),
@@ -281,6 +302,74 @@ posixOnly('a shared session that moves to another key', () => {
     expect(await whoami(client, 3)).toBe('one');
     expect(stderrLines().some((line) => line.includes('moving back to the shared server "one"'))).toBe(true);
     expect(stderrLines().some((line) => line.includes('in this process'))).toBe(false);
+  });
+
+  it("sends the new server the client's initialized, when the client sends it while the session moves", async () => {
+    await serve('unix', 'one');
+    const log = new RequestLog();
+    let openInitialize: () => void = () => undefined;
+    log.initializeGate = new Promise((resolve) => (openInitialize = resolve));
+    await serve('unix', 'two', 'two', { providers: [{ name: 'request-log', provide: RequestLog, useValue: log }] });
+    const client = attach('unix');
+    await client.request(initialize);
+
+    // The move replays the handshake on two, which holds it; the client finishes its own meanwhile
+    await writeKey('two');
+    await waitFor(() => log.methods.includes('initialize'), 'the replay to reach two');
+    client.send({ jsonrpc: '2.0', method: 'notifications/initialized' });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    openInitialize();
+    await waitFor(moved('two'), 'the move');
+
+    expect(await whoami(client, 2)).toBe('two');
+    // A request with no body (the notification stream's GET) has no method
+    expect(log.methods.filter((method) => method !== 'undefined')).toEqual([
+      'initialize',
+      'notifications/initialized',
+      'tools/call',
+    ]);
+  });
+
+  it('logs, and goes on, when the server it moved from fails to shut down', async () => {
+    const booted: BootedEmbeddedServer[] = [];
+    const client = attach('unix', {
+      spawnServer: () => ({ exitReason: 'no server is started in this spec' }),
+      bootEmbedded: async (key) => {
+        const real = await bootEmbeddedServer(configOf(`embedded-${key}`), optionsFor('unix', key), create);
+        let failed = false;
+        const own: BootedEmbeddedServer = {
+          start: async () => {
+            const started = await real.start();
+            return {
+              ...started,
+              close: async () => {
+                await started.close();
+                if (failed) return;
+                failed = true;
+                throw new Error('the shutdown failed');
+              },
+            };
+          },
+          close: () => real.close(),
+        };
+        booted.push(own);
+        return own;
+      },
+    });
+    await client.request(initialize);
+    expect(await whoami(client, 2)).toBe('embedded-one');
+    await serve('unix', 'two');
+
+    await writeKey('two');
+    await waitFor(moved('two'), 'the move');
+    await waitFor(
+      () => stderrLines().some((line) => line.includes('the server the session moved from did not let it go')),
+      'the warning',
+    );
+
+    expect(stderrLines().find((line) => line.includes('did not let it go'))).toContain('the shutdown failed');
+    expect(await whoami(client, 3)).toBe('two');
+    expect(booted).toHaveLength(1);
   });
 
   it('may start only its first key, with its own entry, and the keys its entries name', () => {
