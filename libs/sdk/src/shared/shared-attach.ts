@@ -248,6 +248,7 @@ export function attachSharedSession(options: AttachSharedSessionOptions): Shared
       await sent;
     } finally {
       inFlight.delete(sent);
+      if (inFlight.size === 0 && sending.get(server) === inFlight) sending.delete(server);
     }
   }
 
@@ -348,7 +349,11 @@ export function attachSharedSession(options: AttachSharedSessionOptions): Shared
       stay(`the server of key "${key}" did not take the session (${messageOf(error)})`);
       return;
     }
-    if (moved) void leave(from, left);
+    if (moved) {
+      void leave(from, left).catch((error: unknown) =>
+        log.warn('the server the session moved from did not let it go', { error: messageOf(error) }),
+      );
+    }
   }
 
   /** Let a server the session moved from finish its requests in flight, then end the session there. */
