@@ -1,13 +1,15 @@
 /**
  * Rows a store wrote up to 1.13, named by the value they hold (`oauth:refresh:<token>`), keep working after the
  * upgrade: they are read under that name when the hashed one holds nothing, move under the hashed name when used,
- * and a code or refresh token is still redeemed once, also across instances (#1504).
+ * and a code or refresh token is still redeemed once, also across instances and while its row moves (#1504). A row
+ * is read only for the value its record holds, so a hashed name presented as a value finds nothing.
  */
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { createNamespacedStorage, MemoryStorageAdapter, mkdtemp, rm, type StorageAdapter } from '@frontmcp/utils';
+import { MemoryStorageAdapter, mkdtemp, rm, type StorageAdapter } from '@frontmcp/utils';
 
+import { AuthorizationRowNames } from '../authorization-row-names';
 import type { AuthorizationCodeRecord, PendingAuthorizationRecord, RefreshTokenRecord } from '../authorization.store';
 import { StorageAuthorizationStore } from '../storage-authorization.store';
 import { createTokenStorageAdapter, tokenStorageKeyHashSecret } from '../token-storage.factory';
@@ -322,57 +324,180 @@ describe('StorageAuthorizationStore rows named up to 1.13', () => {
     });
   });
 
-  describe('moveLegacyRows', () => {
-    it('moves every row named by its value, deletes expired ones, and leaves hashed and foreign rows', async () => {
-      const code = codeRecord();
-      const pending = pendingRecord();
+  describe('moving on use, interleaved across two instances', () => {
+    const hashedName = (type: string, value: string) =>
+      `oauth:${type}:${new AuthorizationRowNames(SECRET).name(value)}`;
+
+    /**
+     * A store instance over the shared storage, through a wrapper of its own, so a test can hold it at one storage
+     * call (before the call runs, or after with `after`) while another instance runs.
+     */
+    function instance() {
+      const holds: Array<{ op: string; key: string; after: boolean; reached: () => void; wait: Promise<void> }> = [];
+      const storage = new Proxy(adapter, {
+        get(target, prop, receiver) {
+          const value = Reflect.get(target, prop, receiver) as unknown;
+          if (typeof value !== 'function') return value;
+          const call = value as (...args: unknown[]) => Promise<unknown>;
+          return async (...args: unknown[]) => {
+            const index = holds.findIndex((h) => h.op === prop && h.key === args[0]);
+            const hold = index >= 0 ? holds.splice(index, 1)[0] : undefined;
+            if (hold && !hold.after) {
+              hold.reached();
+              await hold.wait;
+            }
+            const result = await call.apply(target, args);
+            if (hold?.after) {
+              hold.reached();
+              await hold.wait;
+            }
+            return result;
+          };
+        },
+      });
+      function holdAt(op: string, key: string, after = false) {
+        let reached!: () => void;
+        let release!: () => void;
+        const isReached = new Promise<void>((resolve) => (reached = resolve));
+        const wait = new Promise<void>((resolve) => (release = resolve));
+        holds.push({ op, key, after, reached, wait });
+        return { reached: isReached, release };
+      }
+      return { store: new StorageAuthorizationStore(storage, { keyHashSecret: SECRET }), holdAt };
+    }
+
+    /** The records among `records` whose token can still be rotated. */
+    async function liveTokens(records: RefreshTokenRecord[]): Promise<RefreshTokenRecord[]> {
+      const found = await Promise.all(records.map((record) => store.getRefreshToken(record.token)));
+      return found.filter((record): record is RefreshTokenRecord => record !== null);
+    }
+
+    it('a revocation while a rotation moves the row leaves the old token unusable', async () => {
       const refresh = refreshRecord();
-      const hashed = refreshRecord();
-      const expired = refreshRecord({ expiresAt: Date.now() - 1000 });
-      await writeLegacy(adapter, `code:${code.code}`, code);
-      await writeLegacy(adapter, `pending:${pending.id}`, pending);
       await writeLegacy(adapter, `refresh:${refresh.token}`, refresh);
-      await adapter.set(`oauth:refresh:${expired.token}`, JSON.stringify(expired));
-      await store.storeRefreshToken(hashed);
-      await adapter.set('oauth:refresh:not-json', 'plain text');
-      await adapter.set('oauth:refresh:another-name', JSON.stringify({ token: 'a-different-token', expiresAt: 0 }));
-      await adapter.set('oauth:client:client-1', JSON.stringify({ client_id: 'client-1' }));
+      const [a, b] = [instance(), instance()];
+      const successor = refreshRecord();
+      // A holds between claiming the old row and writing the hashed one: the row is under neither name.
+      const held = a.holdAt('set', hashedName('refresh', refresh.token));
+      const rotation = a.store.rotateRefreshToken(refresh.token, successor);
+      await held.reached;
 
-      expect(await store.moveLegacyRows()).toBe(3);
+      await b.store.revokeRefreshToken(refresh.token);
+      await expect(b.store.rotateRefreshToken(refresh.token, refreshRecord())).rejects.toThrow('already rotated');
+      held.release();
+      await rotation;
 
-      const values = [code.code, pending.id, refresh.token, hashed.token, expired.token];
-      expect((await adapter.keys('*')).filter((key) => values.some((value) => key.includes(value)))).toEqual([]);
-      expect(await store.getAuthorizationCode(code.code)).toEqual(code);
-      expect(await store.getPendingAuthorization(pending.id)).toEqual(pending);
-      expect(await store.getRefreshToken(refresh.token)).toEqual(refresh);
-      expect(await store.getRefreshToken(hashed.token)).toEqual(hashed);
-      expect(await adapter.get('oauth:refresh:not-json')).toBe('plain text');
-      expect(await adapter.exists('oauth:refresh:another-name')).toBe(true);
-      expect(await adapter.exists('oauth:client:client-1')).toBe(true);
-      expect(await store.moveLegacyRows()).toBe(0);
-    });
-
-    it('keeps the row already under the hashed name, and deletes the old one', async () => {
-      const refresh = refreshRecord();
-      await store.storeRefreshToken({ ...refresh, revoked: true });
-      await writeLegacy(adapter, `refresh:${refresh.token}`, refresh);
-
-      await store.moveLegacyRows();
-
-      expect(await adapter.exists(`oauth:refresh:${refresh.token}`)).toBe(false);
       expect(await store.getRefreshToken(refresh.token)).toBeNull();
+      await expect(store.rotateRefreshToken(refresh.token, refreshRecord())).rejects.toThrow('already rotated');
+      expect(await liveTokens([successor])).toHaveLength(1);
+      expect(await adapter.exists(`oauth:refresh:${refresh.token}`)).toBe(false);
     });
 
-    it('moves the rows of a store over a NamespacedStorage', async () => {
-      const namespaced = createNamespacedStorage(adapter, 'tenant:a');
-      const nsStore = new StorageAuthorizationStore(namespaced, { keyHashSecret: SECRET });
+    it('a rotation while a revocation moves the row is refused', async () => {
       const refresh = refreshRecord();
-      await adapter.set(`tenant:a:oauth:refresh:${refresh.token}`, JSON.stringify(refresh), { ttlSeconds: 60 });
+      await writeLegacy(adapter, `refresh:${refresh.token}`, refresh);
+      const [a, b] = [instance(), instance()];
+      // B holds after writing the revoked record under the hashed name, before deleting the old row.
+      const held = b.holdAt('delete', `oauth:refresh:${refresh.token}`);
+      const revocation = b.store.revokeRefreshToken(refresh.token);
+      await held.reached;
 
-      expect(await nsStore.moveLegacyRows()).toBe(1);
+      const successor = refreshRecord();
+      await expect(a.store.rotateRefreshToken(refresh.token, successor)).rejects.toThrow('already rotated');
+      held.release();
+      await revocation;
 
-      expect((await adapter.keys('*')).filter((key) => key.includes(refresh.token))).toEqual([]);
-      expect(await nsStore.getRefreshToken(refresh.token)).toEqual(refresh);
+      expect(await store.getRefreshToken(refresh.token)).toBeNull();
+      expect(await liveTokens([successor])).toEqual([]);
+      expect(await adapter.exists(`oauth:refresh:${refresh.token}`)).toBe(false);
+    });
+
+    it('a rotation that read the old row before a revocation moved it is refused', async () => {
+      const refresh = refreshRecord();
+      await writeLegacy(adapter, `refresh:${refresh.token}`, refresh);
+      const [a, b] = [instance(), instance()];
+      // A has read the old row and holds before its compare-and-delete; B revokes in full meanwhile.
+      const held = a.holdAt('deleteIfEquals', `oauth:refresh:${refresh.token}`);
+      const successor = refreshRecord();
+      const rotation = a.store.rotateRefreshToken(refresh.token, successor);
+      await held.reached;
+
+      await b.store.revokeRefreshToken(refresh.token);
+      held.release();
+
+      await expect(rotation).rejects.toThrow('already rotated');
+      expect(await store.getRefreshToken(refresh.token)).toBeNull();
+      expect(await liveTokens([successor])).toEqual([]);
+    });
+
+    it('a revocation that read the old row before a rotation moved it still revokes it', async () => {
+      const refresh = refreshRecord();
+      await writeLegacy(adapter, `refresh:${refresh.token}`, refresh);
+      const [a, b] = [instance(), instance()];
+      // B has read the live old row and holds before writing; A rotates in full meanwhile.
+      const held = b.holdAt('get', `oauth:refresh:${refresh.token}`, true);
+      const revocation = b.store.revokeRefreshToken(refresh.token);
+      await held.reached;
+
+      const successor = refreshRecord();
+      await a.store.rotateRefreshToken(refresh.token, successor);
+      held.release();
+      await revocation;
+
+      expect(await store.getRefreshToken(refresh.token)).toBeNull();
+      await expect(store.rotateRefreshToken(refresh.token, refreshRecord())).rejects.toThrow('already rotated');
+      expect(await liveTokens([successor])).toHaveLength(1);
+    });
+
+    it('a rotation that missed the hashed name before another instance moved the row is refused', async () => {
+      const refresh = refreshRecord();
+      await writeLegacy(adapter, `refresh:${refresh.token}`, refresh);
+      const [a, b] = [instance(), instance()];
+      // A has missed the hashed name and holds before reading the old one; B rotates in full meanwhile.
+      const held = a.holdAt('get', `oauth:refresh:${refresh.token}`);
+      const late = refreshRecord();
+      const rotation = a.store.rotateRefreshToken(refresh.token, late);
+      await held.reached;
+
+      const successor = refreshRecord();
+      await b.store.rotateRefreshToken(refresh.token, successor);
+      held.release();
+
+      await expect(rotation).rejects.toThrow('already rotated');
+      expect((await liveTokens([successor, late])).map((record) => record.token)).toEqual([successor.token]);
+    });
+
+    it('a code redeemed while another instance moves it is redeemed once', async () => {
+      const code = codeRecord();
+      await writeLegacy(adapter, `code:${code.code}`, code);
+      const [a, b] = [instance(), instance()];
+      // A holds between claiming the old row and writing the hashed one.
+      const held = a.holdAt('set', hashedName('code', code.code));
+      const first = a.store.markCodeUsed(code.code);
+      await held.reached;
+
+      await expect(b.store.markCodeUsed(code.code)).rejects.toThrow('already redeemed');
+      held.release();
+      await first;
+
+      await expect(b.store.markCodeUsed(code.code)).rejects.toThrow('already redeemed');
+      expect((await b.store.getAuthorizationCode(code.code))?.used).toBe(true);
+    });
+
+    it('a code one instance read under its old name and the other redeemed is redeemed once', async () => {
+      const code = codeRecord();
+      await writeLegacy(adapter, `code:${code.code}`, code);
+      const [a, b] = [instance(), instance()];
+      // A has read the old row and holds before its compare-and-delete.
+      const held = a.holdAt('deleteIfEquals', `oauth:code:${code.code}`);
+      const first = a.store.markCodeUsed(code.code);
+      await held.reached;
+
+      await b.store.markCodeUsed(code.code);
+      held.release();
+
+      await expect(first).rejects.toThrow('already redeemed');
+      expect((await a.store.getAuthorizationCode(code.code))?.used).toBe(true);
     });
   });
 

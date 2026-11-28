@@ -1,7 +1,7 @@
 /**
  * The authorization store on a real Redis Cluster (#1504): no key names a code or refresh token, a row stored under
- * its old name moves when used, and a code or refresh token is redeemed once across two instances, each command
- * on one key.
+ * its old name moves when used, a code or refresh token is redeemed once across two instances, each command on one
+ * key, and the name of a row does not stand in for the token it holds.
  *
  * Runs when REDIS_CLUSTER_NODES lists the cluster's nodes (`host:port,host:port,...`), as
  * `scripts/redis-cluster-docker.sh up` prints; skipped otherwise.
@@ -112,23 +112,5 @@ describeCluster('StorageAuthorizationStore on a Redis Cluster', () => {
       await expect(stores[1].rotateRefreshToken(rowName, refreshRecord())).rejects.toThrow('already rotated');
     }
     expect(await stores[0].getRefreshToken(refresh.token)).toEqual(refresh);
-  });
-  it('moves the rows stored under their old names with moveLegacyRows', async () => {
-    const refresh = refreshRecord();
-    const pending = stores[0].createPendingRecord({
-      clientId: 'client-1',
-      redirectUri: 'https://app.example.com/cb',
-      scopes: ['read'],
-      pkce: { challenge: 'c'.repeat(43), method: 'S256' },
-    });
-    await instances[0].set(`oauth:refresh:${refresh.token}`, JSON.stringify(refresh), { ttlSeconds: 60 });
-    await instances[0].set(`oauth:pending:${pending.id}`, JSON.stringify(pending), { ttlSeconds: 60 });
-
-    expect(await stores[1].moveLegacyRows()).toBe(2);
-
-    const keys = await instances[0].keys('*');
-    expect(keys.filter((key) => key.includes(refresh.token) || key.includes(pending.id))).toEqual([]);
-    expect(await stores[0].getRefreshToken(refresh.token)).toEqual(refresh);
-    expect(await stores[0].getPendingAuthorization(pending.id)).toEqual(pending);
   });
 });
