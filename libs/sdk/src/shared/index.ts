@@ -6,7 +6,7 @@ import { exitOnShutdownSignals, STDIO_SHUTDOWN_DEADLINE_MS } from '../front-mcp/
 import { redirectConsoleToStderr } from '../front-mcp/stdio-console';
 import { SHARED_SERVE_ENV, SHARED_START_LOCK_ENV } from './ensure-shared-server';
 import { attachSharedSession } from './shared-attach';
-import { runEmbeddedServer } from './shared-embedded';
+import { bootEmbeddedServer } from './shared-embedded';
 import { isSharedVersion, MAX_SHARED_VERSION_LENGTH } from './shared-endpoint';
 import { serveShared, type SharedServerInstance } from './shared-serve';
 import { parseSharedServerOptions } from './shared-server.options';
@@ -53,7 +53,7 @@ export async function runShared(
     version,
     input: process.stdin,
     output: process.stdout,
-    embed: () => runEmbeddedServer(config, options.key, create),
+    bootEmbedded: () => bootEmbeddedServer(config, options, create),
   });
   exitOnShutdownSignals(() => session.stop(), {
     deadlineMs: STDIO_SHUTDOWN_DEADLINE_MS,

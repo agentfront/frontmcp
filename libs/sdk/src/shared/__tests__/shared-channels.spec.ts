@@ -40,7 +40,7 @@ import {
   unsupportedProtocolVersionError,
 } from '../../transport/mcp-20260728';
 import { attachSharedSession, type AttachSharedSessionOptions, type SharedSession } from '../shared-attach';
-import { runEmbeddedServer } from '../shared-embedded';
+import { bootEmbeddedServer } from '../shared-embedded';
 import { readServerRecord, sharedServerFiles, writeServerRecord, type SharedServerRecord } from '../shared-files';
 import { serveShared, type SharedServerHandle } from '../shared-serve';
 import { parseSharedServerOptions } from '../shared-server.options';
@@ -178,7 +178,7 @@ posixOnly('channels in a shared session', () => {
       version: '1.0.0',
       input,
       output,
-      embed: () => runEmbeddedServer(configOf('embedded'), 'spec', create),
+      bootEmbedded: () => bootEmbeddedServer(configOf('embedded'), options, create),
       spawnServer: (holder) => {
         if (!serves) throw new Error('no server should be started');
         void serve(transport, serves, holder);
@@ -418,15 +418,17 @@ posixOnly('channels in a shared session', () => {
     ]);
   });
 
-  it('declines the probe, but relays no channel event, when it runs the server itself: that server offers no stream', async () => {
+  it('declines the probe, and relays channel events, when it runs the server itself: on a listener of its own', async () => {
     const client = attach('unix', { attachBudgetMs: 200, spawnServer: () => ({ exitReason: undefined }) });
     client.send(DISCOVER_PROBE);
     await connectAsClaudeCode(client);
 
     expect(structuredOf(await client.request(announceBuild(2, '41')))).toEqual({ announced: '41' });
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await client.waitFor(({ method }) => method === CHANNEL_NOTIFICATION, 'channel event');
 
-    expect(channelEvents(client.received)).toEqual([]);
+    expect(channelEvents(client.received)).toEqual([
+      { content: 'Build 41 finished on embedded', meta: { build: '41', source: 'build-alerts' } },
+    ]);
   });
 });
 

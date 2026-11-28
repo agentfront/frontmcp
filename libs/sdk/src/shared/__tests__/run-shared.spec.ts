@@ -120,11 +120,12 @@ posixOnly('FrontMcpInstance.runShared', () => {
       replaceOlder: true,
       idleTimeoutMs: 600_000,
       checkout: path.dirname(process.argv[1] ?? ''),
+      spare: false,
       name: 'run-shared-spec',
       version: '1.0.0',
       input: process.stdin,
       output: process.stdout,
-      embed: expect.any(Function),
+      bootEmbedded: expect.any(Function),
     });
     const [[shutdown, options]] = jest.mocked(exitOnShutdownSignals).mock.calls;
     expect(options).toMatchObject({ whenOrphaned: { stdin: process.stdin } });

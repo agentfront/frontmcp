@@ -63,9 +63,14 @@ export function sharedServerFiles(key: string): SharedServerFiles {
   };
 }
 
+/** Whether the platform can listen on a socket at `socketPath`: a socket address holds at most 103 bytes of it. */
+export function socketPathFits(socketPath: string): boolean {
+  return new TextEncoder().encode(socketPath).length <= MAX_SOCKET_PATH_BYTES;
+}
+
 /** Refuse a socket path the platform can't listen on, which would otherwise fail with a bare `EINVAL`. */
 export function assertSocketPathFits(files: SharedServerFiles): void {
-  if (new TextEncoder().encode(files.socketPath).length <= MAX_SOCKET_PATH_BYTES) return;
+  if (socketPathFits(files.socketPath)) return;
   throw new InvalidSharedServerOptionsError(
     `transport: the socket path ${files.socketPath} is longer than ${MAX_SOCKET_PATH_BYTES} bytes; ` +
       "use a shorter key or FRONTMCP_HOME, or transport 'http'",
