@@ -39,8 +39,8 @@ takes the duty over once the lease runs out.
 
 ## Prerequisites
 
-- `@frontmcp/storage-sqlite` installed, where the leases live by default; it runs on `better-sqlite3`, or on Node's
-  `node:sqlite` without it (see `setup-sqlite`). A server with a top-level `redis` keeps them in Redis instead.
+- `@frontmcp/storage-sqlite` installed, where the leases live by default; it runs on Node's `node:sqlite`, or on
+  `better-sqlite3`, an optional peer, when it is installed (see `setup-sqlite`). A server with a top-level `redis` keeps them in Redis instead.
 - For `scope: 'cluster'`, a top-level `redis` (a Redis provider, not Vercel KV): the one lease every machine shares
   lives there. Without it the server refuses to start.
 - A distinctive server `info.name`: leases are per server name. Two servers with different names never share a lease;

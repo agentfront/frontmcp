@@ -3828,7 +3828,7 @@
               "level": "basic",
               "tags": ["setup", "sqlite", "session", "database", "local"],
               "features": [
-                "`@frontmcp/storage-sqlite`, which brings `better-sqlite3` as an optional dependency and runs on `node:sqlite` without it",
+                "`@frontmcp/storage-sqlite`, which runs on `node:sqlite`, or on `better-sqlite3` (an optional peer) when it is installed",
                 "`sqlite` config in `@FrontMcp` with `path` and `walMode`",
                 "WAL mode creates three files (`.sqlite`, `.sqlite-wal`, `.sqlite-shm`)",
                 "Tilde-prefixed paths for stable storage across working directories"
