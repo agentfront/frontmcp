@@ -18,7 +18,7 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset=".github/assets/readme/terminal.svg">
-  <img src=".github/assets/readme/terminal.light.svg" alt="npx frontmcp create my-app, then npm run dev: an MCP server running on localhost:3000" width="760">
+  <img src=".github/assets/readme/terminal.light.svg" alt="npx frontmcp create my-app, then cd my-app &amp;&amp; npm install and npm run dev: an MCP server running on localhost:3000" width="760">
 </picture>
 
 </div>
