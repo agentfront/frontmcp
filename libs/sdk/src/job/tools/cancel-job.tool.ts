@@ -7,9 +7,10 @@ import { jobExecutionManagerOf, mayAccessRun } from '../job-run-access';
 @Tool({
   name: 'cancel_job',
   description:
-    'Cancel a job run by runId. The cancel is kept in the job store, so the process running it stops it, and its cleanup runs.',
+    'Cancel a job or workflow run by runId. The cancel is kept in the job store, so the process running it stops it: ' +
+    "a job's cleanup runs, and a workflow starts no more steps.",
   inputSchema: {
-    runId: z.string().describe('Run ID returned from execute_job'),
+    runId: z.string().describe('Run ID returned from execute_job or execute_workflow'),
   },
   outputSchema: {
     runId: z.string(),

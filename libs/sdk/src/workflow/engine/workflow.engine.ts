@@ -36,6 +36,8 @@ export class WorkflowEngine {
   private readonly stepExecutor: WorkflowStepExecutor;
   private readonly logger: FrontMcpLogger;
   private readonly maxConcurrency: number;
+  /** The run's signal: once it aborts, no step starts, and the run ends with its reason. */
+  private readonly signal?: AbortSignal;
 
   constructor(
     metadata: WorkflowMetadata,
@@ -46,6 +48,7 @@ export class WorkflowEngine {
     this.metadata = metadata;
     this.logger = logger;
     this.maxConcurrency = metadata.maxConcurrency ?? 5;
+    this.signal = extra.signal;
     this.stepExecutor = new WorkflowStepExecutor(jobRegistry, logger, {
       ...extra,
       workflowName: extra.workflowName ?? metadata.name,
@@ -92,6 +95,8 @@ export class WorkflowEngine {
     const deadline = startedAt + timeoutMs;
 
     while (completed.size + failed.size + skipped.size < allStepIds.size) {
+      // A cancelled or interrupted run starts no more steps
+      this.signal?.throwIfAborted();
       if (Date.now() > deadline) {
         throw new WorkflowTimeoutError(this.metadata.name, timeoutMs);
       }
@@ -191,6 +196,8 @@ export class WorkflowEngine {
       );
     }
 
+    // The last steps' attempts were aborted: the run ends as the signal says, not as failed
+    this.signal?.throwIfAborted();
     const completedAt = Date.now();
     const hasFailed = failed.size > 0;
 

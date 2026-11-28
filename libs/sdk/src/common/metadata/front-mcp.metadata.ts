@@ -487,14 +487,24 @@ export interface FrontMcpBaseMetadata {
      */
     runner?: 'inline' | 'worker' | 'detached';
     /**
-     * When job attempts (and workflow steps) may start in this process: at most `concurrency` at once,
-     * each claiming `memoryMb` of free memory. An attempt waits up to `maxWaitMs` (default 600000) and
-     * is then refused with `JOB_ADMISSION_TIMEOUT`.
+     * The processes of detached job and workflow runs. `boot: 'app'` boots, for each run, only the apps it needs (the
+     * app that declares its job, or the workflow's and its steps' jobs'), with the server-level providers and plugins;
+     * `'server'` boots the whole config.
+     *
+     * @default { boot: 'server' }
+     */
+    detached?: { boot?: 'server' | 'app' };
+    /**
+     * When job attempts (and workflow steps) may start: at most `concurrency` at once, each claiming `memoryMb` of
+     * free memory. An attempt waits up to `maxWaitMs` (default 600000) and is then refused with
+     * `JOB_ADMISSION_TIMEOUT`. `scope: 'process'` (the default) counts this process's attempts; `'machine'` those of
+     * every process on the machine that shares the job store, its detached runners included, which hold leases in it.
      */
     admission?: {
       concurrency?: number;
       memoryMb?: number;
       maxWaitMs?: number;
+      scope?: 'process' | 'machine';
     };
   };
 
@@ -844,11 +854,20 @@ export const frontMcpBaseSchema = z.object({
       runner: z
         .enum(['inline', 'worker', 'detached'], { message: "jobs.runner must be 'inline', 'worker' or 'detached'" })
         .optional(),
+      detached: z
+        .object({
+          boot: z.enum(['server', 'app'], { message: "jobs.detached.boot must be 'server' or 'app'" }).optional(),
+        })
+        .strict()
+        .optional(),
       admission: z
         .object({
           concurrency: z.number().int().positive().optional(),
           memoryMb: z.number().positive().optional(),
           maxWaitMs: z.number().int().nonnegative().optional(),
+          scope: z
+            .enum(['process', 'machine'], { message: "jobs.admission.scope must be 'process' or 'machine'" })
+            .optional(),
         })
         .optional(),
     })
