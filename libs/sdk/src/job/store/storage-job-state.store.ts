@@ -100,6 +100,25 @@ export class StorageJobStateStore implements JobStateStore {
     return claimed;
   }
 
+  async holdLease(key: string, value: string, ttlSeconds: number): Promise<boolean> {
+    await this.storage.set(leaseKey(key), value, { ttlSeconds, ifNotExists: true });
+    return (await this.storage.get(leaseKey(key))) === value;
+  }
+
+  async renewLease(key: string, value: string, ttlSeconds: number): Promise<boolean> {
+    return this.storage.expireIfEquals(leaseKey(key), value, ttlSeconds);
+  }
+
+  async releaseLease(key: string, value: string): Promise<void> {
+    await this.storage.deleteIfEquals(leaseKey(key), value);
+  }
+
+  async listLeases(prefix: string): Promise<string[]> {
+    const keys = await this.storage.keys(`${leaseKey(prefix)}*`);
+    if (keys.length === 0) return [];
+    return (await this.storage.mget(keys)).filter((value): value is string => value !== null);
+  }
+
   async dispose(): Promise<void> {
     await this.storage.disconnect();
   }
@@ -132,6 +151,10 @@ function cancelKey(runId: string): string {
 
 function runnerKey(runnerId: string): string {
   return `runner:${runnerId}`;
+}
+
+function leaseKey(key: string): string {
+  return `lease:${key}`;
 }
 
 function claimKey(runId: string): string {

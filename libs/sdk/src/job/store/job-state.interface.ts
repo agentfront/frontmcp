@@ -112,5 +112,16 @@ export interface JobStateStore {
   isRunnerAlive?(runnerId: string): Promise<boolean>;
   /** True for the one caller that claims an orphaned run, so only one process ends it and runs its cleanup. */
   claimRun?(runId: string): Promise<boolean>;
+  /**
+   * Write `key` holding `value` for `ttlSeconds` unless another value holds it, in one atomic step; resolves to whether
+   * `value` holds it now. With the three methods below, the leases `jobs.admission` with `scope: 'machine'` keeps.
+   */
+  holdLease?(key: string, value: string, ttlSeconds: number): Promise<boolean>;
+  /** Extend `key` for `ttlSeconds` while it holds `value`; resolves to whether it did. */
+  renewLease?(key: string, value: string, ttlSeconds: number): Promise<boolean>;
+  /** Delete `key` while it holds `value`. */
+  releaseLease?(key: string, value: string): Promise<void>;
+  /** The values of the unexpired leases whose key starts with `prefix`. */
+  listLeases?(prefix: string): Promise<string[]>;
   dispose(): Promise<void>;
 }
