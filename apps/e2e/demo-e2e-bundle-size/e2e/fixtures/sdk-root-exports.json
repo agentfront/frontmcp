@@ -99,6 +99,7 @@
   "DuplicatePluginEntryError": "class",
   "DuplicatePluginError": "class",
   "Duty": "function",
+  "DutyLeaseKeyError": "class",
   "DutyNameConflictError": "class",
   "DynamicAdapter": "class",
   "DynamicAdapterNameError": "class",
