@@ -14,8 +14,9 @@ import {
   type PluginStoreInBrowser,
   type PluginStoreServer,
   type ProviderType,
+  type RedisProviderOptions,
 } from '@frontmcp/sdk';
-import { sha256Hex } from '@frontmcp/utils';
+import { sha256Hex, type RedisClientInput } from '@frontmcp/utils';
 
 import { CachePluginConfigurationError } from './cache.errors';
 import { CacheStoreToken } from './cache.symbol';
@@ -130,16 +131,25 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
                 });
               }
 
-              // Redis provider (including legacy format without provider field)
+              // The server's own client (`redis: { client }`): used, never closed
+              const { client } = storeConfig as { client?: RedisClientInput };
+              if (client !== undefined) {
+                return new CacheRedisProvider({ type: 'redis-client', client, defaultTTL: globalOptions.defaultTTL });
+              }
+
+              // Redis provider (including legacy format without provider field), on a single node or a cluster
+              const redis = storeConfig as RedisProviderOptions;
               return new CacheRedisProvider({
                 type: 'redis',
                 config: {
-                  host: storeConfig.host ?? 'localhost',
-                  port: storeConfig.port ?? 6379,
-                  password: storeConfig.password,
-                  db: storeConfig.db,
-                  tls: storeConfig.tls ? {} : undefined,
-                  keyPrefix: storeConfig.keyPrefix,
+                  host: redis.host ?? 'localhost',
+                  port: redis.port ?? 6379,
+                  password: redis.password,
+                  db: redis.db,
+                  // Left out unless set: an undefined tls must not clear the TLS a rediss:// seed asks for
+                  ...(redis.tls ? { tls: {} } : {}),
+                  keyPrefix: redis.keyPrefix,
+                  ...(redis.cluster !== undefined ? { cluster: redis.cluster } : {}),
                 },
                 defaultTTL: globalOptions.defaultTTL,
               });

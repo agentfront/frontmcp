@@ -86,6 +86,10 @@ If you already have a Redis server (managed cloud, self-hosted, or shared dev in
 - **TLS**: whether the connection requires TLS (most cloud providers require it)
 - **DB index**: default `0`
 
+### Option D: Redis Cluster (AWS ElastiCache with cluster mode on, Azure Cache Enterprise, self-hosted)
+
+A Redis Cluster spreads the keys over several masters. A plain client pointed at its endpoint answers `MOVED <slot> <host>:<port>` for every key another master owns, so FrontMCP has to be told it is a cluster (`cluster: true`, Step 2). One reachable node is enough: the client discovers the rest. Collect the **configuration endpoint** (ElastiCache: `<name>.xxxxxx.clustercfg.<region>.cache.amazonaws.com:6379`), the AUTH token if set, and whether in-transit encryption (TLS) is on. A cluster has database `0` only.
+
 ## Step 2 -- Configure the FrontMCP Server
 
 The `redis` field in the `@FrontMcp` decorator accepts a `RedisOptionsInput` union type. There are three valid shapes:
@@ -154,6 +158,61 @@ The URL is the base: `host` / `port` / `password` / `db` / `tls` beside it only 
 A `redis` with neither `host` nor `url`, as when both come from unset variables, fails with `redis needs host or url`, on the server and in the generated CLI, wherever a `redis` option is read (`pubsub`, `jobs.store.redis`, `tasks.redis` and the others too); up to 1.10 the message was `Invalid input`.
 
 The generated CLI (`frontmcp build --target cli`) and the `createTaskStore()` / `createElicitationStore()` factories read every form too, and refuse an unusable one (`TaskStoreNotSupportedError` / `ElicitationNotSupportedError` from the factories) instead of falling back to memory or to `REDIS_URL`. Up to 1.10 they took a `redis` only with a `host` (the CLI when its server config was an object rather than a `@FrontMcp` class), so a `url` there kept the tasks in memory or in the Redis of `REDIS_URL` / `REDIS_HOST`.
+
+### For a Redis Cluster
+
+Add `cluster: true` to the `host`/`port` (or `url`) form. FrontMCP then opens an ioredis `Cluster` from that endpoint, puts the password and TLS on every node, and keeps hostnames as they are, which an ElastiCache TLS certificate needs (it names the hostname, not the address it resolves to):
+
+```typescript
+redis: {
+  provider: 'redis',
+  host: process.env['REDIS_HOST'] ?? 'my-cluster.xxxxxx.clustercfg.use2.cache.amazonaws.com',
+  port: 6379,
+  password: process.env['REDIS_AUTH_TOKEN'], // ElastiCache AUTH token, if set
+  tls: true, // ElastiCache in-transit encryption
+  cluster: true,
+},
+```
+
+The same with a URL: `redis: { url: process.env['REDIS_URL'], cluster: true }` (`rediss://` turns TLS on).
+
+To name the seed nodes yourself, or to tune the ioredis `Cluster`, give `cluster` an object. `nodes` takes `{ host, port }`, `'host:port'` or `redis://` URLs; `options` are ioredis `ClusterOptions` applied over FrontMCP's defaults, and `options.redisOptions` over the per-node ones:
+
+```typescript
+redis: {
+  cluster: {
+    nodes: [{ host: '10.0.0.1', port: 7000 }, '10.0.0.2:7000'],
+    options: { scaleReads: 'slave', redisOptions: { tls: { ca: process.env['REDIS_CA'] } } },
+  },
+  password: process.env['REDIS_AUTH_TOKEN'],
+},
+```
+
+Every Redis-backed feature reads `cluster`: the session store, `transport.persistence.redis`, `pubsub`, elicitation, tasks, events, jobs (`jobs.store.redis`), the skills HTTP cache, the distributed HA relay, `auth.tokenStorage` / `auth.secureStore` `{ redis }`, the CIMD cache, and the Cache and Remember plugins. Keys keep the names they have on a single node: batched reads, writes and deletes go one key at a time on a cluster, and key listings use `SCAN` on every master. `db` other than `0` beside `cluster` is a validation error.
+
+### For a client you made (ioredis or node-redis)
+
+For IAM auth, Sentinel, custom TLS, or a client your app already shares, pass it as `client`, alone (no `host`/`url`/`cluster`/`password`/`db`/`tls` beside it). FrontMCP takes an ioredis `Redis` or `Cluster`, a node-redis client or cluster (`createClient()` / `createCluster()` from `redis` or `@redis/client`), or any object implementing `FrontMcpRedisClient` (from `@frontmcp/utils`). It is recognized by its shape, so a second copy of the package works too:
+
+```typescript
+import { createCluster } from 'redis';
+
+const redisClient = createCluster({ rootNodes: [{ url: process.env['REDIS_URL'] }] });
+// node-redis throws an 'error' event that has no listener, which ends the process
+redisClient.on('error', (error) => console.error('[redis]', error));
+
+@FrontMcp({
+  info: { name: 'my-server', version: '0.1.0' },
+  apps: [
+    /* ... */
+  ],
+  redis: { client: redisClient },
+  transport: { persistence: { redis: { client: redisClient } } },
+})
+export default class Server {}
+```
+
+**Who owns the client:** you do. FrontMCP runs its commands on it (connecting a node-redis client that isn't open yet), never calls `quit()`/`disconnect()`/`close()` on it, and attaches no listeners to it. For pub/sub it opens copies with `duplicate()`; those are FrontMCP's and it closes them. Close your client after the server has stopped. `client` is code-only: it can't be written in a JSON config file.
 
 ### For Vercel KV
 
@@ -393,18 +452,22 @@ throttle: {
 
 ## Troubleshooting
 
-| Problem                                                                                           | Cause                                                            | Solution                                                                                                      |
-| ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `ECONNREFUSED 127.0.0.1:6379`                                                                     | Redis is not running or Docker container is stopped              | Start the container with `docker compose up -d redis` or check the Redis service status                       |
-| `NOAUTH Authentication required`                                                                  | Password is set on Redis but not provided in config              | Add `password` to the `redis` config or set `REDIS_PASSWORD` environment variable                             |
-| `ERR max number of clients reached`                                                               | Too many open connections from the application                   | Set `maxRetriesPerRequest` or use connection pooling; check for connection leaks                              |
-| Vercel KV `401 Unauthorized`                                                                      | Missing or invalid KV tokens in the environment                  | Verify `KV_REST_API_URL` and `KV_REST_API_TOKEN` in the Vercel dashboard and redeploy                         |
-| Sessions lost after container restart                                                             | Redis running without append-only persistence                    | Add `--appendonly yes` to the Redis command in docker-compose or use a managed Redis with persistence enabled |
-| Startup fails with `GuardStorageUnavailableError`                                                 | `throttle.storage` Redis is unreachable; rate limits fail closed | Bring Redis up, or set `throttle.storage.fallback: 'memory'` to start with per-instance counters              |
-| Startup fails with `redis needs host or url`                                                      | Both come from variables that are unset where the server starts  | Set `REDIS_URL` (or `REDIS_HOST`) in that environment                                                         |
-| Startup fails with `JobStoreNotSupportedError`                                                    | `jobs.store.redis` is Vercel KV, which the job stores cannot use | Point `jobs.store.redis` at a Redis server, or use `jobs.store.sqlite` or `jobs.store: false`                 |
-| Clients get 404 for a session they just used (load-balanced)                                      | Instances run with different `MCP_SESSION_SECRET` values         | Set the same `MCP_SESSION_SECRET` on every instance                                                           |
-| A 2026-07-28 tool repeats its first question; log shows `rejected requestState` / `bad-signature` | `VAULT_SECRET`/`JWT_SECRET` unset or different per instance      | Set `VAULT_SECRET` to the same value on every instance                                                        |
+| Problem                                                                                           | Cause                                                            | Solution                                                                                                          |
+| ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `ECONNREFUSED 127.0.0.1:6379`                                                                     | Redis is not running or Docker container is stopped              | Start the container with `docker compose up -d redis` or check the Redis service status                           |
+| `NOAUTH Authentication required`                                                                  | Password is set on Redis but not provided in config              | Add `password` to the `redis` config or set `REDIS_PASSWORD` environment variable                                 |
+| `ERR max number of clients reached`                                                               | Too many open connections from the application                   | Set `maxRetriesPerRequest` or use connection pooling; check for connection leaks                                  |
+| Vercel KV `401 Unauthorized`                                                                      | Missing or invalid KV tokens in the environment                  | Verify `KV_REST_API_URL` and `KV_REST_API_TOKEN` in the Vercel dashboard and redeploy                             |
+| Sessions lost after container restart                                                             | Redis running without append-only persistence                    | Add `--appendonly yes` to the Redis command in docker-compose or use a managed Redis with persistence enabled     |
+| Startup fails with `GuardStorageUnavailableError`                                                 | `throttle.storage` Redis is unreachable; rate limits fail closed | Bring Redis up, or set `throttle.storage.fallback: 'memory'` to start with per-instance counters                  |
+| Startup fails with `redis needs host or url`                                                      | Both come from variables that are unset where the server starts  | Set `REDIS_URL` (or `REDIS_HOST`) in that environment                                                             |
+| `ReplyError: MOVED 12182 10.0.1.5:6379`, then `404` / `500` for sessions another instance opened  | The endpoint is a Redis Cluster, opened as a single node         | Add `cluster: true` beside `host`/`port` or `url` (or pass your own cluster `client`)                             |
+| `None of startup nodes is available` on a TLS cluster                                             | A client of your own resolves hostnames, so TLS checks an IP     | Let FrontMCP open it (`cluster: true`), or pass `dnsLookup: (address, cb) => cb(null, address)` to your `Cluster` |
+| `redis.db is 1, but a Redis Cluster has database 0 only`                                          | `db` set beside `cluster`                                        | Drop `db` (a cluster has database 0 only)                                                                         |
+| `redis.client carries its own connection; drop host beside it`                                    | `client` and connection fields together                          | Keep one: the `client`, or `host`/`url`/`cluster`                                                                 |
+| Startup fails with `JobStoreNotSupportedError`                                                    | `jobs.store.redis` is Vercel KV, which the job stores cannot use | Point `jobs.store.redis` at a Redis server, or use `jobs.store.sqlite` or `jobs.store: false`                     |
+| Clients get 404 for a session they just used (load-balanced)                                      | Instances run with different `MCP_SESSION_SECRET` values         | Set the same `MCP_SESSION_SECRET` on every instance                                                               |
+| A 2026-07-28 tool repeats its first question; log shows `rejected requestState` / `bad-signature` | `VAULT_SECRET`/`JWT_SECRET` unset or different per instance      | Set `VAULT_SECRET` to the same value on every instance                                                            |
 
 ## Examples
 
@@ -413,8 +476,19 @@ throttle: {
 | [`docker-redis-local-dev`](../examples/setup-redis/docker-redis-local-dev.md)             | Basic        | Provision Redis with Docker Compose and connect a FrontMCP server for local session storage.                                                  |
 | [`hybrid-vercel-kv-with-pubsub`](../examples/setup-redis/hybrid-vercel-kv-with-pubsub.md) | Advanced     | Use Vercel KV for session storage and a separate Redis instance for pub/sub resource subscriptions in distributed multi-instance deployments. |
 | [`vercel-kv-serverless`](../examples/setup-redis/vercel-kv-serverless.md)                 | Intermediate | Configure a FrontMCP server with Vercel KV as the session store for serverless deployment.                                                    |
+| [`redis-cluster-elasticache`](../examples/setup-redis/redis-cluster-elasticache.md)       | Intermediate | Run several FrontMCP instances on an AWS ElastiCache cluster (cluster mode on, TLS) with `cluster: true`.                                     |
+| [`bring-your-own-redis-client`](../examples/setup-redis/bring-your-own-redis-client.md)   | Advanced     | Hand FrontMCP an ioredis or node-redis client you built, and keep its lifecycle.                                                              |
 
 > See all examples in [`examples/setup-redis/`](../examples/setup-redis/)
+
+## Upgrading to 1.14
+
+- `redis` (and every option that takes one) also takes `cluster` and `client`; existing host/port, url, legacy and Vercel KV configs behave as before.
+- `@frontmcp/auth`'s `RedisConfig` (`auth.tokenStorage` / `auth.secureStore` `{ redis }`, `RedisSessionStore`) takes the same forms, so its `host` is optional now: code that reads `config.redis.host` checks it first, or uses `isRedisConnection()` from `@frontmcp/utils`.
+- The parsed `RedisOptions` gains a client form (`{ provider: 'redis', client, keyPrefix, defaultTtlMs }`), so after `provider === 'redis'` `host` may be undefined. `isRedisProvider()` still narrows to the host form; `isRedisConnection()` covers every form.
+- `createRedisClient()` from `@frontmcp/utils` is deprecated: `createRedisConnection()` takes the same settings plus `cluster` and `client`, and returns `{ client, owned, kind, isCluster }`.
+- A `RedisStateStoreLike` (the job state store's client) and the HA heartbeat client need `scan` instead of `keys`: FrontMCP lists keys with `SCAN` now, never `KEYS`.
+- CachePlugin `type: 'redis-client'` no longer quits your client in `close()`.
 
 ## Reference
 

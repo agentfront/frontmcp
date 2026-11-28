@@ -7,7 +7,7 @@ import {
   type StorageConfig,
 } from '@frontmcp/utils';
 
-import { isRedisProvider, redisOptionsSchema, type FrontMcpLogger } from '../common';
+import { isRedisConnectionOptions, redisOptionsSchema, redisStorageConfigOf, type FrontMcpLogger } from '../common';
 
 export interface PeopleStoreSources {
   /** The server's `redis`. */
@@ -26,9 +26,8 @@ export interface PeopleSessionStore {
 
 function serverRedis(redis: unknown): StorageConfig | undefined {
   const parsed = redis === undefined ? undefined : redisOptionsSchema.safeParse(redis);
-  if (!parsed?.success || !isRedisProvider(parsed.data)) return undefined;
-  const { host, port, password, db, tls } = parsed.data;
-  return { type: 'redis', redis: { config: { host, port, password, db, tls } } };
+  if (!parsed?.success || !isRedisConnectionOptions(parsed.data)) return undefined;
+  return redisStorageConfigOf(parsed.data);
 }
 
 /** Where people sessions are kept: the server's `redis`, else its `sqlite`, else `auth.tokenStorage`; none with `store: false`. */

@@ -34,6 +34,18 @@ jest.mock('@frontmcp/utils', () => {
       .fn()
       .mockImplementation((opts: unknown) => ({ __kind: 'redis', opts, connect: connectRedis })),
     requireOptionalModule: (_moduleName: string, load: () => unknown) => load(),
+    // The connection helpers are pure; their own specs live in @frontmcp/utils
+    isRedisConnection: (value: unknown) => typeof value === 'object' && value !== null && Object.keys(value).length > 0,
+    redisAdapterOptionsOf: (config: Record<string, unknown>) => {
+      const { keyPrefix: _keyPrefix, defaultTtlMs: _defaultTtlMs, client, url, ...connection } = config;
+      if (client !== undefined) return { client };
+      return url !== undefined ? { url, config: connection } : { config: connection };
+    },
+    StorageConfigError: class StorageConfigError extends Error {
+      constructor(_backend: string, message: string) {
+        super(message);
+      }
+    },
     __connectMemory: connectMemory,
     __connectRedis: connectRedis,
   };
@@ -174,6 +186,23 @@ describe('token-storage.factory', () => {
         config: { host: 'localhost', port: undefined, password: undefined, db: undefined, tls: undefined },
         keyPrefix: '',
       });
+    });
+
+    it("opens a cluster, or uses the app's own client (#1503)", async () => {
+      const client = { get() {}, set() {}, del() {} };
+      await createTokenStorageAdapter({ redis: { host: 'cfg', tls: true, cluster: true, keyPrefix: 'auth:' } });
+      expect(mockRedisStorageAdapterCtor).toHaveBeenLastCalledWith({
+        config: { host: 'cfg', tls: true, cluster: true },
+        keyPrefix: 'auth:',
+      });
+      await createTokenStorageAdapter({ redis: { client } });
+      expect(mockRedisStorageAdapterCtor).toHaveBeenLastCalledWith({ client, keyPrefix: '' });
+    });
+
+    it('refuses a redis block that names no server', async () => {
+      await expect(createTokenStorageAdapter({ redis: {} })).rejects.toThrow(
+        /needs host, url, cluster.nodes or client/,
+      );
     });
   });
 });

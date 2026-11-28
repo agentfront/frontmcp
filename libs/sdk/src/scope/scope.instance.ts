@@ -2,7 +2,7 @@ import 'reflect-metadata';
 
 import { createGuardManager, type GuardConfig, type GuardManager } from '@frontmcp/guard';
 import { type EventStore } from '@frontmcp/protocol';
-import { createRedisClient, getEnvFlag, getMachineId, getRuntimeContext, isEdgeRuntime, mkdir } from '@frontmcp/utils';
+import { getEnvFlag, getMachineId, getRuntimeContext, isEdgeRuntime, mkdir } from '@frontmcp/utils';
 
 import AdapterRegistry from '../adapter/adapter.registry';
 import AgentRegistry from '../agent/agent.registry';
@@ -363,9 +363,9 @@ export class Scope extends ScopeEntry {
     if (isDistributed && this.metadata.redis && !this.cliMode && !this.directOnly) {
       const ha = await import('../ha/index.js');
       try {
-        const haRedis = this.createHaRedisClient();
+        const haRedis = this.createHaRedisClient(ha);
         // The relay channel needs its own connection: a subscribed ioredis client runs no other commands.
-        const haSubscriber = this.createHaRedisClient('ha-subscriber');
+        const haSubscriber = this.createHaRedisClient(ha, 'ha-subscriber');
         this.haManager = ha.HaManager.create({
           redis: haRedis as never,
           pubsubPublisher: haRedis as never,
@@ -2264,19 +2264,14 @@ export class Scope extends ScopeEntry {
   }
 
   /**
-   * Build the ioredis client shared by the HA manager and the transport bus from `metadata.redis`.
-   * The client reconnects on its own and has a permanent, rate-limited 'error' listener.
+   * Build the Redis client shared by the HA manager and the transport bus from `metadata.redis` (a
+   * single node, a cluster, or the app's own client), or its subscriber; see `createHaRedisClient`.
    */
-  private createHaRedisClient(label: 'ha' | 'ha-subscriber' = 'ha'): NonNullable<typeof this.haRedisClient> {
-    const redis = this.metadata.redis as
-      | { provider?: string; url?: string; host?: string; port?: number; password?: string; db?: number; tls?: boolean }
-      | undefined;
-    if (!redis || redis.provider === 'vercel-kv') {
-      throw new Error('Distributed HA requires a TCP Redis (ioredis); Vercel KV over REST has no Lua/pub-sub support');
-    }
-    const client = createRedisClient({ ...redis, label, logger: this.logger }) as never as NonNullable<
-      typeof this.haRedisClient
-    >;
+  private createHaRedisClient(
+    ha: Pick<typeof import('../ha/index.js'), 'createHaRedisClient'>,
+    label: 'ha' | 'ha-subscriber' = 'ha',
+  ): NonNullable<typeof this.haRedisClient> {
+    const client = ha.createHaRedisClient(this.metadata.redis, label, this.logger);
     if (label === 'ha-subscriber') this.haSubscriberClient = client;
     else this.haRedisClient = client;
     return client;
@@ -2289,6 +2284,7 @@ export class Scope extends ScopeEntry {
     for (const client of clients) {
       if (!client) continue;
       try {
+        // The app's own client is behind a guard whose quit()/disconnect() close nothing
         await client.quit();
       } catch {
         client.disconnect();

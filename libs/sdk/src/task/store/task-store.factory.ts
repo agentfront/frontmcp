@@ -12,7 +12,7 @@
 
 import { createMemoryStorage, createStorage, getEnv, type RootStorage, type StorageConfig } from '@frontmcp/utils';
 
-import { isVercelKvProvider, type FrontMcpLogger, type RedisOptionsInput } from '../../common';
+import { isVercelKvProvider, redisStorageConfigOf, type FrontMcpLogger, type RedisOptionsInput } from '../../common';
 import { normalizeRedisOptions } from '../../common/types/options/redis/schema';
 import { requireOptionalModule } from '../../scope/optional-dependency.util';
 import { hasSqliteDriver, SQLITE_ON_EDGE_REMEDY } from '../../storage/sqlite-on-edge';
@@ -143,8 +143,7 @@ export async function createTaskStore(options: TaskStoreOptions = {}): Promise<T
         'Vercel KV is not supported for task stores. Task result blocking and cancel signalling require pub/sub. Use Redis or Upstash instead.',
       );
     }
-    const { host, port, password, db, tls } = redisOptions;
-    finalStorageConfig = { type: 'redis', redis: { config: { host, port, password, db, tls } } };
+    finalStorageConfig = redisStorageConfigOf(redisOptions);
   }
 
   // The ambient `KV_REST_API_URL` only selects Vercel KV when nothing else was

@@ -1,4 +1,13 @@
-import { createRedisClient, createStorage, StorageConfigError, type SqliteAdapterOptions } from '@frontmcp/utils';
+import {
+  createRedisConnection,
+  createStorage,
+  redisConnectionOf,
+  StorageConfigError,
+  type RedisClientInput,
+  type RedisClusterOption,
+  type RedisConnectionConfig,
+  type SqliteAdapterOptions,
+} from '@frontmcp/utils';
 
 import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
 import { JobStoreNotSupportedError } from '../../errors/job.errors';
@@ -16,6 +25,10 @@ export interface JobStateStoreOptions {
     password?: string;
     db?: number;
     tls?: boolean;
+    /** The host (or url) is a Redis Cluster endpoint, or `{ nodes, options }`. */
+    cluster?: RedisClusterOption;
+    /** A Redis client you made, in place of the connection fields; never closed by the store. */
+    client?: RedisClientInput;
   };
   /** A SQLite file the processes on one machine share; takes precedence over `redis`. */
   sqlite?: SqliteAdapterOptions;
@@ -61,11 +74,15 @@ export async function createJobStateStore(
   if (options?.redis) {
     refuseVercelKvJobStore(options.redis);
     try {
-      const { url, host, port, password, db, tls } = options.redis;
-      const client = createRedisClient({ url, host, port, password, db, tls, label: 'JobStateStore', logger });
+      const { client, owned } = createRedisConnection({
+        ...redisConnectionOf(options.redis as RedisConnectionConfig),
+        label: 'JobStateStore',
+        logger,
+      });
       return {
+        // A client the store opened is closed on dispose(); the app's own client is not
         store: new RedisJobStateStore(client as unknown as RedisStateStoreLike, logger, keyPrefix, ttlSeconds, {
-          ownsClient: true,
+          ownsClient: owned,
         }),
         type: 'redis',
       };

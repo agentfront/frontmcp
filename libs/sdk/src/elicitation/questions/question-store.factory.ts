@@ -11,7 +11,7 @@ import {
   type SqliteAdapterOptions,
 } from '@frontmcp/utils';
 
-import { isRedisProvider, redisOptionsSchema, type FrontMcpLogger } from '../../common';
+import { isRedisConnectionOptions, redisOptionsSchema, redisStorageConfigOf, type FrontMcpLogger } from '../../common';
 import { type PersistentQuestionsStorage } from '../../common/types/options/elicitation';
 import { findReplaceableDirectory } from '../../server/security/replaceable-directory';
 import { getElicitationSecret } from '../store/elicitation-encryption';
@@ -87,10 +87,7 @@ export interface QuestionStorageSources {
 export async function resolveQuestionStorage(sources: QuestionStorageSources): Promise<PersistentQuestionsStorage> {
   if (sources.storage) return sources.storage;
   const redis = sources.redis === undefined ? undefined : redisOptionsSchema.safeParse(sources.redis);
-  if (redis?.success && isRedisProvider(redis.data)) {
-    const { host, port, password, db, tls } = redis.data;
-    return { type: 'redis', redis: { config: { host, port, password, db, tls } } };
-  }
+  if (redis?.success && isRedisConnectionOptions(redis.data)) return redisStorageConfigOf(redis.data);
   if (sources.sqlite) return { type: 'sqlite', sqlite: sources.sqlite };
   const { runtime, deployment } = getRuntimeContext();
   if (runtime !== 'node' || deployment === 'serverless') {

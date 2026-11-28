@@ -6,6 +6,8 @@
  * Created by Scope when deployment mode is 'distributed'.
  */
 
+import { scanRedisKeys } from '@frontmcp/utils';
+
 import { HaConfigurationError } from '../errors';
 import { DEFAULT_HA_CONFIG, type HaConfig, type TakeoverResult } from './ha.types';
 import { HeartbeatService, type HeartbeatRedisClient } from './heartbeat.service';
@@ -277,7 +279,8 @@ export class HaManager {
 
       const { sessionKeyPrefix, onOrphan, recreatableProtocols } = this.scannerOptions;
       const allowedProtocols = new Set(recreatableProtocols ?? ['streamable-http']);
-      const sessionKeys = await this.redis.keys(`${sessionKeyPrefix}*`);
+      // SCAN, not KEYS: it doesn't block the node, and on a cluster it runs on every master
+      const sessionKeys = await scanRedisKeys(this.redis, `${sessionKeyPrefix}*`);
 
       let claimed = 0;
       let scanned = 0;

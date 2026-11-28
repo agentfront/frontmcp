@@ -13,7 +13,7 @@ const fakeClient = {
   get: jest.fn().mockResolvedValue(null),
   del: jest.fn().mockResolvedValue(1),
   exists: jest.fn().mockResolvedValue(0),
-  keys: jest.fn().mockResolvedValue([]),
+  scan: jest.fn().mockResolvedValue(['0', []]),
   eval: jest.fn().mockResolvedValue(0),
   hset: jest.fn().mockResolvedValue(1),
   hget: jest.fn().mockResolvedValue(null),
@@ -27,13 +27,17 @@ const fakeClient = {
   quit: jest.fn().mockResolvedValue('OK'),
   disconnect: jest.fn(),
   on: jest.fn(),
+  duplicate: jest.fn(),
 };
 
-const createRedisClient = jest.fn(() => fakeClient);
+const createRedisConnection = jest.fn((options: { client?: unknown }) => ({
+  client: options.client ?? fakeClient,
+  owned: options.client === undefined,
+}));
 
 jest.mock('@frontmcp/utils', () => ({
   ...jest.requireActual('@frontmcp/utils'),
-  createRedisClient: (...args: unknown[]) => (createRedisClient as (...a: unknown[]) => unknown)(...args),
+  createRedisConnection: (...args: unknown[]) => (createRedisConnection as (...a: unknown[]) => unknown)(...args),
 }));
 
 interface HaScope {
@@ -70,11 +74,11 @@ describe('Scope HA Redis client (#646)', () => {
     const [scope] = instance.getScopes() as unknown as HaScope[];
     scopes.push(scope);
 
-    expect(createRedisClient).toHaveBeenCalledWith(
+    expect(createRedisConnection).toHaveBeenCalledWith(
       expect.objectContaining({ host: 'redis.internal', port: 6380, label: 'ha' }),
     );
     // A second connection carries the relay channel subscription.
-    expect(createRedisClient).toHaveBeenCalledWith(
+    expect(createRedisConnection).toHaveBeenCalledWith(
       expect.objectContaining({ host: 'redis.internal', port: 6380, label: 'ha-subscriber' }),
     );
     expect(scope.haManager).toBeDefined();
@@ -104,7 +108,42 @@ describe('Scope HA Redis client (#646)', () => {
     const [scope] = instance.getScopes() as unknown as HaScope[];
     scopes.push(scope);
 
-    expect(createRedisClient).not.toHaveBeenCalled();
+    expect(createRedisConnection).not.toHaveBeenCalled();
     expect(scope.haManager).toBeUndefined();
+  });
+
+  it("runs HA on the app's own client, subscribing on a copy of it (#1503)", async () => {
+    @App({ id: 'ha-own', name: 'ha-own' })
+    class HaOwnApp {}
+
+    const subscriber = { ...fakeClient, subscribe: jest.fn().mockResolvedValue(1), quit: jest.fn() };
+    const appClient = {
+      ...fakeClient,
+      status: 'ready',
+      isCluster: true,
+      call: jest.fn(),
+      sendCommand: jest.fn(),
+      nodes: jest.fn(() => []),
+      duplicate: jest.fn(() => subscriber),
+      quit: jest.fn(),
+    };
+
+    const instance = await FrontMcpInstance.createForGraph({
+      info: { name: 'ha-own', version: '0.0.0' },
+      apps: [HaOwnApp],
+      redis: { client: appClient },
+      tasks: { enabled: false },
+    });
+    const [scope] = instance.getScopes() as unknown as HaScope[];
+    scopes.push(scope);
+
+    expect(createRedisConnection).toHaveBeenCalledWith(expect.objectContaining({ client: appClient }));
+    expect(appClient.duplicate).toHaveBeenCalledTimes(1);
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(subscriber.subscribe).toHaveBeenCalledWith(expect.stringMatching(/^mcp:ha:notify:/));
+
+    await scope.shutdown();
+    // The copy is FrontMCP's to close; the app's client is not
+    expect(subscriber.quit).toHaveBeenCalledTimes(1);
   });
 });

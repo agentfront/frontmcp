@@ -16,13 +16,22 @@
  *   contains the package hands it over with `registerOptionalModule()` instead.
  */
 
-import { MemoryStorageAdapter, RedisStorageAdapter, requireOptionalModule, type StorageAdapter } from '@frontmcp/utils';
+import {
+  isRedisConnection,
+  MemoryStorageAdapter,
+  redisAdapterOptionsOf,
+  RedisStorageAdapter,
+  requireOptionalModule,
+  StorageConfigError,
+  type StorageAdapter,
+} from '@frontmcp/utils';
 
 import { type TokenStorageConfig, type TokenStorageSqliteConfig } from '../options/interfaces';
 import { type RedisConfig } from './transport-session.types';
 
 /**
- * Narrow a {@link TokenStorageConfig} to its Redis variant.
+ * Narrow a {@link TokenStorageConfig} to its Redis variant: a connection in any form (host, url,
+ * cluster, or a client you made; see `isRedisConnection()`).
  */
 export function isRedisTokenStorage(config: TokenStorageConfig | undefined): config is { redis: RedisConfig } {
   return typeof config === 'object' && config !== null && 'redis' in config && !!config.redis;
@@ -80,10 +89,12 @@ export async function createTokenStorageAdapter(config: TokenStorageConfig | und
 
   // redis
   if (isRedisTokenStorage(config)) {
-    const { host, port, password, db, tls, keyPrefix } = config.redis;
+    if (!isRedisConnection(config.redis)) {
+      throw new StorageConfigError('redis', 'tokenStorage.redis needs host, url, cluster.nodes or client');
+    }
     const adapter = new RedisStorageAdapter({
-      config: { host, port, password, db, tls },
-      keyPrefix: keyPrefix ?? '',
+      ...redisAdapterOptionsOf(config.redis),
+      keyPrefix: config.redis.keyPrefix ?? '',
     });
     await adapter.connect();
     return adapter;

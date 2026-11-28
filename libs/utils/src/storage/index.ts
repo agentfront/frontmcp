@@ -19,6 +19,7 @@ export type {
   RedisHostConnectionConfig,
   RedisUrlConnectionConfig,
   RedisUrlFillInConfig,
+  RedisClusterConnectionConfig,
   VercelKvAdapterOptions,
   UpstashAdapterOptions,
   SqliteAdapterOptions,
@@ -39,6 +40,52 @@ export type { RedisErrorListenerOptions, ErrorEmitterClient } from './redis-erro
 
 export { mergeRedisUrlFields, describeRedisUrlConflicts } from './redis-url';
 export type { RedisUrlConnection, RedisUrlMerge, RedisUrlSiblingFields } from './redis-url';
+
+// The Redis connection factory: single node, Redis Cluster, or a client you made (#1503)
+export {
+  createRedisConnection,
+  isRedisConnection,
+  redisConnectionOf,
+  redisAdapterOptionsOf,
+  hasRedisClusterNodes,
+  adoptRedisClient,
+  wantsRedisCluster,
+  detectRedisClientKind,
+  isRedisClientInput,
+  missingRedisClientMethods,
+  redisClientProblem,
+  REQUIRED_REDIS_CLIENT_METHODS,
+  UNSUPPORTED_REDIS_CLIENT_MESSAGE,
+  borrowRedisClient,
+  isBorrowedRedisClient,
+  NodeRedisClientAdapter,
+  isRedisClusterClient,
+  redisMasterNodes,
+  scanRedisKeys,
+  publishRedisMessage,
+  deleteRedisKeys,
+  getRedisKeys,
+} from './redis-client';
+export type {
+  CreateRedisConnectionOptions,
+  FrontMcpRedisClient,
+  FrontMcpRedisPipeline,
+  RedisArgument,
+  RedisClientInput,
+  RedisClientKind,
+  RedisClusterConfig,
+  RedisClusterNode,
+  RedisClusterOption,
+  RedisConnection,
+  RedisConnectionConfig,
+  RedisConnectionSettings,
+  RedisEventListener,
+  RedisMessageListener,
+  RedisPipelineResult,
+  NodeRedisClientAdapterOptions,
+  NodeRedisLike,
+  RedisScanClient,
+} from './redis-client';
 
 // Namespace utilities
 export {

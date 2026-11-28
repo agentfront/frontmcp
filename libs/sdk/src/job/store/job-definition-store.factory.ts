@@ -1,10 +1,19 @@
-import { createRedisClient, createStorage, StorageConfigError, type SqliteAdapterOptions } from '@frontmcp/utils';
+import {
+  createRedisConnection,
+  createStorage,
+  redisConnectionOf,
+  StorageConfigError,
+  type RedisClientInput,
+  type RedisClusterOption,
+  type RedisConnectionConfig,
+  type SqliteAdapterOptions,
+} from '@frontmcp/utils';
 
 import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
 import { type JobDefinitionStore } from './job-definition.interface';
 import { refuseVercelKvJobStore } from './job-state-store.factory';
 import { MemoryJobDefinitionStore } from './memory-job-definition.store';
-import { RedisJobDefinitionStore } from './redis-job-definition.store';
+import { RedisJobDefinitionStore, type RedisDefinitionStoreLike } from './redis-job-definition.store';
 import { StorageJobDefinitionStore } from './storage-job-definition.store';
 
 /* istanbul ignore next -- no-op fallback used only when caller omits logger */
@@ -37,6 +46,10 @@ export interface JobDefinitionStoreOptions {
     password?: string;
     db?: number;
     tls?: boolean;
+    /** The host (or url) is a Redis Cluster endpoint, or `{ nodes, options }`. */
+    cluster?: RedisClusterOption;
+    /** A Redis client you made, in place of the connection fields; never closed by the store. */
+    client?: RedisClientInput;
   };
   /** A SQLite file the processes on one machine share; takes precedence over `redis`. */
   sqlite?: SqliteAdapterOptions;
@@ -72,21 +85,17 @@ export async function createJobDefinitionStore(
   if (options?.redis) {
     refuseVercelKvJobStore(options.redis);
     try {
-      const { url, host, port, password, db, tls } = options.redis;
-      const client = createRedisClient({
-        url,
-        host,
-        port,
-        password,
-        db,
-        tls,
+      const { client, owned } = createRedisConnection({
+        ...redisConnectionOf(options.redis as RedisConnectionConfig),
         label: 'JobDefinitionStore',
         logger: effectiveLogger,
       });
       return {
-        // Factory-created client lifetime is bound to the store, so the store
-        // must close it on dispose() — pass ownsClient: true.
-        store: new RedisJobDefinitionStore(client, effectiveLogger, keyPrefix, { ownsClient: true }),
+        // A client the factory opened is bound to the store, which closes it on dispose();
+        // the app's own client is not.
+        store: new RedisJobDefinitionStore(client as unknown as RedisDefinitionStoreLike, effectiveLogger, keyPrefix, {
+          ownsClient: owned,
+        }),
         type: 'redis',
       };
     } catch (err) {

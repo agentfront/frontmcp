@@ -29,9 +29,9 @@ function createMockRedis(): HeartbeatRedisClient & { store: Map<string, { value:
       }
       return 1;
     }),
-    keys: jest.fn(async (pattern: string) => {
+    scan: jest.fn(async (_cursor: string, _match: string, pattern: string) => {
       const prefix = pattern.replace('*', '');
-      return [...store.keys()].filter((k) => k.startsWith(prefix));
+      return ['0', [...store.keys()].filter((k) => k.startsWith(prefix))] as [string, string[]];
     }),
   };
 }

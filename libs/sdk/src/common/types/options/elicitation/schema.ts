@@ -65,3 +65,8 @@ export type ElicitationOptions = z.infer<typeof elicitationOptionsSchema>;
  * Uses explicit interface for better IDE autocomplete.
  */
 export type ElicitationOptionsInput = ElicitationOptionsInterface;
+
+// The redis option's `client` is typed `RedisClientInput`. This file's emitted declarations name that
+// type, and tsc names it by this re-export; without one it writes a path into the repository's utils
+// build (`libs/utils/dist/...`), which a consumer of the published package cannot resolve (#1503).
+export type { RedisClientInput } from '@frontmcp/utils';

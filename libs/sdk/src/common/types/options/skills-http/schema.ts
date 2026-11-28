@@ -2,6 +2,12 @@
 // Zod schema for skills HTTP configuration
 
 import { internalZ as z } from '@frontmcp/lazy-zod';
+import {
+  isRedisClientInput,
+  redisClientProblem,
+  UNSUPPORTED_REDIS_CLIENT_MESSAGE,
+  type RedisClientInput,
+} from '@frontmcp/utils';
 
 import type { SkillDecider, SkillDecisionOptions } from '../../../../skill/decision/skill-decision.types';
 import type { ExternalSkillProviderBase } from '../../../../skill/providers/external-skill.provider';
@@ -49,6 +55,25 @@ export const skillsConfigCacheOptionsSchema = z.object({
       port: z.number().int().positive().optional(),
       password: z.string().optional(),
       db: z.number().int().nonnegative().optional(),
+      tls: z.boolean().optional(),
+      /** `true`: the host is a Redis Cluster endpoint; or `{ nodes, options }`. */
+      cluster: z
+        .union([
+          z.boolean(),
+          z.object({
+            nodes: z
+              .array(z.union([z.string().min(1), z.object({ host: z.string().min(1), port: z.number().optional() })]))
+              .optional(),
+            options: z.record(z.string(), z.unknown()).optional(),
+          }),
+        ])
+        .optional(),
+      /** A Redis client you made (ioredis, node-redis, or a FrontMcpRedisClient); never closed by FrontMCP. */
+      client: z
+        .custom<RedisClientInput>((value) => value === undefined || isRedisClientInput(value), {
+          error: (issue) => redisClientProblem(issue.input) ?? UNSUPPORTED_REDIS_CLIENT_MESSAGE,
+        })
+        .optional(),
       url: z.string().optional(),
       token: z.string().optional(),
     })

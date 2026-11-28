@@ -20,6 +20,7 @@ export {
   type ResponseRelayMessage,
 } from './relay-messages';
 export { resolveHaConfigFromEnv, HA_ENV } from './ha-config';
+export { createHaRedisClient } from './ha-redis-client';
 export { DEFAULT_FRONTMCP_NODE_COOKIE, DEFAULT_FRONTMCP_MACHINE_ID_HEADER } from './ha.constants';
 export type { HaConfig, DeploymentMode, HeartbeatValue, TakeoverResult } from './ha.types';
 export { DEFAULT_HA_CONFIG } from './ha.types';

@@ -12,8 +12,9 @@ import {
 } from '@frontmcp/utils';
 
 import {
-  isRedisProvider,
+  isRedisConnectionOptions,
   redisOptionsSchema,
+  redisStorageConfigOf,
   type FrontMcpConfigType,
   type HealthProbeDefinition,
   type ScopeEntry,
@@ -75,11 +76,9 @@ export function registerReadinessProbe(providers: ProviderRegistry, probe: Healt
  */
 export function leaseStorageConfig(redis: unknown, kind: LeaseKind, scope: LeaseScope): StorageConfig {
   const parsed = redis === undefined ? undefined : redisOptionsSchema.safeParse(redis);
-  if (parsed?.success && isRedisProvider(parsed.data)) {
-    const { host, port, password, db, tls } = parsed.data;
+  if (parsed?.success && isRedisConnectionOptions(parsed.data)) {
     return {
-      type: 'redis',
-      redis: { config: { host, port, password, db, tls } },
+      ...redisStorageConfigOf(parsed.data),
       prefix: scope === 'cluster' ? `frontmcp:cluster:${kind}:` : `frontmcp:${kind}:${nodeOs().hostname()}:`,
       fallback: 'error',
     };

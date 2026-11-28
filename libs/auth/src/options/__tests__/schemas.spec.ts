@@ -11,6 +11,8 @@
  * - orchestrated.schema.ts (localAuthSchema, remoteAuthSchema)
  */
 
+import { REQUIRED_REDIS_CLIENT_METHODS } from '@frontmcp/utils';
+
 import { localAuthSchema, remoteAuthSchema } from '../orchestrated.schema';
 import { publicAuthOptionsSchema } from '../public.schema';
 import { authOptionsSchema } from '../schema';
@@ -33,6 +35,11 @@ import { transparentAuthOptionsSchema } from '../transparent.schema';
 // ============================================
 // publicAccessConfigSchema
 // ============================================
+
+/** An object with every method a FrontMcpRedisClient requires. */
+function fullRedisClient(): Record<string, () => undefined> {
+  return Object.fromEntries(REQUIRED_REDIS_CLIENT_METHODS.map((name) => [name, () => undefined]));
+}
 
 describe('publicAccessConfigSchema', () => {
   it('should apply defaults when given an empty object', () => {
@@ -352,9 +359,18 @@ describe('secureStoreConfigSchema', () => {
       { sqlite: { path: '/tmp/s.sqlite', encryption: { secret: undefined } }, scope: 'user' },
       'secureStore.sqlite.encryption.secret: Invalid input: expected string, received undefined',
     ],
+    [{ redis: { port: 6379 } }, 'secureStore.redis.host: redis needs host, url, cluster.nodes or client'],
     [
-      { redis: { url: 'redis://cache.internal' } },
-      'secureStore.redis.host: Invalid input: expected string, received undefined',
+      { redis: { url: 'http://cache.internal' } },
+      'secureStore.redis.url: redis.url must be a redis:// or rediss:// URL',
+    ],
+    [
+      { redis: { host: 'cache', client: fullRedisClient() } },
+      'secureStore.redis.client: redis.client carries its own connection; drop host beside it',
+    ],
+    [
+      { redis: { host: 'cache', db: 2, cluster: true } },
+      'secureStore.redis.db: redis.db is 2, but a Redis Cluster has database 0 only',
     ],
     [{ redis: { host: '' } }, 'secureStore.redis.host: Too small: expected string to have >=1 characters'],
     [
@@ -385,10 +401,48 @@ describe('secureStoreConfigSchema', () => {
   });
 
   it('refuses an unusable backing where the server reads auth', () => {
-    const result = authOptionsSchema.safeParse({ mode: 'local', secureStore: { redis: { url: 'redis://cache' } } });
+    const result = authOptionsSchema.safeParse({ mode: 'local', secureStore: { redis: { port: 6379 } } });
 
     expect(result.success).toBe(false);
-    expect(JSON.stringify(result.error?.issues)).toContain('secureStore.redis.host: Invalid input');
+    expect(result.error?.issues).toEqual([
+      expect.objectContaining({
+        path: ['secureStore', 'redis', 'host'],
+        message: 'redis needs host, url, cluster.nodes or client',
+      }),
+    ]);
+  });
+
+  it.each([
+    ['a url', { url: 'rediss://:pw@cache.internal:6380' }],
+    ['a cluster endpoint', { host: 'cfg.example', tls: true, cluster: true }],
+    ['cluster seed nodes', { cluster: { nodes: ['10.0.0.1:7000', { host: '10.0.0.2', port: 7001 }] } }],
+    ['a client', { client: fullRedisClient() }],
+  ])('takes a Redis backing given by %s (#1503)', (_label, redis) => {
+    const result = secureStoreConfigSchema.safeParse({ redis });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('refuses a client of its own that lacks required methods, naming them', () => {
+    const result = secureStoreConfigSchema.safeParse({ redis: { client: { get() {}, set() {}, del() {} } } });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.message).toContain('redis.client is missing FrontMcpRedisClient methods: exists');
+  });
+
+  it('keeps a host config as before: port 6379, db 0, no TLS', () => {
+    const result = secureStoreConfigSchema.safeParse({ redis: { host: 'cache' } });
+
+    expect(result.success && result.data).toMatchObject({
+      redis: { host: 'cache', port: 6379, db: 0, tls: false, keyPrefix: 'mcp:session:', defaultTtlMs: 3600000 },
+    });
+  });
+
+  it('keeps the client a backing was given as the same object', () => {
+    const client = fullRedisClient();
+    const result = secureStoreConfigSchema.safeParse({ redis: { client } });
+
+    expect(result.success && (result.data as { redis: { client: unknown } }).redis.client).toBe(client);
   });
 
   it('keeps the memory store for a backing left undefined', () => {

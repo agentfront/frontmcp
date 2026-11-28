@@ -7,6 +7,12 @@
  * @see https://datatracker.ietf.org/doc/html/draft-ietf-oauth-client-id-metadata-document-00
  */
 import { internalZ as z } from '@frontmcp/lazy-zod';
+import {
+  isRedisClientInput,
+  redisClientProblem,
+  UNSUPPORTED_REDIS_CLIENT_MESSAGE,
+  type RedisClientInput,
+} from '@frontmcp/utils';
 
 // ============================================
 // CLIENT METADATA DOCUMENT SCHEMA
@@ -169,6 +175,32 @@ export const cimdRedisCacheConfigSchema = z.object({
    * @default false
    */
   tls: z.boolean().optional(),
+
+  /**
+   * The host (or url) is a Redis Cluster endpoint (`true`), or `{ nodes, options }` with seed nodes
+   * and ioredis ClusterOptions.
+   */
+  cluster: z
+    .union([
+      z.boolean(),
+      z.object({
+        nodes: z
+          .array(z.union([z.string().min(1), z.object({ host: z.string().min(1), port: z.number().optional() })]))
+          .optional(),
+        options: z.record(z.string(), z.unknown()).optional(),
+      }),
+    ])
+    .optional(),
+
+  /**
+   * A Redis client you made (ioredis Redis/Cluster, node-redis client/cluster, or a
+   * FrontMcpRedisClient), in place of the connection fields. FrontMCP never closes it.
+   */
+  client: z
+    .custom<RedisClientInput>((value) => value === undefined || isRedisClientInput(value), {
+      error: (issue) => redisClientProblem(issue.input) ?? UNSUPPORTED_REDIS_CLIENT_MESSAGE,
+    })
+    .optional(),
 
   /**
    * Key prefix for CIMD cache entries.

@@ -18,9 +18,9 @@ function createMockRedis() {
       const entry = store.get(key);
       return entry && entry.expiresAt >= Date.now() ? 1 : 0;
     }),
-    keys: jest.fn(async (pattern: string) => {
+    scan: jest.fn(async (_cursor: string, _match: string, pattern: string) => {
       const prefix = pattern.replace('*', '');
-      return [...store.keys()].filter((k) => k.startsWith(prefix));
+      return ['0', [...store.keys()].filter((k) => k.startsWith(prefix))] as [string, string[]];
     }),
     eval: jest.fn(async () => 0),
   };

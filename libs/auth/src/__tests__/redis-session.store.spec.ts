@@ -122,6 +122,34 @@ describe('RedisSessionStore', () => {
       });
       expect(newStore).toBeDefined();
     });
+
+    it('opens a host config with the same defaults as before', () => {
+      const { RedisStorageAdapter } = jest.requireMock('@frontmcp/utils') as { RedisStorageAdapter: jest.Mock };
+      RedisStorageAdapter.mockClear();
+      new RedisSessionStore({ host: 'cache', password: 'pw' });
+      expect(RedisStorageAdapter).toHaveBeenCalledWith({
+        config: { host: 'cache', port: 6379, db: 0, password: 'pw' },
+        keyPrefix: 'mcp:session:',
+      });
+    });
+
+    it("opens a Redis Cluster, a url, or the app's own client (#1503)", () => {
+      const { RedisStorageAdapter } = jest.requireMock('@frontmcp/utils') as { RedisStorageAdapter: jest.Mock };
+      RedisStorageAdapter.mockClear();
+      const client = { get() {}, set() {}, del() {} };
+
+      new RedisSessionStore({ host: 'cfg', tls: true, cluster: true });
+      new RedisSessionStore({ url: 'rediss://cfg:6380', cluster: true });
+      new RedisSessionStore({ cluster: { nodes: ['10.0.0.1:7000'] } });
+      new RedisSessionStore({ client, keyPrefix: 'own:' });
+
+      expect(RedisStorageAdapter.mock.calls.map(([options]) => options)).toEqual([
+        { config: { host: 'cfg', port: 6379, db: 0, tls: true, cluster: true }, keyPrefix: 'mcp:session:' },
+        { url: 'rediss://cfg:6380', config: { cluster: true }, keyPrefix: 'mcp:session:' },
+        { config: { cluster: { nodes: ['10.0.0.1:7000'] } }, keyPrefix: 'mcp:session:' },
+        { client, keyPrefix: 'own:' },
+      ]);
+    });
   });
 
   // ============================================

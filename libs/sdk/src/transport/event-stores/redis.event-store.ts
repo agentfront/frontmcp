@@ -1,7 +1,7 @@
 import { type EventId, type EventStore, type JSONRPCMessage, type StreamId } from '@frontmcp/protocol';
-import { attachRedisErrorListener } from '@frontmcp/utils';
+import { createRedisConnection, type FrontMcpRedisClient } from '@frontmcp/utils';
 
-import { isVercelKvProvider, type RedisOptionsInput } from '../../common';
+import { isVercelKvProvider, redisConnectionOfOptions, type RedisOptionsInput } from '../../common';
 import { normalizeRedisOptions } from '../../common/types/options/redis/schema';
 import { InternalMcpError } from '../../errors/mcp.error';
 import { VercelKvNotSupportedError } from '../../errors/sdk.errors';
@@ -55,7 +55,7 @@ export interface RedisEventStoreOptions {
  * ```
  */
 export class RedisEventStore implements EventStore {
-  private client: unknown; // Redis client (lazy loaded)
+  private client?: FrontMcpRedisClient; // Redis client (lazy loaded)
   private readonly keyPrefix: string;
   private readonly maxEvents: number;
   private readonly ttlSeconds: number;
@@ -93,29 +93,24 @@ export class RedisEventStore implements EventStore {
         );
       }
 
-      // Use ioredis for 'redis' provider
-
-      const Redis = require('ioredis');
-      const { host, port, password, db, tls } = redis;
-
-      this.client = new Redis({
-        host,
-        port,
-        password,
-        db,
-        tls: tls ? {} : undefined,
-        lazyConnect: true,
-        enableReadyCheck: false,
-        maxRetriesPerRequest: 3,
-      });
-      attachRedisErrorListener(this.client as Parameters<typeof attachRedisErrorListener>[0], {
+      // A single node, a cluster (each stream is one key, routed by its slot), or the app's client
+      const { client, owned, kind } = createRedisConnection({
+        ...redisConnectionOfOptions(redis),
         label: 'RedisEventStore',
+        ioredisOptions: { lazyConnect: true, enableReadyCheck: false },
       });
-
-      await (this.client as { connect: () => Promise<void> }).connect();
+      if (kind === 'custom' && (typeof client.xadd !== 'function' || typeof client.xrange !== 'function')) {
+        throw new InternalMcpError(
+          "The event store's redis client has no xadd/xrange: give it a client that runs Redis Streams commands.",
+          'INVALID_REDIS_CONFIG',
+        );
+      }
+      this.client = client;
+      // A client the app made is connected already, or connects itself
+      if (owned) await client.connect?.();
     }
 
-    return this.client as {
+    return this.client as unknown as {
       xadd: (...args: unknown[]) => Promise<string>;
       xrange: (...args: unknown[]) => Promise<[string, string[]][]>;
       expire: (key: string, seconds: number) => Promise<number>;
@@ -232,7 +227,8 @@ export class RedisEventStore implements EventStore {
    */
   async close(): Promise<void> {
     if (this.client) {
-      await (this.client as { quit: () => Promise<void> }).quit();
+      // A client the app made is behind a guard whose quit() closes nothing
+      await this.client.quit();
       this.client = undefined;
     }
   }

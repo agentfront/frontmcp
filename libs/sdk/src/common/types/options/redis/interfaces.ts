@@ -1,6 +1,8 @@
 // common/types/options/redis/interfaces.ts
 // Explicit TypeScript interfaces for Redis/storage configuration
 
+import type { RedisClientInput, RedisClusterConfig, RedisClusterNode, RedisClusterOption } from '@frontmcp/utils';
+
 /**
  * Supported storage providers.
  */
@@ -56,9 +58,21 @@ export interface RedisConnectionInterface {
   tls?: boolean;
 
   /**
+   * The host is a Redis Cluster endpoint, such as an AWS ElastiCache configuration endpoint:
+   * `true`, or `{ nodes, options }` to name seed nodes or tune the ioredis Cluster. A cluster has
+   * database 0 only.
+   *
+   * @example `{ host: 'my-cluster.xxxxxx.clustercfg.use2.cache.amazonaws.com', tls: true, cluster: true }`
+   */
+  cluster?: RedisClusterOption;
+
+  /**
    * Not set with `host` — a config with a `url` is a {@link RedisUrlOptionsInterface}.
    */
   url?: undefined;
+
+  /** Not set with `host` — a client you made is a {@link RedisClientOptionsInterface}. */
+  client?: undefined;
 }
 
 /**
@@ -97,6 +111,47 @@ export interface RedisUrlOptionsInterface
 }
 
 /**
+ * A Redis Cluster named by its seed nodes alone. One reachable node is enough; the rest are
+ * discovered. Parsed into the host form, with the first seed node as `host`/`port`.
+ */
+export interface RedisClusterNodesOptionsInterface extends CommonStorageOptionsInterface {
+  /** Storage provider type. Optional. */
+  provider?: 'redis';
+  /** The seed nodes (`{ host, port }`, `'host:port'` or a `redis://` URL), and ioredis ClusterOptions. */
+  cluster: RedisClusterConfig & { nodes: RedisClusterNode[] };
+  /** The password of every node. */
+  password?: string;
+  /** A cluster has database 0 only. */
+  db?: number;
+  /** Connect to every node over TLS. */
+  tls?: boolean;
+  host?: undefined;
+  port?: undefined;
+  url?: undefined;
+  client?: undefined;
+}
+
+/**
+ * A Redis client you made: an ioredis `Redis` or `Cluster`, a node-redis client or cluster
+ * (`createClient()` / `createCluster()`), or an object implementing `FrontMcpRedisClient`.
+ * FrontMCP runs its commands on it, opens copies of it for pub/sub (which it closes), and never
+ * closes it: you do, after the server stops. Nothing about the connection goes beside it.
+ */
+export interface RedisClientOptionsInterface extends CommonStorageOptionsInterface {
+  /** Storage provider type. Optional. */
+  provider?: 'redis';
+  /** The client. */
+  client: RedisClientInput;
+  host?: undefined;
+  port?: undefined;
+  password?: undefined;
+  db?: undefined;
+  tls?: undefined;
+  url?: undefined;
+  cluster?: undefined;
+}
+
+/**
  * Vercel KV provider configuration.
  * Uses environment variables by default (KV_REST_API_URL, KV_REST_API_TOKEN).
  */
@@ -126,6 +181,8 @@ export type RedisOptionsInterface =
   | RedisProviderOptionsInterface
   | VercelKvProviderOptionsInterface
   | RedisUrlOptionsInterface
+  | RedisClusterNodesOptionsInterface
+  | RedisClientOptionsInterface
   | (RedisConnectionInterface & CommonStorageOptionsInterface);
 
 /**
@@ -134,4 +191,6 @@ export type RedisOptionsInterface =
 export type PubsubOptionsInterface =
   | RedisProviderOptionsInterface
   | RedisUrlOptionsInterface
+  | RedisClusterNodesOptionsInterface
+  | RedisClientOptionsInterface
   | (RedisConnectionInterface & CommonStorageOptionsInterface);
