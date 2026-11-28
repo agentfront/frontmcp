@@ -90,6 +90,11 @@ export interface JobStateStore {
   createRunIfAbsent?(record: JobRunRecord | WorkflowRunRecord): Promise<boolean>;
   /** Merge `updates` into the run (never its `runId`), bump its revision and stamp `updatedAt`; an unknown run is ignored. */
   updateRun(runId: string, updates: Partial<JobRunRecord | WorkflowRunRecord>): Promise<void>;
+  /**
+   * {@link updateRun}, unless the run already ended (a state of {@link FINISHED_JOB_STATES}), in one atomic step;
+   * resolves to whether it wrote. A store without it is read, then written.
+   */
+  updateUnfinishedRun?(runId: string, updates: Partial<JobRunRecord | WorkflowRunRecord>): Promise<boolean>;
   getRun(runId: string): Promise<JobRunRecord | WorkflowRunRecord | null>;
   listRuns(opts?: {
     jobId?: string;

@@ -221,6 +221,16 @@ describe.each(stateBackends)('%s job state store', (_backend, open) => {
     expect(await store.swapLeases?.('admission:box', '', 'next', 30)).toBe(true);
   });
 
+  it('writes to a run only while it is unfinished', async () => {
+    await store.createRun(run('r1'));
+
+    expect(await store.updateUnfinishedRun?.('r1', { state: 'running' })).toBe(true);
+    expect(await store.updateUnfinishedRun?.('r1', { state: 'cancelled' })).toBe(true);
+    expect(await store.updateUnfinishedRun?.('r1', { state: 'completed', result: { late: true } })).toBe(false);
+    expect(await store.getRun('r1')).toEqual(expect.objectContaining({ state: 'cancelled', revision: 3 }));
+    expect(await store.updateUnfinishedRun?.('unknown', { state: 'completed' })).toBe(false);
+  });
+
   it('lets one caller claim a run', async () => {
     await store.createRun(run('r1'));
 

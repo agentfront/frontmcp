@@ -200,11 +200,22 @@ class FailingCompletionStore extends MemoryJobStateStore {
   }
 
   override async updateRun(runId: string, updates: Partial<JobRunRecord | WorkflowRunRecord>): Promise<void> {
-    if (updates.state === 'completed' && this.failures > 0) {
-      this.failures--;
-      throw new Error('the run store is unavailable');
-    }
+    this.failCompletion(updates);
     await super.updateRun(runId, updates);
+  }
+
+  override async updateUnfinishedRun(
+    runId: string,
+    updates: Partial<JobRunRecord | WorkflowRunRecord>,
+  ): Promise<boolean> {
+    this.failCompletion(updates);
+    return super.updateUnfinishedRun(runId, updates);
+  }
+
+  private failCompletion(updates: Partial<JobRunRecord | WorkflowRunRecord>): void {
+    if (updates.state !== 'completed' || this.failures <= 0) return;
+    this.failures--;
+    throw new Error('the run store is unavailable');
   }
 }
 
