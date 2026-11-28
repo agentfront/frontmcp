@@ -530,6 +530,25 @@ describe('RedisSessionStore', () => {
       expect(nodes[0].pubsub).toHaveBeenCalledWith('NUMSUB', 'mcp:session:session-end');
     });
 
+    it('still counts a listener of a cluster that left while the message was published', async () => {
+      const counts = [2, 1];
+      const node = { pubsub: jest.fn(async () => ['ch', counts.shift()]) };
+      mockStorageAdapter.getClient.mockReturnValue({ isCluster: true, nodes: jest.fn(() => [node]) });
+
+      await expect(store.publish('session-end', 'm')).resolves.toBe(2);
+      expect(mockStorageAdapter.publish).toHaveBeenCalledWith('session-end', 'm');
+    });
+
+    it('rejects when a node of the cluster cannot be counted, as the count could be short', async () => {
+      const nodes = [
+        { pubsub: jest.fn().mockResolvedValue(['ch', 1]) },
+        { pubsub: jest.fn().mockRejectedValue(new Error('failing over')) },
+      ];
+      mockStorageAdapter.getClient.mockReturnValue({ isCluster: true, nodes: jest.fn(() => nodes) });
+
+      await expect(store.publish('session-end', 'm')).rejects.toThrow('failing over');
+    });
+
     it('hands each message on the channel over, and closes the subscriber connection it opened', async () => {
       const onMessage = jest.fn();
       const stop = jest.fn(async () => undefined);

@@ -340,17 +340,16 @@ export class RedisSessionStore implements SessionStore {
     }
   }
 
-  /**
-   * Publish `message` to the instances sharing this store, on a channel of its Redis named under the
-   * store's key prefix. Resolves how many connections listen on the channel; on a cluster that is every
-   * node's listeners, as a cluster's PUBLISH counts only those of the node it ran on.
-   */
+  /** Publish to the instances sharing this store; how many it reached (on a cluster, the most counted around it). */
   async publish(channel: string, message: string): Promise<number> {
     await this.ensureConnected();
-    const received = await this.storage.publish(channel, message);
     const client = this.storage.getClient() as unknown as FrontMcpRedisClient | undefined;
-    if (!client || !isRedisClusterClient(client)) return received;
-    return countRedisSubscribers(client, `${this.keyPrefix}${channel}`);
+    if (!client || !isRedisClusterClient(client)) return this.storage.publish(channel, message);
+    const prefixed = `${this.keyPrefix}${channel}`;
+    const before = await countRedisSubscribers(client, prefixed, { strict: true });
+    const received = await this.storage.publish(channel, message);
+    const after = await countRedisSubscribers(client, prefixed, { strict: true });
+    return Math.max(before, received, after);
   }
 
   /**

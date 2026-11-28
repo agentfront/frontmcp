@@ -6,6 +6,7 @@
  * single node, exactly the call FrontMCP made before, and on a cluster splits the work per key or
  * runs it on every master. No key is renamed: the same keys work on a single node and a cluster.
  */
+import { StorageOperationError } from '../errors';
 import type { FrontMcpRedisClient } from './types';
 
 /** What the cluster checks read: the `isCluster` flag and the nodes. */
@@ -79,25 +80,30 @@ export async function publishRedisMessage(
   return countRedisSubscribers(client, channel);
 }
 
-/**
- * How many connections listen on `channel` (`PUBSUB NUMSUB`). A cluster node counts only the connections
- * subscribed through it, so a cluster's count adds up every node's. A node that can't answer (failing
- * over) counts none.
- */
+/** Connections on `channel`, every node's on a cluster; a node that can't count adds 0, or rejects if strict. */
 export async function countRedisSubscribers(
   client: Pick<FrontMcpRedisClient, 'pubsub'> & ClusterShape,
   channel: string,
+  options: { strict?: boolean } = {},
 ): Promise<number> {
   const nodes: Array<Pick<FrontMcpRedisClient, 'pubsub'>> =
     isRedisClusterClient(client) && typeof client.nodes === 'function' ? client.nodes('all') : [client];
+  if (options.strict && nodes.length === 0) {
+    throw new StorageOperationError('PUBSUB NUMSUB', channel, 'the cluster lists no node to count on');
+  }
   const counts = await Promise.all(
     nodes.map(async (node) => {
-      if (typeof node.pubsub !== 'function') return 0;
+      if (typeof node.pubsub !== 'function') {
+        if (options.strict) throw new StorageOperationError('PUBSUB NUMSUB', channel, 'a node cannot count');
+        return 0;
+      }
       try {
         const reply = (await node.pubsub('NUMSUB', channel)) as unknown[];
         return Number(reply?.[1] ?? 0);
-      } catch {
-        return 0;
+      } catch (error) {
+        if (!options.strict) return 0;
+        const cause = error instanceof Error ? error : undefined;
+        throw new StorageOperationError('PUBSUB NUMSUB', channel, cause?.message ?? String(error), cause);
       }
     }),
   );

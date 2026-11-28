@@ -346,4 +346,19 @@ describe('countRedisSubscribers', () => {
   it('counts none on a client that cannot ask', async () => {
     await expect(countRedisSubscribers({}, 'ch')).resolves.toBe(0);
   });
+
+  it('rejects a count that may be short when asked to be strict', async () => {
+    const failing = { pubsub: jest.fn().mockRejectedValue(new Error('failing over')) };
+    const cluster = (all: object[]) => ({ isCluster: true, nodes: jest.fn(() => all) });
+    const counted = { pubsub: jest.fn().mockResolvedValue(['ch', 1]) };
+
+    await expect(countRedisSubscribers(cluster([counted, failing]) as never, 'ch', { strict: true })).rejects.toThrow(
+      'failing over',
+    );
+    await expect(countRedisSubscribers(cluster([counted, {}]) as never, 'ch', { strict: true })).rejects.toThrow(
+      'a node cannot count',
+    );
+    await expect(countRedisSubscribers(cluster([]) as never, 'ch', { strict: true })).rejects.toThrow('no node');
+    await expect(countRedisSubscribers(cluster([counted]) as never, 'ch', { strict: true })).resolves.toBe(1);
+  });
 });
