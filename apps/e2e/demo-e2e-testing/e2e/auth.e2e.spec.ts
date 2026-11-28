@@ -2,6 +2,7 @@
  * E2E for `mcp.authenticate()`, token scopes and expiry against a real server (issue #644).
  */
 import { expect, McpTestClient, MockOAuthServer, TestServer, TestTokenFactory } from '@frontmcp/testing';
+import { generatePkcePair } from '@frontmcp/utils';
 
 describe('authentication against a transparent-mode server', () => {
   let mockOAuth: MockOAuthServer;
@@ -101,6 +102,10 @@ describe('authentication against a transparent-mode server', () => {
     authorize.searchParams.set('redirect_uri', 'http://localhost:3000/callback');
     authorize.searchParams.set('response_type', 'code');
     authorize.searchParams.set('scope', 'read write');
+    // The mock requires S256 PKCE by default.
+    const { codeVerifier, codeChallenge } = generatePkcePair();
+    authorize.searchParams.set('code_challenge', codeChallenge);
+    authorize.searchParams.set('code_challenge_method', 'S256');
     const redirect = await fetch(authorize.toString(), { redirect: 'manual' });
     const code = new URL(redirect.headers.get('location') as string).searchParams.get('code') as string;
     const tokenRes = await fetch(`${mockOAuth.info.baseUrl}/oauth/token`, {
@@ -111,6 +116,7 @@ describe('authentication against a transparent-mode server', () => {
         code,
         redirect_uri: 'http://localhost:3000/callback',
         client_id: 'test-client',
+        code_verifier: codeVerifier,
       }).toString(),
     });
     const tokens = (await tokenRes.json()) as { access_token: string };
