@@ -45,6 +45,7 @@ import { hookOwnerName } from '../hooks/hook-order';
 import type HookRegistry from '../hooks/hook.registry';
 import { bindContextHookTargets, sourceMetadataOf, staticHooksFor } from '../hooks/hooks.utils';
 import type ProviderRegistry from '../provider/provider.registry';
+import { sdkHttpHandler } from '../server/sdk-http-handler';
 import { writeHttpResponse } from '../server/server.validation';
 import { flowErrorToHttpOutput } from '../transport/flow-error-output';
 import { deferredFlowLoader } from './deferred-flow';
@@ -207,87 +208,91 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
 
     const { middleware } = this.metadata;
     if (middleware) {
-      server.registerMiddleware(this.mountPath(), async (request, response, next) => {
-        const canActivate = await this.canActivate(request);
-        if (!canActivate) return next();
+      // The flow reads the request through ServerRequest only, so the node:http host serves it (#948)
+      server.registerMiddleware(
+        this.mountPath(),
+        sdkHttpHandler(async (request, response, next) => {
+          const canActivate = await this.canActivate(request);
+          if (!canActivate) return next();
 
-        // Get context storage to wrap entire flow in FrontMcpContext
-        const contextStorage = this.getContextStorage();
+          // Get context storage to wrap entire flow in FrontMcpContext
+          const contextStorage = this.getContextStorage();
 
-        try {
-          // Use runWithContext to wrap entire flow execution in AsyncLocalStorage context
-          // This ensures all stages have access to FrontMcpContext
-          const result = await this.runWithContext(
-            contextStorage,
-            request,
-            { request, response, next } as any,
-            new Map(),
-          );
-          if (result) return writeHttpResponse(response, result);
-        } catch (e) {
-          if (e instanceof FlowControl) {
-            switch (e.type) {
-              case 'abort':
-                return writeHttpResponse(response, { kind: 'text', status: 500, body: 'Aborted' });
-              case 'fail':
-                return writeHttpResponse(response, { kind: 'text', status: 500, body: 'Internal Server Error' });
-              case 'handled':
-                return;
-              case 'next':
-                return next();
-              case 'respond':
-                return writeHttpResponse(response, e.output as any);
+          try {
+            // Use runWithContext to wrap entire flow execution in AsyncLocalStorage context
+            // This ensures all stages have access to FrontMcpContext
+            const result = await this.runWithContext(
+              contextStorage,
+              request,
+              { request, response, next } as any,
+              new Map(),
+            );
+            if (result) return writeHttpResponse(response, result);
+          } catch (e) {
+            if (e instanceof FlowControl) {
+              switch (e.type) {
+                case 'abort':
+                  return writeHttpResponse(response, { kind: 'text', status: 500, body: 'Aborted' });
+                case 'fail':
+                  return writeHttpResponse(response, { kind: 'text', status: 500, body: 'Internal Server Error' });
+                case 'handled':
+                  return;
+                case 'next':
+                  return next();
+                case 'respond':
+                  return writeHttpResponse(response, e.output as any);
+              }
             }
-          }
-          // A deployment that is merely missing a secret (MCP_SESSION_SECRET,
-          // JWT_SECRET) answers the same structured `server_misconfigured` body on
-          // every adapter, not a bare 500 (#546, #646).
-          const misconfiguration = findMisconfiguration(e);
-          if (misconfiguration) {
-            this.logger.error('Server misconfigured', { flow: this.name, code: misconfiguration.code });
-            return writeHttpResponse(response, {
-              kind: 'json',
-              status: 500,
-              body: misconfigurationBody(misconfiguration),
-            });
-          }
-          // Public MCP errors carry a client-safe status + message (e.g. a 401
-          // from ensureAuthInfo when a verified token's session can't be
-          // reconstructed — #471). Render them with their real status instead
-          // of masking everything as a 500, and forward an RFC 6750
-          // `WWW-Authenticate` challenge when the error supplies one.
-          if (e instanceof PublicMcpError) {
-            const challenge = e.wwwAuthenticate;
-            this.logger.warn('Public error in flow', {
+            // A deployment that is merely missing a secret (MCP_SESSION_SECRET,
+            // JWT_SECRET) answers the same structured `server_misconfigured` body on
+            // every adapter, not a bare 500 (#546, #646).
+            const misconfiguration = findMisconfiguration(e);
+            if (misconfiguration) {
+              this.logger.error('Server misconfigured', { flow: this.name, code: misconfiguration.code });
+              return writeHttpResponse(response, {
+                kind: 'json',
+                status: 500,
+                body: misconfigurationBody(misconfiguration),
+              });
+            }
+            // Public MCP errors carry a client-safe status + message (e.g. a 401
+            // from ensureAuthInfo when a verified token's session can't be
+            // reconstructed — #471). Render them with their real status instead
+            // of masking everything as a 500, and forward an RFC 6750
+            // `WWW-Authenticate` challenge when the error supplies one.
+            if (e instanceof PublicMcpError) {
+              const challenge = e.wwwAuthenticate;
+              this.logger.warn('Public error in flow', {
+                flow: this.name,
+                name: e.name,
+                status: e.statusCode,
+                code: e.code,
+              });
+              return writeHttpResponse(response, {
+                kind: 'json',
+                status: e.statusCode,
+                body: { error: e.getPublicMessage() },
+                ...(typeof challenge === 'string' && challenge.length > 0
+                  ? { headers: { 'WWW-Authenticate': challenge } }
+                  : {}),
+              });
+            }
+            // Log unhandled errors for visibility (non-FlowControl errors indicate bugs)
+            this.logger.error('Unhandled error in flow', {
               flow: this.name,
-              name: e.name,
-              status: e.statusCode,
-              code: e.code,
+              name: e instanceof Error ? e.name : 'UnknownError',
+              message: e instanceof Error ? e.message : String(e),
             });
             return writeHttpResponse(response, {
-              kind: 'json',
-              status: e.statusCode,
-              body: { error: e.getPublicMessage() },
-              ...(typeof challenge === 'string' && challenge.length > 0
-                ? { headers: { 'WWW-Authenticate': challenge } }
-                : {}),
+              kind: 'text',
+              status: 500,
+              body: 'Internal Server Error',
             });
           }
-          // Log unhandled errors for visibility (non-FlowControl errors indicate bugs)
-          this.logger.error('Unhandled error in flow', {
-            flow: this.name,
-            name: e instanceof Error ? e.name : 'UnknownError',
-            message: e instanceof Error ? e.message : String(e),
-          });
-          return writeHttpResponse(response, {
-            kind: 'text',
-            status: 500,
-            body: 'Internal Server Error',
-          });
-        }
 
-        return next();
-      });
+          return next();
+        }),
+      );
     }
 
     return Promise.resolve();

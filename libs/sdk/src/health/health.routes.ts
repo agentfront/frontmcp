@@ -6,6 +6,7 @@
 import { getRuntimeContext } from '@frontmcp/utils';
 
 import type { HealthOptionsInterface } from '../common';
+import { sdkHttpHandler } from '../server/sdk-http-handler';
 import type { HealthService } from './health.service';
 
 /**
@@ -58,24 +59,36 @@ export function registerHealthRoutes(
   const readyzPath = config.readyzPath ?? '/readyz';
 
   // Liveness probe
-  server.registerRoute('GET', healthzPath, async (_req, res) => {
-    const response = healthService.getHealthz();
-    res.status(response.status === 'ok' ? 200 : 503).json(response);
-  });
+  server.registerRoute(
+    'GET',
+    healthzPath,
+    sdkHttpHandler(async (_req, res) => {
+      const response = healthService.getHealthz();
+      res.status(response.status === 'ok' ? 200 : 503).json(response);
+    }),
+  );
 
   // Legacy /health alias (backwards compatibility)
   if (healthzPath !== '/health') {
-    server.registerRoute('GET', '/health', async (_req, res) => {
-      const response = healthService.getHealthz();
-      res.status(response.status === 'ok' ? 200 : 503).json(response);
-    });
+    server.registerRoute(
+      'GET',
+      '/health',
+      sdkHttpHandler(async (_req, res) => {
+        const response = healthService.getHealthz();
+        res.status(response.status === 'ok' ? 200 : 503).json(response);
+      }),
+    );
   }
 
   // Readiness probe (runtime-conditional)
   if (isReadyzEnabled(config)) {
-    server.registerRoute('GET', readyzPath, async (_req, res) => {
-      const response = await healthService.getReadyz();
-      res.status(response.status === 'ready' ? 200 : 503).json(response);
-    });
+    server.registerRoute(
+      'GET',
+      readyzPath,
+      sdkHttpHandler(async (_req, res) => {
+        const response = await healthService.getReadyz();
+        res.status(response.status === 'ready' ? 200 : 503).json(response);
+      }),
+    );
   }
 }

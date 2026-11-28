@@ -34,9 +34,10 @@ const BUDGETS: Array<{ entry: string; label: string; maxBytes: number }> = [
   // fields checked, and the principal told by the subject claimsMapping.userId resolves. Then +30 and +30: the shared
   // server's changes (#1349). Then +282 and +282: detached workflows, workflow cancel and machine-wide admission
   // (#1351). Then +1,549 and +1,544: starting a server on an existing container (#1356). Then +120 and +120: its review
-  // fixes, one onReady() per instance and the disposal check at acquisition
-  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_359_368 },
-  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_366_609 },
+  // fixes, one onReady() per instance and the disposal check at acquisition. Then +84 and +84: the mark on FrontMCP's
+  // own HTTP handlers, which the node:http host serves without Express (#948)
+  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_359_452 },
+  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_366_693 },
 ];
 
 // +413 bytes, the 1.13.2 batch: producer-backed resource keys (#1354, +241), the client metadata a transparent server
