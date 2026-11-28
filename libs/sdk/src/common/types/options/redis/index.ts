@@ -7,6 +7,8 @@ export type {
   RedisConnectionInterface,
   RedisProviderOptionsInterface,
   RedisUrlOptionsInterface,
+  RedisClusterNodesOptionsInterface,
+  RedisClientOptionsInterface,
   VercelKvProviderOptionsInterface,
   RedisOptionsInterface,
   PubsubOptionsInterface,
@@ -17,6 +19,9 @@ export {
   redisProviderSchema,
   vercelKvProviderSchema,
   redisUrlSchema,
+  redisClusterSchema,
+  redisClusterNodesSchema,
+  redisClientSchema,
   parseRedisUrl,
   redisOptionsSchema,
   pubsubOptionsSchema,
@@ -28,9 +33,24 @@ export {
 export type {
   ParsedRedisUrl,
   RedisProviderOptions,
+  RedisClientProviderOptions,
   VercelKvProviderOptions,
   RedisOptions,
   RedisOptionsInput,
   PubsubOptions,
   PubsubOptionsInput,
 } from './schema';
+
+export { isRedisConnectionOptions, redisConnectionOfOptions, redisStorageConfigOf } from './connection';
+export type { RedisConnectionOptions } from './connection';
+
+// The one guard for a Redis connection in any form (host, url, cluster seed nodes, client)
+export { isRedisConnection } from '@frontmcp/utils';
+export type {
+  FrontMcpRedisClient,
+  RedisClientInput,
+  RedisClusterConfig,
+  RedisClusterNode,
+  RedisClusterOption,
+  RedisConnectionConfig,
+} from '@frontmcp/utils';

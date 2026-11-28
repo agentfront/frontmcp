@@ -5,18 +5,21 @@
  * When a pod dies, its heartbeat key expires and other pods can detect the death.
  */
 
+import { scanRedisKeys, type RedisScanClient } from '@frontmcp/utils';
+
 import { DEFAULT_HA_CONFIG, type HaConfig, type HeartbeatValue } from './ha.types';
 
 /**
  * Minimal Redis client interface (subset of ioredis).
  * Allows the service to work with any Redis-compatible client.
+ *
+ * Since 1.14 keys are listed with SCAN (on every master of a cluster), not KEYS.
  */
-export interface HeartbeatRedisClient {
+export interface HeartbeatRedisClient extends RedisScanClient {
   set(key: string, value: string, expiryMode: 'PX', time: number): Promise<unknown>;
   get(key: string): Promise<string | null>;
   del(key: string): Promise<number>;
   exists(key: string): Promise<number>;
-  keys(pattern: string): Promise<string[]>;
 }
 
 export class HeartbeatService {
@@ -96,7 +99,8 @@ export class HeartbeatService {
 
   /** Get all alive node IDs by scanning heartbeat keys. */
   async getAliveNodes(): Promise<string[]> {
-    const keys = await this.redis.keys(`${this.keyPrefix}heartbeat:*`);
+    // SCAN, not KEYS: it doesn't block the node, and on a cluster it runs on every master
+    const keys = await scanRedisKeys(this.redis, `${this.keyPrefix}heartbeat:*`);
     return keys.map((key) => key.slice(`${this.keyPrefix}heartbeat:`.length));
   }
 

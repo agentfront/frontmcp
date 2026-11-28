@@ -203,11 +203,28 @@ export class RedisSkillHttpCache implements SkillHttpCache {
   private readonly keyPrefix: string;
   private readonly ttlMs: number;
   private readonly getClient: () => Promise<RedisClient>;
+  private readonly listKeys: (client: RedisClient, pattern: string) => Promise<string[]>;
+  private readonly deleteKeys: (client: RedisClient, keys: string[]) => Promise<unknown>;
 
-  constructor(options: { getClient: () => Promise<RedisClient>; keyPrefix?: string; ttlMs?: number }) {
+  /**
+   * @param options.listKeys how to find the keys matching a pattern; by default the client's `keys()`
+   *   (Vercel KV). A Redis server or cluster is scanned instead (the factory passes SCAN over every master).
+   * @param options.deleteKeys how to delete several keys; by default one `del(...keys)` (one DEL per
+   *   key on a cluster, whose keys span hash slots).
+   */
+  constructor(options: {
+    getClient: () => Promise<RedisClient>;
+    keyPrefix?: string;
+    ttlMs?: number;
+    listKeys?: (client: RedisClient, pattern: string) => Promise<string[]>;
+    deleteKeys?: (client: RedisClient, keys: string[]) => Promise<unknown>;
+  }) {
     this.getClient = options.getClient;
     this.keyPrefix = options.keyPrefix ?? 'frontmcp:skills:cache:';
     this.ttlMs = options.ttlMs ?? 60000;
+    this.listKeys =
+      options.listKeys ?? ((client, pattern) => (client.keys ? client.keys(pattern) : Promise.resolve([])));
+    this.deleteKeys = options.deleteKeys ?? ((client, keys) => client.del(...keys));
   }
 
   async getLlmTxt(): Promise<string | null> {
@@ -245,9 +262,9 @@ export class RedisSkillHttpCache implements SkillHttpCache {
   async invalidateAll(): Promise<void> {
     try {
       const client = await this.getClient();
-      const keys = await client.keys(`${this.keyPrefix}*`);
+      const keys = await this.listKeys(client, `${this.keyPrefix}*`);
       if (keys.length > 0) {
-        await client.del(...keys);
+        await this.deleteKeys(client, keys);
       }
     } catch {
       // Ignore errors during invalidation
@@ -266,11 +283,11 @@ export class RedisSkillHttpCache implements SkillHttpCache {
       ];
 
       // Also find and delete list caches
-      const listKeys = await client.keys(`${this.keyPrefix}list:*`);
+      const listKeys = await this.listKeys(client, `${this.keyPrefix}list:*`);
       keysToDelete.push(...listKeys);
 
       if (keysToDelete.length > 0) {
-        await client.del(...keysToDelete);
+        await this.deleteKeys(client, keysToDelete);
       }
     } catch {
       // Ignore errors during invalidation
@@ -308,11 +325,14 @@ export class RedisSkillHttpCache implements SkillHttpCache {
 
 /**
  * Minimal Redis client interface used by the cache.
- * Compatible with ioredis and @vercel/kv.
+ * Compatible with ioredis, node-redis (through FrontMCP's adapter) and @vercel/kv.
+ *
+ * `keys` is only needed by the default key listing (Vercel KV); a Redis server or cluster is
+ * scanned with SCAN instead.
  */
 export interface RedisClient {
   get(key: string): Promise<string | null>;
   setex(key: string, seconds: number, value: string): Promise<unknown>;
   del(...keys: string[]): Promise<unknown>;
-  keys(pattern: string): Promise<string[]>;
+  keys?(pattern: string): Promise<string[]>;
 }
