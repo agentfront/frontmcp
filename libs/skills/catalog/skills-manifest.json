@@ -3781,6 +3781,30 @@
               ]
             },
             {
+              "name": "redis-cluster-elasticache",
+              "description": "Run several FrontMCP instances on an AWS ElastiCache cluster (cluster mode on, TLS) with `cluster: true`.",
+              "level": "intermediate",
+              "tags": ["setup", "redis", "cluster", "elasticache", "aws", "session", "tls"],
+              "features": [
+                "`cluster: true` beside `host`/`port` (or `url`) opens a Redis Cluster client from the configuration endpoint",
+                "The AUTH token and TLS apply to every node, and hostnames are kept for the TLS certificate",
+                "One `redis` value shared by `redis` and `transport.persistence.redis`, so a session opened on one instance is served by the others",
+                "Every instance shares `MCP_SESSION_SECRET`, or a session id minted by one is a 404 on the others"
+              ]
+            },
+            {
+              "name": "bring-your-own-redis-client",
+              "description": "Hand FrontMCP an ioredis or node-redis client you built, and keep its lifecycle.",
+              "level": "advanced",
+              "tags": ["setup", "redis", "cluster", "ioredis", "node-redis", "client", "lifecycle"],
+              "features": [
+                "`redis: { client }` takes an ioredis `Redis`/`Cluster`, a node-redis client/cluster, or a `FrontMcpRedisClient`",
+                "FrontMCP never closes a client you passed; it closes only the copies it opens with `duplicate()` for pub/sub",
+                "Nothing about the connection goes beside `client`",
+                "You close the client after the server stops"
+              ]
+            },
+            {
               "name": "vercel-kv-serverless",
               "description": "Configure a FrontMCP server with Vercel KV as the session store for serverless deployment.",
               "level": "intermediate",

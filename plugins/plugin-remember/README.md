@@ -74,8 +74,8 @@ Every option is optional. `RememberPlugin.init()` and `plugins: [RememberPlugin]
 | `defaultTTL`           | `number` (seconds)                                                       |                                        | How long a value set without `ttl` lives. A whole number; `0` means no default expiry.          |
 | `encryption.enabled`   | `boolean`                                                                | `true`                                 | Encrypt values before they're stored. With `false`, values are stored as plain JSON.            |
 | `encryption.customKey` | `string`                                                                 |                                        | The secret keys are derived from, in place of `REMEMBER_SECRET`. See [Encryption](#encryption). |
-| `config`               | `{ host, port, password?, db? }`                                         |                                        | With `type: 'redis'`: where to connect.                                                         |
-| `client`               | `Redis` (ioredis)                                                        |                                        | With `type: 'redis-client'`: a client you created.                                              |
+| `config`               | `{ host, port, password?, db?, tls?, cluster? }`                         |                                        | With `type: 'redis'`: where to connect. `cluster: true` for a Redis Cluster endpoint.           |
+| `client`               | ioredis `Redis`/`Cluster`, node-redis client/cluster                     |                                        | With `type: 'redis-client'`: a client you created. The plugin never closes it.                  |
 | `url`, `token`         | `string`                                                                 | `KV_REST_API_URL`, `KV_REST_API_TOKEN` | With `type: 'vercel-kv'`: the store's REST URL and token.                                       |
 | `tools.enabled`        | `boolean`                                                                | `false`                                | Register the [memory tools](#memory-tools).                                                     |
 | `tools.prefix`         | `string`                                                                 |                                        | Starts the memory tools' names: `'memory_'` gives `memory_recall`, and so on.                   |
@@ -88,8 +88,8 @@ Every option is optional. `RememberPlugin.init()` and `plugins: [RememberPlugin]
 | `type`           | Where values live                                                                                    |
 | ---------------- | ---------------------------------------------------------------------------------------------------- |
 | `'memory'`       | A `Map` in the server's process. Lost on restart, and not shared between instances.                  |
-| `'redis'`        | A Redis server the plugin connects to with `config`.                                                 |
-| `'redis-client'` | Your own `ioredis` client, in `client`.                                                              |
+| `'redis'`        | A Redis server, or a Redis Cluster with `config.cluster`, the plugin connects to with `config`.      |
+| `'redis-client'` | Your own ioredis or node-redis client (single node or cluster), in `client`.                         |
 | `'vercel-kv'`    | Vercel KV, through `@vercel/kv`.                                                                     |
 | `'global-store'` | The store in `@FrontMcp({ redis })`: Redis, or Vercel KV. Without `redis`, the server doesn't start. |
 

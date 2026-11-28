@@ -30,7 +30,7 @@ FrontMCP's HA module lets any pod receive any request of an MCP session, using R
 
 ## Prerequisites
 
-- Redis 6+ accessible from all pods
+- Redis 6+ accessible from all pods: a single node, or a Redis Cluster (AWS ElastiCache with cluster mode on) with `cluster: true` beside `host`/`port` (see `setup-redis`)
 - `@frontmcp/sdk` and `@frontmcp/cli` installed
 - `FRONTMCP_DEPLOYMENT_MODE=distributed` environment variable
 - The same `MCP_SESSION_SECRET` on every pod (session ids are encrypted with it; a pod with another secret answers other pods' sessions with `404`). A distributed deployment needs it outside production too: without it, creating a session fails with `SESSION_SECRET_REQUIRED` (up to 1.12.0 it fell back to a key derived from the machine id)
@@ -143,7 +143,8 @@ Each pod subscribes to `mcp:ha:notify:{nodeId}` via Redis Pub/Sub. A notificatio
 ## Redis Connection, TTL and Recovery
 
 - On `SIGTERM`/`SIGINT` a pod started with `bootstrap()` (or the `distributed` build) shuts down gracefully: it stops accepting connections, stops its heartbeat (deleting the key, so other pods take its sessions over at once), closes its relay, HA Redis connections and channels, gives requests in flight 5s, then exits (code 1 if a step fails, after the others still run, or after 10s). `instance.shutdown()` runs the same steps. Disposing the server's scopes, last, closes the session store of `transport.persistence`; up to 1.10 only `createDirect()`'s server closed it, so a store that failed at startup kept retrying and an SQLite one kept its file open. Up to 1.9.1 the HTTP server had no signal handler and a stopped pod's sessions answered `503` until its heartbeat expired.
-- HA uses one dedicated ioredis client built from the top-level `redis` config (host/port/password/db/tls or `url`) for commands and publishing, plus a second connection for the relay channel subscription (retried 1s→30s until it succeeds). Both reconnect on their own, log errors at a rate-limited interval, and are closed on shutdown. Vercel KV cannot back HA.
+- HA uses one dedicated client built from the top-level `redis` config (host/port/password/db/tls or `url`, with `cluster` an ioredis `Cluster`) for commands and publishing, plus a second connection for the relay channel subscription (retried 1s→30s until it succeeds). Both reconnect on their own, log errors at a rate-limited interval, and are closed on shutdown. With `redis: { client }` the commands run on your client, which HA never closes, and the subscription on a `duplicate()` of it, which HA opens and closes. Vercel KV cannot back HA.
+- On a Redis Cluster every relay message to one pod's channel is published through the same master, so a relayed response's frames arrive in order, and a pod counts as listening when any node of the cluster has a subscriber on its channel (a cluster's `PUBLISH` reports only its own node's subscribers). The heartbeat and orphan scans list keys with `SCAN` on every master; since 1.14 FrontMCP never sends `KEYS`.
 - The orphan scanner reads `<keyPrefix>session:` (default `mcp:session:`, as `keyPrefix` defaults to `mcp:`), the same prefix the session store writes, and only runs when `transport.persistence.redis` is set. A claimed session is re-advertised on the bus, so every pod relays its next requests to the claimer, which recreates the transport on the first one.
 - Session TTL is `persistence.defaultTtlMs`, then `persistence.redis.defaultTtlMs`, then 1 hour. The pod serving a session refreshes it at most once per quarter TTL.
 - If Redis is unreachable at startup the server still starts; the session store retries with exponential backoff (1s doubling to 30s) and persistence resumes without a restart.
