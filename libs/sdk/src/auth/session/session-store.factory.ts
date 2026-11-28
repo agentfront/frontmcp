@@ -11,15 +11,16 @@
 // cannot see, so a Cloudflare Worker failed with `No such module "@frontmcp/auth"` (#680). The
 // backends these stores talk to (ioredis, @vercel/kv) are still loaded lazily by @frontmcp/utils.
 import { RedisSessionStore, VercelKvSessionStore, type SessionStore } from '@frontmcp/auth';
-import { RedisStorageAdapter, type StorageAdapter } from '@frontmcp/utils';
+import { redisAdapterOptionsOf, RedisStorageAdapter, type StorageAdapter } from '@frontmcp/utils';
 
 import {
-  isRedisProvider,
+  isRedisConnectionOptions,
   isVercelKvProvider,
+  redisConnectionOfOptions,
   type FrontMcpLogger,
   type PubsubOptions,
+  type RedisConnectionOptions,
   type RedisOptions,
-  type RedisProviderOptions,
   type SqliteOptionsInput,
   type VercelKvProviderOptions,
 } from '../../common';
@@ -90,30 +91,31 @@ export async function createSessionStore(
     return createVercelKvSessionStore(options, logger);
   }
 
-  if (isRedisProvider(options)) {
+  if (isRedisConnectionOptions(options)) {
     return createRedisSessionStore(options, logger);
   }
 
   // Fallback for legacy format without provider field
-  return createRedisSessionStore(options as RedisProviderOptions, logger);
+  return createRedisSessionStore(options as RedisConnectionOptions, logger);
 }
 
 /**
- * Create a Redis session store
+ * Create a Redis session store: on a single node, a cluster, or the app's own client.
  */
-async function createRedisSessionStore(options: RedisProviderOptions, logger?: FrontMcpLogger): Promise<SessionStore> {
-  return new RedisSessionStore(
-    {
-      host: options.host,
-      port: options.port,
-      password: options.password,
-      db: options.db,
-      tls: options.tls,
-      keyPrefix: options.keyPrefix ? `${options.keyPrefix}session:` : 'mcp:session:',
-      defaultTtlMs: options.defaultTtlMs,
-    },
-    logger,
-  );
+async function createRedisSessionStore(
+  options: RedisConnectionOptions,
+  logger?: FrontMcpLogger,
+): Promise<SessionStore> {
+  return new RedisSessionStore(redisSessionStoreConfig(options), logger);
+}
+
+/** The session store's config: the connection (host as before, a cluster, or a client) and its key prefix and TTL. */
+function redisSessionStoreConfig(options: RedisConnectionOptions) {
+  return {
+    ...redisConnectionOfOptions(options),
+    keyPrefix: options.keyPrefix ? `${options.keyPrefix}session:` : 'mcp:session:',
+    defaultTtlMs: options.defaultTtlMs,
+  };
 }
 
 /**
@@ -155,20 +157,7 @@ export function createSessionStoreSync(options: RedisOptions, logger?: FrontMcpL
   }
 
   // Redis only - synchronous creation
-  const redisOptions = isRedisProvider(options) ? options : (options as RedisProviderOptions);
-
-  return new RedisSessionStore(
-    {
-      host: redisOptions.host,
-      port: redisOptions.port,
-      password: redisOptions.password,
-      db: redisOptions.db,
-      tls: redisOptions.tls,
-      keyPrefix: redisOptions.keyPrefix ? `${redisOptions.keyPrefix}session:` : 'mcp:session:',
-      defaultTtlMs: redisOptions.defaultTtlMs,
-    },
-    logger,
-  );
+  return new RedisSessionStore(redisSessionStoreConfig(options as RedisConnectionOptions), logger);
 }
 
 /**
@@ -218,15 +207,9 @@ export function createSqliteSessionStore(
 }
 
 export function createPubsubStore(options: PubsubOptions): StorageAdapter {
-  const redisOptions = options as RedisProviderOptions;
+  const redisOptions = options as RedisConnectionOptions;
   return new RedisStorageAdapter({
-    config: {
-      host: redisOptions.host,
-      port: redisOptions.port,
-      password: redisOptions.password,
-      db: redisOptions.db,
-      tls: redisOptions.tls,
-    },
+    ...redisAdapterOptionsOf(redisConnectionOfOptions(redisOptions)),
     keyPrefix: redisOptions.keyPrefix,
   });
 }

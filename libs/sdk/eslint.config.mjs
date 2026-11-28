@@ -20,6 +20,9 @@ export default [
             '@langchain/groq', // Optional: dynamic import
             'openai', // Optional peer dep: dynamic import in agent adapters
             '@anthropic-ai/sdk', // Optional peer dep: dynamic import in agent adapters
+            // @frontmcp/utils opens every Redis client and loads ioredis, its optional peer; the SDK keeps
+            // the dependency so an app on Redis has it installed (#1503)
+            'ioredis',
           ],
         },
       ],

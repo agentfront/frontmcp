@@ -8,7 +8,10 @@ const createRedisClient = jest.fn((_options: Record<string, unknown>): unknown =
 
 jest.mock('@frontmcp/utils', () => ({
   ...jest.requireActual('@frontmcp/utils'),
-  createRedisClient: (options: Record<string, unknown>) => createRedisClient(options),
+  createRedisConnection: (options: Record<string, unknown>) => ({
+    client: createRedisClient(options),
+    owned: options['client'] === undefined,
+  }),
 }));
 
 const connection = { host: 'cache.internal', port: 6380, password: 'secret', db: 3, tls: true };
@@ -62,6 +65,24 @@ describe('job store factories with Redis', () => {
     await store.dispose();
 
     expect(quit).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['state', createJobStateStore],
+    ['definition', createJobDefinitionStore],
+  ])("forwards cluster to the %s store, and leaves the app's own client open (#1503)", async (_store, create) => {
+    await create({ redis: { host: 'cfg', tls: true, cluster: true } });
+    expect(createRedisClient).toHaveBeenLastCalledWith(
+      expect.objectContaining({ host: 'cfg', tls: true, cluster: true }),
+    );
+
+    const quit = jest.fn(async () => 'OK');
+    const client = { quit, get: jest.fn(), set: jest.fn(), del: jest.fn() };
+    createRedisClient.mockReturnValue(client);
+    const { store } = await create({ redis: { client } });
+    expect(createRedisClient).toHaveBeenLastCalledWith(expect.objectContaining({ client }));
+    await store.dispose?.();
+    expect(quit).not.toHaveBeenCalled();
   });
 
   it.each([

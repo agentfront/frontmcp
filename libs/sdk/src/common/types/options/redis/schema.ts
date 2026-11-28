@@ -2,7 +2,14 @@
 // Zod schema for Redis/storage configuration
 
 import { NEVER, internalZ as z } from '@frontmcp/lazy-zod';
-import { describeRedisUrlConflicts, mergeRedisUrlFields } from '@frontmcp/utils';
+import {
+  describeRedisUrlConflicts,
+  isRedisClientInput,
+  mergeRedisUrlFields,
+  UNSUPPORTED_REDIS_CLIENT_MESSAGE,
+  type RedisClientInput,
+  type RedisClusterOption,
+} from '@frontmcp/utils';
 
 import type { PubsubOptionsInterface, RedisOptionsInterface } from './interfaces';
 
@@ -33,6 +40,44 @@ const commonOptionsSchema = z.object({
    */
   defaultTtlMs: z.number().int().positive().optional().default(3600000),
 });
+
+// ============================================
+// Redis Cluster (#1503)
+// ============================================
+
+/** A seed node: `{ host, port }`, `'host:port'`, or a `redis://` / `rediss://` URL. */
+const redisClusterNodeSchema = z.union([
+  z.string().trim().min(1),
+  z.object({
+    host: z.string().trim().min(1),
+    port: z.number().int().positive().max(65535).optional(),
+  }),
+]);
+
+/** `cluster: { nodes, options }`: seed nodes, and ioredis ClusterOptions applied over FrontMCP's defaults. */
+const redisClusterConfigSchema = z.object({
+  nodes: z.array(redisClusterNodeSchema).optional(),
+  options: z.record(z.string(), z.unknown()).optional(),
+});
+
+/**
+ * `cluster: true` makes the host/port (or url) a Redis Cluster endpoint, such as an AWS ElastiCache
+ * configuration endpoint; an object names seed nodes or tunes the cluster client.
+ */
+export const redisClusterSchema = z.union([z.boolean(), redisClusterConfigSchema]);
+
+/** A database other than 0 beside a cluster, which has database 0 only. */
+function clusterDbProblem(val: { cluster?: RedisClusterOption; db?: number }): string | undefined {
+  const cluster = val.cluster === true || (typeof val.cluster === 'object' && val.cluster !== null);
+  return cluster && val.db !== undefined && val.db !== 0
+    ? `redis.db is ${val.db}, but a Redis Cluster has database 0 only`
+    : undefined;
+}
+
+/** Refused beside a field: a client carries its own connection. */
+const NO_CLIENT = z
+  .undefined({ error: 'redis.client carries its own connection; drop host/url/cluster beside it' })
+  .optional();
 
 // ============================================
 // Redis Provider Configuration
@@ -70,8 +115,15 @@ const redisConnectionSchema = z.object({
    */
   tls: z.boolean().optional().default(false),
 
+  /**
+   * The host is a Redis Cluster endpoint (`true`), or `{ nodes, options }`.
+   */
+  cluster: redisClusterSchema.optional(),
+
   // A config with a `url` belongs to redisUrlSchema; matching it here would drop the URL (#768).
   url: z.undefined().optional(),
+
+  client: NO_CLIENT,
 });
 
 /**
@@ -222,6 +274,11 @@ export const redisUrlSchema = z
     password: z.string().optional(),
     db: z.number().int().nonnegative().optional(),
     tls: z.boolean().optional(),
+
+    /** The URL is a Redis Cluster endpoint (`true`), or `{ nodes, options }`. */
+    cluster: redisClusterSchema.optional(),
+
+    client: NO_CLIENT,
   })
   .merge(commonOptionsSchema)
   .transform((val, ctx) => {
@@ -235,14 +292,96 @@ export const redisUrlSchema = z
       ctx.addIssue({ code: 'custom', message: describeRedisUrlConflicts(merge.conflicts), path: ['url'] });
       return NEVER;
     }
+    const connection = { ...parsed, ...merge?.fillIns };
+    const dbProblem = clusterDbProblem({ cluster: val.cluster, db: connection.db });
+    if (dbProblem) {
+      ctx.addIssue({ code: 'custom', message: dbProblem, path: ['url'] });
+      return NEVER;
+    }
     return {
       provider: 'redis' as const,
-      ...parsed,
-      ...merge?.fillIns,
+      ...connection,
+      ...(val.cluster !== undefined ? { cluster: val.cluster } : {}),
       keyPrefix: val.keyPrefix,
       defaultTtlMs: val.defaultTtlMs,
     };
   });
+
+/**
+ * A Redis Cluster named by its seed nodes alone (`cluster: { nodes: [...] }`, no host or url).
+ * Normalized to the host form, with the first seed node as `host`/`port`, so every consumer sees
+ * one shape; the client is opened from all the seed nodes.
+ */
+export const redisClusterNodesSchema = z
+  .object({
+    provider: z.literal('redis').optional(),
+    cluster: redisClusterConfigSchema.extend({ nodes: z.array(redisClusterNodeSchema).min(1) }),
+    password: z.string().optional(),
+    db: z.number().int().nonnegative().optional(),
+    tls: z.boolean().optional(),
+    host: z.undefined().optional(),
+    port: z.undefined().optional(),
+    url: z.undefined().optional(),
+    client: NO_CLIENT,
+  })
+  .merge(commonOptionsSchema)
+  .transform((val, ctx) => {
+    const dbProblem = clusterDbProblem(val);
+    if (dbProblem) {
+      ctx.addIssue({ code: 'custom', message: dbProblem, path: ['db'] });
+      return NEVER;
+    }
+    const [first] = val.cluster.nodes;
+    const seed = typeof first === 'string' ? seedNodeAddress(first) : { host: first.host, port: first.port ?? 6379 };
+    return {
+      provider: 'redis' as const,
+      host: seed.host,
+      port: seed.port,
+      ...(val.password !== undefined ? { password: val.password } : {}),
+      db: 0,
+      tls: val.tls ?? false,
+      cluster: val.cluster,
+      keyPrefix: val.keyPrefix,
+      defaultTtlMs: val.defaultTtlMs,
+    };
+  });
+
+/** The host and port a seed-node string names (`host:port`, `[ipv6]:port`, or a URL). */
+function seedNodeAddress(node: string): { host: string; port: number } {
+  const parsed = parseRedisUrl(node);
+  if (typeof parsed !== 'string') return { host: parsed.host, port: parsed.port };
+  const match = /^(?:\[([^\]]+)\]|([^:[\]]+))(?::(\d+))?$/.exec(node.trim());
+  return { host: match?.[1] ?? match?.[2] ?? node, port: match?.[3] ? Number(match[3]) : 6379 };
+}
+
+/**
+ * A Redis client the application made (`redis: { client }`): an ioredis `Redis` or `Cluster`, a
+ * node-redis client or cluster, or a FrontMcpRedisClient. FrontMCP uses it and never closes it.
+ * Nothing about the connection goes beside it.
+ */
+export const redisClientSchema = z
+  .object({
+    provider: z.literal('redis').optional(),
+    client: z.custom<RedisClientInput>((value) => isRedisClientInput(value), {
+      error: UNSUPPORTED_REDIS_CLIENT_MESSAGE,
+    }),
+    host: z.undefined().optional(),
+    port: z.undefined().optional(),
+    password: z.undefined().optional(),
+    db: z.undefined().optional(),
+    tls: z.undefined().optional(),
+    url: z.undefined().optional(),
+    cluster: z.undefined().optional(),
+  })
+  .merge(commonOptionsSchema)
+  .transform((val) => ({
+    provider: 'redis' as const,
+    client: val.client,
+    keyPrefix: val.keyPrefix,
+    defaultTtlMs: val.defaultTtlMs,
+  }));
+
+export type RedisClientProviderOptions = z.infer<typeof redisClientSchema>;
 
 /** The input and branch errors a failed union reports, as far as its messages need them. */
 interface UnionIssueLike {
@@ -257,15 +396,30 @@ function lacksHostAndUrl(input: unknown): boolean {
   return host === undefined && url === undefined && (provider === undefined || provider === 'redis');
 }
 
+/** The fields the branches refuse with a message of their own: `url`, and `db` beside a cluster. */
+const OWN_MESSAGE_FIELDS = new Set<PropertyKey>(['url', 'db']);
+
 /**
  * A union reports "Invalid input" when no branch matches, burying the reason a
- * `url` was refused among the other branches' complaints about a missing
- * `host`. Surface the URL branch's own message instead, or what is missing.
+ * `url` (or `client`, or a cluster's `db`) was refused among the other branches'
+ * complaints about a missing `host`. Surface that branch's own message instead,
+ * or what is missing.
  */
 function redisUnionError(issue: UnionIssueLike): string | undefined {
+  const input = (typeof issue.input === 'object' && issue.input !== null ? issue.input : {}) as Record<string, unknown>;
+  if (input['client'] !== undefined) {
+    const beside = ['host', 'port', 'password', 'db', 'tls', 'url', 'cluster'].filter(
+      (field) => input[field] !== undefined,
+    );
+    if (beside.length > 0) return `redis.client carries its own connection; drop ${beside.join(', ')} beside it`;
+    if (!isRedisClientInput(input['client'])) return UNSUPPORTED_REDIS_CLIENT_MESSAGE;
+  }
   for (const branch of issue.errors ?? []) {
-    const urlIssue = branch.find((entry) => entry.code === 'custom' && entry.path?.[0] === 'url');
-    if (urlIssue?.message) return urlIssue.message;
+    const own = branch.find((entry) => entry.code === 'custom' && OWN_MESSAGE_FIELDS.has(entry.path?.[0] ?? ''));
+    if (own?.message) return own.message;
+  }
+  if (lacksHostAndUrl(issue.input) && input['cluster'] !== undefined && input['client'] === undefined) {
+    return 'redis.cluster needs a node to start from: set host (or url), or cluster.nodes';
   }
   return lacksHostAndUrl(issue.input) ? 'redis needs host or url' : undefined;
 }
@@ -319,10 +473,28 @@ function redisUnionError(issue: UnionIssueLike): string | undefined {
  * ```
  */
 // The URL branch goes first: a `url` beside `host` must not fall into a host-only branch that drops it.
-export const redisOptionsSchema = z.union(
-  [redisUrlSchema, redisProviderSchema, vercelKvProviderSchema, legacyRedisSchema],
-  { error: redisUnionError },
-);
+export const redisOptionsSchema = z
+  .union(
+    [
+      redisUrlSchema,
+      redisClusterNodesSchema,
+      redisProviderSchema,
+      vercelKvProviderSchema,
+      legacyRedisSchema,
+      redisClientSchema,
+    ],
+    { error: redisUnionError },
+  )
+  .superRefine(refuseClusterDb);
+
+/** A host config with `cluster` and a database other than 0. */
+function refuseClusterDb(
+  val: object,
+  ctx: { addIssue: (issue: { code: 'custom'; message: string; path: string[] }) => void },
+): void {
+  const problem = clusterDbProblem(val as { cluster?: RedisClusterOption; db?: number });
+  if (problem) ctx.addIssue({ code: 'custom', message: problem, path: ['db'] });
+}
 
 /**
  * Storage configuration type (with defaults applied)
@@ -359,9 +531,11 @@ export type RedisOptionsInput = RedisOptionsInterface;
  * }
  * ```
  */
-export const pubsubOptionsSchema = z.union([redisUrlSchema, redisProviderSchema, legacyRedisSchema], {
-  error: redisUnionError,
-});
+export const pubsubOptionsSchema = z
+  .union([redisUrlSchema, redisClusterNodesSchema, redisProviderSchema, legacyRedisSchema, redisClientSchema], {
+    error: redisUnionError,
+  })
+  .superRefine(refuseClusterDb);
 
 /**
  * Pub/Sub configuration type (Redis-only)
@@ -379,10 +553,11 @@ export type PubsubOptionsInput = PubsubOptionsInterface;
 // ============================================
 
 /**
- * Check if options are for Redis provider
+ * Check if options are for the Redis provider given by host, url or cluster seed nodes (the parsed
+ * form always has `host`). False for a `client` config: use `isRedisConnection()` (from `@frontmcp/utils`, re-exported here) for any Redis.
  */
 export function isRedisProvider(options: RedisOptions): options is RedisProviderOptions {
-  return options.provider === 'redis';
+  return options.provider === 'redis' && !('client' in options && options.client !== undefined);
 }
 
 /**
@@ -395,6 +570,8 @@ export function isVercelKvProvider(options: RedisOptions | RedisOptionsInput): o
 /**
  * Check if pub/sub options are valid Redis config
  */
-export function isPubsubConfigured(options: PubsubOptions): options is RedisProviderOptions {
+export function isPubsubConfigured(
+  options: PubsubOptions,
+): options is RedisProviderOptions | RedisClientProviderOptions {
   return options.provider === 'redis';
 }

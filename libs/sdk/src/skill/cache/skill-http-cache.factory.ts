@@ -6,7 +6,15 @@
  * @module skill/cache/skill-http-cache.factory
  */
 
-import { attachRedisErrorListener, createVercelKvClient } from '@frontmcp/utils';
+import {
+  createRedisConnection,
+  createVercelKvClient,
+  deleteRedisKeys,
+  scanRedisKeys,
+  type FrontMcpRedisClient,
+  type RedisClientInput,
+  type RedisClusterOption,
+} from '@frontmcp/utils';
 
 import type { FrontMcpLogger } from '../../common/index.js';
 import {
@@ -32,6 +40,12 @@ export interface SkillHttpCacheRedisOptions {
   password?: string;
   /** Redis database number */
   db?: number;
+  /** Connect over TLS (`redis` provider) */
+  tls?: boolean;
+  /** The host is a Redis Cluster endpoint (`true`), or `{ nodes, options }` (`redis` provider) */
+  cluster?: RedisClusterOption;
+  /** A Redis client you made, in place of host/port (`redis` provider); FrontMCP never closes it */
+  client?: RedisClientInput;
   /** Vercel KV REST URL (`vercel-kv` provider); defaults to `KV_REST_API_URL` */
   url?: string;
   /** Vercel KV REST token (`vercel-kv` provider); defaults to `KV_REST_API_TOKEN` */
@@ -157,25 +171,28 @@ async function createRedisCache(
     });
   }
 
-  // Use ioredis for 'redis' provider - use require for CommonJS compatibility
+  // A single node, a cluster, or the app's client
+  const { client, owned } = redis.client
+    ? createRedisConnection({ client: redis.client, label: 'SkillHttpCache' })
+    : createRedisConnection({
+        host: redis.host ?? 'localhost',
+        port: redis.port ?? 6379,
+        password: redis.password,
+        db: redis.db,
+        tls: redis.tls,
+        cluster: redis.cluster,
+        label: 'SkillHttpCache',
+        ioredisOptions: { lazyConnect: true, enableReadyCheck: false },
+      });
 
-  const Redis = require('ioredis');
-  const client = new Redis({
-    host: redis.host ?? 'localhost',
-    port: redis.port ?? 6379,
-    password: redis.password,
-    db: redis.db,
-    lazyConnect: true,
-    enableReadyCheck: false,
-    maxRetriesPerRequest: 3,
-  });
-  attachRedisErrorListener(client, { label: 'SkillHttpCache' });
-
-  await client.connect();
+  if (owned) await client.connect?.();
 
   return new RedisSkillHttpCache({
-    getClient: async () => client,
+    getClient: async () => client as unknown as RedisClient,
     keyPrefix,
     ttlMs,
+    // SCAN rather than KEYS, on every master of a cluster; DEL one key at a time on a cluster
+    listKeys: (scanned, pattern) => scanRedisKeys(scanned as unknown as FrontMcpRedisClient, pattern),
+    deleteKeys: (deleted, keys) => deleteRedisKeys(deleted as unknown as FrontMcpRedisClient, keys),
   });
 }

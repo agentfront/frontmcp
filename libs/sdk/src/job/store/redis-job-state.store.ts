@@ -1,3 +1,5 @@
+import { scanRedisKeys, type RedisScanClient } from '@frontmcp/utils';
+
 import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
 import {
   type JobExecutionState,
@@ -6,15 +8,18 @@ import {
   type WorkflowRunRecord,
 } from './job-state.interface';
 
-/** Minimal Redis client interface covering operations used by this store. */
-export interface RedisStateStoreLike {
+/**
+ * Minimal Redis client interface covering operations used by this store.
+ *
+ * Since 1.14 runs are listed with SCAN (on every master of a cluster), not KEYS: `scan` replaces `keys`.
+ */
+export interface RedisStateStoreLike extends RedisScanClient {
   get(key: string): Promise<string | null>;
   set(key: string, value: string, ...args: (string | number)[]): Promise<unknown>;
   del(key: string | string[]): Promise<number>;
   sadd(key: string, ...members: string[]): Promise<number>;
   srem(key: string, ...members: string[]): Promise<number>;
   smembers(key: string): Promise<string[]>;
-  keys(pattern: string): Promise<string[]>;
   expire?(key: string, seconds: number): Promise<unknown>;
   quit?(): Promise<unknown>;
 }
@@ -118,7 +123,7 @@ export class RedisJobStateStore implements JobStateStore {
       runIds = await this.client.smembers(this.indexKey('sessionId', opts.sessionId));
     } else {
       // Scan for all run keys (expensive, use with caution)
-      const keys = await this.client.keys(`${this.keyPrefix}run:*`);
+      const keys = await scanRedisKeys(this.client, `${this.keyPrefix}run:*`);
       runIds = keys.map((k: string) => k.replace(`${this.keyPrefix}run:`, ''));
     }
 
@@ -142,7 +147,7 @@ export class RedisJobStateStore implements JobStateStore {
   async cleanup(olderThanMs: number): Promise<number> {
     // Redis TTL handles cleanup; this is for manual purge
     const cutoff = Date.now() - olderThanMs;
-    const keys = await this.client.keys(`${this.keyPrefix}run:*`);
+    const keys = await scanRedisKeys(this.client, `${this.keyPrefix}run:*`);
     let removed = 0;
 
     for (const key of keys) {

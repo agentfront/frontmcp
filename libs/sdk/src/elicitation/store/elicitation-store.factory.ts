@@ -12,7 +12,13 @@
 
 import { createMemoryStorage, createStorage, getEnv, type RootStorage, type StorageConfig } from '@frontmcp/utils';
 
-import { isVercelKvProvider, type FrontMcpLogger, type RedisOptionsInput, type SqliteOptionsInput } from '../../common';
+import {
+  isVercelKvProvider,
+  redisStorageConfigOf,
+  type FrontMcpLogger,
+  type RedisOptionsInput,
+  type SqliteOptionsInput,
+} from '../../common';
 import { normalizeRedisOptions } from '../../common/types/options/redis/schema';
 import { ElicitationNotSupportedError } from '../../errors/elicitation.error';
 import { requireOptionalModule } from '../../scope/optional-dependency.util';
@@ -292,9 +298,13 @@ export async function createElicitationStore(options: ElicitationStoreOptions = 
           'Use Redis provider instead: { provider: "redis", host: "...", port: ... }',
       );
     }
-    const { host, port, password, db, tls } = redisOptions;
-    finalStorageConfig = { type: 'redis', redis: { config: { host, port, password, db, tls } } };
-    logger?.debug('[ElicitationStoreFactory] Converted redis option to storage config', { host, port });
+    finalStorageConfig = redisStorageConfigOf(redisOptions);
+    const { host, port, client } = redisOptions as { host?: string; port?: number; client?: unknown };
+    logger?.debug('[ElicitationStoreFactory] Converted redis option to storage config', {
+      host,
+      port,
+      client: client !== undefined,
+    });
   }
 
   // Check for Vercel KV - not supported for elicitation (no pub/sub)

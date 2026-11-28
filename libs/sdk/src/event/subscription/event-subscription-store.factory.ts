@@ -6,7 +6,7 @@ import {
   type StorageConfig,
 } from '@frontmcp/utils';
 
-import { isRedisProvider, type FrontMcpLogger, type RedisOptions } from '../../common';
+import { isRedisConnectionOptions, redisStorageConfigOf, type FrontMcpLogger, type RedisOptions } from '../../common';
 import { EventSubscriptionStoreError } from '../../errors';
 import { StorageEventSubscriptionStore, type EventSubscriptionStore } from './event-subscription.store';
 
@@ -46,14 +46,13 @@ function storageConfigOf(options: EventSubscriptionStoreOptions): StorageConfig 
   const { redis, sqlite } = options;
   if (sqlite) return { type: 'sqlite', sqlite };
   if (!redis) return { type: 'memory' };
-  if (!isRedisProvider(redis)) {
+  if (!isRedisConnectionOptions(redis)) {
     throw new EventSubscriptionStoreError(
       'Vercel KV has no atomic compare-and-set, which subscription updates need. ' +
         'Use a Redis server in events.store.redis, or events.store.sqlite.',
     );
   }
-  const { host, port, password, db, tls } = redis;
-  return { type: 'redis', redis: { config: { host, port, password, db, tls } } };
+  return redisStorageConfigOf(redis);
 }
 
 /** Open the storage of one backend under a key prefix. */

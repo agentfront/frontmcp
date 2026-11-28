@@ -1,5 +1,7 @@
 // common/types/options/skills-http/interfaces.ts
 
+import type { RedisClientInput, RedisClusterOption } from '@frontmcp/utils';
+
 import type { SkillDecisionOptions } from '../../../../skill/decision/skill-decision.types';
 import type { ExternalSkillProviderBase } from '../../../../skill/providers/external-skill.provider';
 
@@ -542,6 +544,12 @@ export interface SkillsConfigCacheOptions {
     password?: string;
     /** Redis database number */
     db?: number;
+    /** Connect over TLS (`redis` provider) */
+    tls?: boolean;
+    /** The host is a Redis Cluster endpoint (`true`), or `{ nodes, options }` (`redis` provider) */
+    cluster?: RedisClusterOption;
+    /** A Redis client you made, in place of host/port (`redis` provider); FrontMCP never closes it */
+    client?: RedisClientInput;
     /** Vercel KV REST URL (`vercel-kv` provider); defaults to `KV_REST_API_URL` */
     url?: string;
     /** Vercel KV REST token (`vercel-kv` provider); defaults to `KV_REST_API_TOKEN` */

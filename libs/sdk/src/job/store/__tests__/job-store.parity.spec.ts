@@ -84,7 +84,10 @@ function fakeRedis(): RedisStateStoreLike {
     },
     srem: async (key, ...members) => members.filter((member) => setOf(key).delete(member)).length,
     smembers: async (key) => [...setOf(key)],
-    keys: async (pattern) => [...values.keys()].filter((key) => key.startsWith(pattern.replace(/\*$/, ''))),
+    scan: async (_cursor, _match, pattern) => [
+      '0',
+      [...values.keys()].filter((key) => key.startsWith(String(pattern).replace(/\*$/, ''))),
+    ],
   };
 }
 
