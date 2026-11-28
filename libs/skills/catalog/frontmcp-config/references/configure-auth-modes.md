@@ -73,6 +73,33 @@ Set `provider` to the provider's issuer identifier exactly as its metadata's `is
 
 > Transparent also accepts `allowAnonymous` (default `false`) + `anonymousScopes` (default `['anonymous']`) to admit tokenless requests as anonymous, and `requiredScopes` to reject tokens missing a scope (read from the `scope` and `scp` claims, which `this.auth.scopes` also merges). Without `providerConfig.jwks`/`jwksUri`, keys come from `<provider>/.well-known/jwks.json`, else the discovered `jwks_uri`; they are cached for 6 hours, and a token whose `kid` the cache lacks triggers a refetch first (at most once a minute per provider), so rotated keys work immediately. A token without `sub` takes its subject from `client_id`, else `azp`; one with none of the three is refused with 401 `invalid_token` (never served as anonymous). `expectedAudience` is shared across transparent/local/remote, not transparent-only.
 
+### Person or machine: the principal
+
+Every request carries the principal its token speaks for: `this.auth.principal` in tools, resources, prompts and agents, `principal` on the request's authorization (`req.authSession.principal` on an `http.routes` route with `auth: true`), and `user.principal` in authorities rules.
+
+| Field       | Holds                                                                                                |
+| ----------- | ---------------------------------------------------------------------------------------------------- |
+| `kind`      | `'person'` (someone signed in), `'machine'` (a client acting for itself) or `'anonymous'` (no one)   |
+| `sub`       | The token's subject: `sub`, else `client_id`, else `azp`                                             |
+| `clientId`  | The OAuth client the token was issued to: `client_id`, else `azp`, else `cid`                        |
+| `authTime`  | When the caller authenticated, in epoch seconds: `auth_time` (when the person signed in), else `iat` |
+| `grantType` | The grant the token names (`gty`), `client_credentials` for Auth0's `client-credentials`             |
+
+A token is a machine's when it names the client-credentials grant (`gty`), when Microsoft Entra marks it an app token (`idtyp: 'app'`), or when its subject is its client (`sub` equal to `client_id`, `azp`, `cid` or `appid`, as RFC 9068 §2.2 has it, and as it is when the token has no `sub`); else a person's. The claims `auth_time`, `azp` and `client_id` are typed on the request's user (`UserClaim`) too; a value of the wrong type is dropped.
+
+A provider that marks machines another way (a Keycloak service account has its own `sub`) sets `principal` on the transparent, local or remote auth options. It gets the token's claims and the detected principal, returns the fields to change or `undefined`, and may be async. One that throws, or answers a kind that is not one of the three, leaves the detected principal and logs a warning:
+
+```typescript
+auth: {
+  mode: 'transparent',
+  provider: 'https://keycloak.example.com/realms/acme',
+  principal: (claims) =>
+    String(claims['preferred_username']).startsWith('service-account-') ? { kind: 'machine' } : undefined,
+}
+```
+
+New in 1.14: the principal, the `principal` option, and the typed `auth_time`, `azp` and `client_id`. The subject a token without `sub` takes is unchanged: such a token is now also told apart as a machine's.
+
 > **Claim validation (transparent):** a valid JWKS signature alone does not bind a token to this server — every service behind the same IdP shares the signing keys. FrontMCP therefore validates the token `iss` against `provider` (plus any `providerConfig.additionalIssuers`, each matched with/without a trailing slash) **by default**, and validates `aud` against `expectedAudience` when the token carries one. Without `expectedAudience` the audience is the pinned `FRONTMCP_PUBLIC_URL`, else the request's address when its host is listed in `security.dnsRebindingProtection.allowedHosts` (or `FRONTMCP_ALLOWED_HOSTS`) and the protection is on. With none of the three, a server accepts tokens that carry an `aud` only for its loopback address on `http.port` when `NODE_ENV` is `development` or `test`, and refuses them otherwise (401), including with `NODE_ENV` unset; the server says which at startup. `audienceFromRequestHost: true` keeps checking against whatever host the request names, as 1.12 did, for migrating only: the client chooses that host, and the server warns at startup while it is set. This blocks replay of a token minted by the same IdP for a different issuer or audience. Set `providerConfig.additionalIssuers: ['https://gateway.example']` to trust a known extra issuer. `providerConfig.verifyIssuer: false` **disables the issuer check entirely** (accepts any issuer signed by the JWKS) — only for a trusted gateway whose re-minted issuer you cannot enumerate, and always paired with a strict `expectedAudience`.
 
 ## Local Mode

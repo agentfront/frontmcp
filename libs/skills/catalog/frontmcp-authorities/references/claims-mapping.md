@@ -116,6 +116,7 @@ authorities: {
 - Replace `my-client` with your actual Keycloak client ID.
 - Keycloak adds system roles like `offline_access` and `uma_authorization` to `realm_access.roles`. You may want to use `all` instead of `any` in RBAC policies to avoid matching on these.
 - For multi-tenant Keycloak setups, tenant ID is often a custom claim added via a protocol mapper.
+- A service account's token has a `sub` of its own, so FrontMCP takes it for a person's. Say it is a machine's with the auth options' `principal`: `principal: (claims) => String(claims['preferred_username']).startsWith('service-account-') ? { kind: 'machine' } : undefined` (see `frontmcp-config` → `configure-auth-modes`). Rules then match it as `user.principal`.
 
 ## Okta
 
