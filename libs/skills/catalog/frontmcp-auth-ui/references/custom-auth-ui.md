@@ -96,7 +96,7 @@ The handler returns `{ ok, error?, addedItems?, sideEffects? }` (sync or async).
 | --------------- | ------------------------- | ------------------------------------------------------------------------ |
 | `slot`          | `AuthSlot`                | Which page slot is rendering.                                            |
 | `pendingAuthId` | `string?`                 | Correlation id; round-tripped on every submit. Absent only for `error`.  |
-| `clientName`    | `string?`                 | OAuth client display name (**not** an end user).                         |
+| `clientName`    | `string?`                 | The client's CIMD or registered `client_name`, else its `client_id`.     |
 | `clientId`      | `string?`                 | OAuth `client_id`.                                                       |
 | `scopes`        | `string[]`                | Requested OAuth scopes.                                                  |
 | `redirectUri`   | `string?`                 | Validated `redirect_uri` the code is sent to.                            |
@@ -108,6 +108,8 @@ The handler returns `{ ok, error?, addedItems?, sideEffects? }` (sync or async).
 | `extras`        | `Record<string, unknown>` | Free-form, slot-specific extras (e.g. logo URI, incremental target app). |
 
 **No PII is in the contract.** Anything the user types (email, name, …) travels in your own form fields, never in `AuthFlowState`.
+
+`clientName` comes from the client itself: a DCR registration (`POST /oauth/register`) needs no sign-in. Render it as text (JSX does), never as HTML. FrontMCP cuts it to 64 characters and drops control and invisible formatting characters. Up to 1.13.2 a DCR client's `clientName` was its `client_id`, and so was every client's on the `consent` slot.
 
 ## Client: `@frontmcp/ui/auth`
 

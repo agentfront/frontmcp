@@ -63,6 +63,7 @@ import {
   type AuthUiRegistry,
 } from '../auth-ui';
 import { initialAuthorizedApps, withoutSkippedApps } from '../authorized-apps.utils';
+import { resolveClientDisplayName } from '../client-display-name';
 import { projectConsentTools } from '../consent-tools.helper';
 import {
   answerFederatedStep,
@@ -91,6 +92,8 @@ const stateSchema = z.object({
   // From pending authorization record
   clientId: z.string().optional(),
   clientAuthMethod: z.string().optional(),
+  /** The client's display name kept on the pending authorization (#1505); absent on older records. */
+  clientName: z.string().optional(),
   redirectUri: z.string().optional(),
   scopes: z.array(z.string()).optional(),
   codeChallenge: z.string().optional(),
@@ -482,7 +485,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     if (authenticateFn && !isIncremental && !verifiedLogin) {
       const result = await this.runAuthenticate(authenticateFn, loginFields ?? {}, pendingAuth);
       if (!result.ok && answersSteps) {
-        const clientName = await this.resolveClientName(pendingAuth.clientId);
+        const clientName = await resolveClientDisplayName(this.scope, pendingAuth);
         this.respond(renderFederatedStep(this.scope, pendingAuth, { clientName, error: result.message }));
         return;
       }
@@ -496,7 +499,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
         // A `login.render` page is the app's own markup: no CSP is imposed on it.
         this.respond(
           httpRespond.html(
-            this.renderLoginRetryPage(pendingAuth, localOptions.login, loginFields ?? {}, result),
+            await this.renderLoginRetryPage(pendingAuth, localOptions.login, loginFields ?? {}, result),
             200,
             builtInAuthPageHeaders({ csp: localOptions.login?.render ? false : 'inline' }),
           ),
@@ -647,7 +650,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
           if (!(await this.keepSignInForConsent(pendingAuth, signIn))) return;
           this.respond(
             this.htmlPage(
-              this.renderConsentScreen(
+              await this.renderConsentScreen(
                 pendingAuth,
                 consentConfig,
                 { email, name },
@@ -670,7 +673,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       if (!(await this.keepSignInForConsent(pendingAuth, signIn))) return;
       // Custom `@AuthUi({ slot: 'consent' })` renderer takes over when registered.
       if (await this.tryRenderCustomConsent(pendingAuth, consentConfig)) return;
-      this.respond(this.htmlPage(this.renderConsentScreen(pendingAuth, consentConfig, { email, name })));
+      this.respond(this.htmlPage(await this.renderConsentScreen(pendingAuth, consentConfig, { email, name })));
       return;
     }
 
@@ -704,7 +707,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
         if (!(await this.keepSignInForConsent(pendingAuth, signIn))) return;
         this.respond(
           this.htmlPage(
-            this.renderConsentScreen(
+            await this.renderConsentScreen(
               pendingAuth,
               consentConfig,
               { email, name },
@@ -742,6 +745,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     this.state.set({
       clientId: pendingAuth.clientId,
       clientAuthMethod: pendingAuth.clientAuthMethod,
+      clientName: pendingAuth.clientName,
       redirectUri: pendingAuth.redirectUri,
       scopes: pendingAuth.scopes,
       codeChallenge: pendingAuth.pkce.challenge,
@@ -932,6 +936,8 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       signinBinding: this.state.signinBinding,
       authorizedAppIds,
       clientAuthMethod: this.state.clientAuthMethod,
+      // The provider callback's consent screen shows the same name.
+      clientName: await resolveClientDisplayName(this.scope, { clientId, clientName: this.state.clientName }),
     });
 
     // Store the session
@@ -1304,9 +1310,9 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       ctx: AuthenticateContext,
     ) => Promise<AuthenticateResult>,
     fields: Record<string, string>,
-    pendingAuth: { clientId: string },
+    pendingAuth: { clientId: string; clientName?: string },
   ): Promise<AuthenticateResult> {
-    const clientName = await this.resolveClientName(pendingAuth.clientId);
+    const clientName = await resolveClientDisplayName(this.scope, pendingAuth);
     const ctx: AuthenticateContext = {
       get: <T>(token: unknown): T => this.get(token as Parameters<typeof this.get>[0]) as T,
       fetch: (input: RequestInfo | URL, init?: RequestInit) => this.contextFetch(input, init),
@@ -1344,31 +1350,6 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
   }
 
   /**
-   * Resolve a human-readable client name for the verifier context. Uses the
-   * CIMD `client_name` when the client_id is a CIMD URL and resolvable; falls
-   * back to the raw client_id.
-   */
-  private async resolveClientName(clientId: string): Promise<string> {
-    try {
-      const localAuth = this.scope.auth as {
-        cimdService?: {
-          enabled?: boolean;
-          isCimdClientId?: (id: string) => boolean;
-          resolveClientMetadata?: (id: string) => Promise<{ metadata?: { client_name?: string } }>;
-        };
-      };
-      const cimd = localAuth.cimdService;
-      if (cimd?.enabled && cimd.isCimdClientId?.(clientId) && cimd.resolveClientMetadata) {
-        const resolution = await cimd.resolveClientMetadata(clientId);
-        if (resolution?.metadata?.client_name) return resolution.metadata.client_name;
-      }
-    } catch {
-      // Best-effort only; fall back to the client_id.
-    }
-    return clientId;
-  }
-
-  /**
    * Derive the subject of a login whose authenticate() returned no `sub`, from the login subject strategy.
    *
    * - `per-account`: hash the value of `login.subject.fromField` into a stable
@@ -1390,16 +1371,17 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
    * verifier's message (and pre-selecting `retryField`). Submitted values are
    * preserved on the form so the user does not have to re-enter everything.
    */
-  private renderLoginRetryPage(
-    pendingAuth: { clientId: string; redirectUri: string; scopes: string[] },
+  private async renderLoginRetryPage(
+    pendingAuth: { clientId: string; clientName?: string; redirectUri: string; scopes: string[] },
     login: LoginConfig | undefined,
     fields: Record<string, string>,
     failure: { message: string; retryField?: string },
-  ): string {
+  ): Promise<string> {
     const callbackPath = `${oauthBasePath(this.scope)}/oauth/callback`;
     const ctx: LoginRenderContext = {
       clientId: pendingAuth.clientId,
-      clientName: pendingAuth.clientId,
+      // The name the first page showed (#1505).
+      clientName: await resolveClientDisplayName(this.scope, pendingAuth),
       scopes: pendingAuth.scopes ?? [],
       pendingAuthId: this.state.required.pendingAuthId,
       callbackPath,
@@ -1463,7 +1445,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     }
     if (outcome.kind === 'done') return outcome.selectedProviderIds;
 
-    const clientName = await this.resolveClientName(pendingAuth.clientId);
+    const clientName = await resolveClientDisplayName(this.scope, pendingAuth);
     this.respond(renderFederatedStep(this.scope, pendingAuth, { clientName }));
     return undefined;
   }
@@ -1479,7 +1461,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
    * `redirect_uri`, where the submission is redirected). Returns `true` when handled.
    */
   private async tryRenderCustomConsent(
-    pendingAuth: { id: string; clientId: string; redirectUri: string; authUiCsrf?: string },
+    pendingAuth: { id: string; clientId: string; clientName?: string; redirectUri: string; authUiCsrf?: string },
     consentConfig: ConsentConfig | undefined,
   ): Promise<boolean> {
     const authUi: AuthUiRegistry | undefined = this.scope.authUi;
@@ -1542,7 +1524,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
         csrfToken,
         addedItems: authUi.getAddedItems(pendingAuth.id),
       },
-      { clientId: pendingAuth.clientId, tools },
+      { clientId: pendingAuth.clientId, clientName: await resolveClientDisplayName(this.scope, pendingAuth), tools },
     );
 
     const page = buildAuthUiPage({
@@ -1613,8 +1595,8 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
    * {@link projectConsentTools}). `error` re-renders the screen with a banner
    * (used for an empty `requireSelection` submit).
    */
-  private renderConsentScreen(
-    pendingAuth: { id: string; clientId: string; authUiCsrf?: string },
+  private async renderConsentScreen(
+    pendingAuth: { id: string; clientId: string; clientName?: string; authUiCsrf?: string },
     consentConfig: ConsentConfig | undefined,
     /** Shown as "Signed in as"; never round-tripped. */
     identity: { email?: string; name?: string },
@@ -1626,7 +1608,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
      * newly-added tool(s).
      */
     preSelectedTools?: string[],
-  ): string {
+  ): Promise<string> {
     const callbackPath = `${oauthBasePath(this.scope)}/oauth/callback`;
 
     // Derive the offered tool cards from the scope via the shared projection so
@@ -1636,7 +1618,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
 
     return buildToolConsentPage({
       tools: toolCards,
-      clientName: pendingAuth.clientId,
+      clientName: await resolveClientDisplayName(this.scope, pendingAuth),
       pendingAuthId: pendingAuth.id,
       csrfToken: pendingAuth.authUiCsrf ?? '',
       callbackPath,

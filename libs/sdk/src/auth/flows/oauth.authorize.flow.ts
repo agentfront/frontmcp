@@ -79,6 +79,7 @@ import {
 } from '../auth-ui';
 import { incrementalTicketAudience, initialAuthorizedApps } from '../authorized-apps.utils';
 import { CimdDisabledError, CimdError, CimdService, clientMetadataDocumentSchema } from '../cimd';
+import { clientDisplayName } from '../client-display-name';
 import { projectConsentTools } from '../consent-tools.helper';
 import {
   getConfiguredProviders,
@@ -226,6 +227,10 @@ const stateSchema = z.object({
     .string()
     .optional()
     .describe('How the registered client validated here authenticates at the token endpoint'),
+  clientName: z
+    .string()
+    .optional()
+    .describe('The name the auth pages show for the client: its CIMD or registered client_name, else its client_id'),
 });
 
 const outputSchema = z.union([
@@ -655,6 +660,13 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       this.state.set('registeredClientAuthMethod', registered.token_endpoint_auth_method);
     }
 
+    // The name the pages show for the client (#1505), from the document or registration validated above: a later
+    // registry lookup misses a registration another request dropped from memory meanwhile.
+    this.state.set(
+      'clientName',
+      clientDisplayName(client_id, this.state.cimdMetadata?.client_name, registered?.client_name),
+    );
+
     // `dcr.allowedClientIds` (#462): a client the operator didn't list may not
     // start a sign-in. Checked once `redirect_uri` is validated for the client,
     // so a registered client learns why at its own redirect_uri
@@ -910,6 +922,8 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       // Consent State
       consent,
       clientAuthMethod: this.clientAuthMethodOf(validatedRequest.client_id, localAuth),
+      // The pages after this one (a sign-in shown again, consent) show the same name.
+      clientName: this.clientNameOf(validatedRequest.client_id),
     });
 
     // The token the grant expansion mints keeps the email and name of the subject the ticket proved.
@@ -981,8 +995,8 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       return;
     }
 
-    // Use CIMD client_name if available, otherwise fall back to client_id
-    const clientDisplayName = cimdMetadata?.client_name ?? validatedRequest.client_id;
+    // The CIMD or registered client_name, else the client_id (#1505).
+    const clientName = this.clientNameOf(validatedRequest.client_id);
 
     // For incremental auth, render a single-app authorization page
     if (isIncrementalAuth && targetAppId) {
@@ -1023,7 +1037,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     // For federated login (multiple providers), render provider selection page
     if (requiresFederatedLogin) {
       if (this.federatedStepRecord) {
-        this.respond(renderFederatedStep(this.scope, this.federatedStepRecord, { clientName: clientDisplayName }));
+        this.respond(renderFederatedStep(this.scope, this.federatedStepRecord, { clientName }));
         return;
       }
 
@@ -1049,7 +1063,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
         (common) =>
           buildFederatedState(common, {
             clientId: validatedRequest.client_id,
-            clientName: clientDisplayName,
+            clientName,
             redirectUri: validatedRequest.redirect_uri,
             providers: [...detection.providers.values()].map(toAuthProvider),
           }),
@@ -1061,7 +1075,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       const federatedLoginHtml = this.renderFederatedLoginPage({
         pendingAuthId,
         detection,
-        clientId: validatedRequest.client_id,
+        clientName,
         redirectUri: validatedRequest.redirect_uri,
       });
 
@@ -1076,7 +1090,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       (common) =>
         buildLoginState(common, {
           clientId: validatedRequest.client_id,
-          clientName: clientDisplayName,
+          clientName,
           scopes: validatedRequest.scope ? validatedRequest.scope.split(' ').filter(Boolean) : [],
           redirectUri: validatedRequest.redirect_uri,
           logoUri: cimdMetadata?.logo_uri,
@@ -1090,7 +1104,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     const loginHtml = this.renderLoginPage({
       pendingAuthId,
       clientId: validatedRequest.client_id,
-      clientName: clientDisplayName, // Use CIMD client_name if available
+      clientName,
       scope: validatedRequest.scope ?? '',
       redirectUri: validatedRequest.redirect_uri,
       logoUri: cimdMetadata?.logo_uri, // Use CIMD logo_uri if available
@@ -1187,6 +1201,11 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     );
   }
 
+  /** The name the pages show for the client validated here (#1505): its CIMD or registered `client_name`, else its id. */
+  private clientNameOf(clientId: string): string {
+    return this.state.clientName ?? clientDisplayName(clientId, this.state.cimdMetadata?.client_name);
+  }
+
   private async startRemoteFederation(pendingAuthId: string, validatedRequest: OAuthAuthorizeRequest): Promise<void> {
     const auth = this.scope.auth;
     if (!auth || !('federatedSessionStore' in auth)) {
@@ -1222,6 +1241,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       providerIds: [providerId],
       signinBinding: this.signinBindingHash,
       clientAuthMethod: this.clientAuthMethodOf(validatedRequest.client_id, localAuth),
+      clientName: this.clientNameOf(validatedRequest.client_id),
       authorizedAppIds: initialAuthorizedApps(
         this.scope.auth?.options,
         this.scope.apps.getApps(),
@@ -1421,10 +1441,10 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
   private renderFederatedLoginPage(params: {
     pendingAuthId: string;
     detection: AuthProviderDetectionResult;
-    clientId: string;
+    clientName: string;
     redirectUri: string;
   }): string {
-    const { pendingAuthId, detection, clientId } = params;
+    const { pendingAuthId, detection, clientName } = params;
     const callbackPath = `${oauthBasePath(this.scope)}/oauth/callback`;
     const authOptions = this.scope.auth?.options;
     const required = requiredProviderIds(authOptions, this.scope.apps.getApps());
@@ -1442,7 +1462,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
 
     return buildFederatedLoginPage({
       providers,
-      clientName: clientId,
+      clientName,
       pendingAuthId,
       callbackPath,
       allowSkip: allowsSkippingApps(authOptions),
