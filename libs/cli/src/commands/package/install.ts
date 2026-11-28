@@ -117,7 +117,7 @@ export async function runInstall(opts: ParsedArgs): Promise<void> {
     }
 
     // 5. Install runtime packages (externalized from the bundle) and native addons
-    const runtimePackages = resolveRuntimePackageSpecs(packageDir);
+    const runtimePackages = resolveRuntimePackageSpecs(packageDir, manifestData.dependencies.nativeAddons);
     const packagesToInstall = [...runtimePackages.required, ...manifestData.dependencies.nativeAddons];
     console.log(`${c('cyan', '[install]')} installing runtime dependencies...`);
     if (!fs.existsSync(path.join(installDir, 'package.json'))) {

@@ -118,7 +118,7 @@ import { nodeSqlite, useSqliteDriver } from '@frontmcp/storage-sqlite';
 useSqliteDriver(nodeSqlite());
 ```
 
-So a CLI published to npm installs and runs without a native build: it depends on `@frontmcp/storage-sqlite` alone and its stores use `node:sqlite`. A server that wants `better-sqlite3` lists it in its own dependencies. An app installed with `frontmcp install` gets it next to its bundle when the build lists it in `build.dependencies.nativeAddons`; without that, the installed app runs on `node:sqlite`.
+So a CLI published to npm installs and runs without a native build: it depends on `@frontmcp/storage-sqlite` alone and its stores use `node:sqlite`. A server that wants `better-sqlite3` lists it in its own dependencies. `frontmcp install` installs it next to the app's bundle when the project lists it in `dependencies` (or `optionalDependencies`, as optional) or the build lists it in `build.dependencies.nativeAddons`, so the installed app keeps running on it; otherwise the installed app runs on `node:sqlite`.
 
 - **Processes can use different libraries on one file**: one server on `better-sqlite3` and a CLI on `node:sqlite` wait for each other's locks. In one process, open a file with one library only: two SQLite libraries in one process don't see each other's locks.
 - **On `node:sqlite`, `getDatabase()` and `openDatabase()` return a database with the members of `SqliteDatabase` only**, not `better-sqlite3`'s `Database` (no `pluck()`, `iterate()`, `backup()` or `function()`). Its errors carry `code: 'ERR_SQLITE_ERROR'` and SQLite's extended result code in `errcode`, where `better-sqlite3`'s carry `code: 'SQLITE_BUSY'` and the like; `isBusyError()` reads both.
