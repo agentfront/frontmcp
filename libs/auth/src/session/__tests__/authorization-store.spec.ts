@@ -2,6 +2,7 @@
  * Authorization Store Tests
  */
 import { assertDefined } from '../../__test-utils__/assertion.helpers';
+import { AuthorizationRowNames } from '../authorization-row-names';
 import {
   generatePkceChallenge,
   InMemoryAuthorizationStore,
@@ -548,6 +549,90 @@ describe('RedisAuthorizationStore', () => {
     };
   }
 
+  /** The row name of `value` without a key hash secret. */
+  function hashed(value: string): string {
+    return new AuthorizationRowNames().name(value);
+  }
+
+  describe('rows named up to 1.13', () => {
+    function legacyRefreshRow() {
+      const redis = fakeRedis();
+      const redisStore = new RedisAuthorizationStore(redis);
+      const record = redisStore.createRefreshTokenRecord({ clientId: 'client-1', userSub: 'user-1', scopes: [] });
+      return { redis, redisStore, record, legacyKey: `oauth:refresh:${record.token}` };
+    }
+
+    it('should rotate a refresh token stored under its old name once, and move it under its hashed name', async () => {
+      const { redis, redisStore, record, legacyKey } = legacyRefreshRow();
+      await redis.set(legacyKey, JSON.stringify(record));
+      const successors = Array.from({ length: 4 }, () =>
+        redisStore.createRefreshTokenRecord({ clientId: 'client-1', userSub: 'user-1', scopes: [] }),
+      );
+
+      const results = await Promise.allSettled(
+        successors.map((successor) => redisStore.rotateRefreshToken(record.token, successor)),
+      );
+
+      expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+      expect(await redis.get(legacyKey)).toBeNull();
+      expect(JSON.parse((await redis.get(`oauth:refresh:${hashed(record.token)}`)) ?? '{}')).toMatchObject({
+        revoked: true,
+      });
+      expect(await redisStore.getRefreshToken(record.token)).toBeNull();
+    });
+
+    it('should redeem a code stored under its old name once', async () => {
+      const redis = fakeRedis();
+      const redisStore = new RedisAuthorizationStore(redis);
+      const record = redisStore.createCodeRecord({
+        clientId: 'client-1',
+        redirectUri: 'https://example.com/cb',
+        scopes: [],
+        pkce: { challenge: 'abc', method: 'S256' },
+        userSub: 'user-1',
+      });
+      await redis.set(`oauth:code:${record.code}`, JSON.stringify(record));
+
+      const results = await Promise.allSettled([
+        redisStore.markCodeUsed(record.code),
+        redisStore.markCodeUsed(record.code),
+        redisStore.markCodeUsed(record.code),
+      ]);
+      await redisStore.markCodeUsed(record.code, 'issued-refresh-token');
+
+      expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+      expect(await redis.get(`oauth:code:${record.code}`)).toBeNull();
+      expect(await redisStore.getAuthorizationCode(record.code)).toMatchObject({
+        used: true,
+        issuedRefreshToken: 'issued-refresh-token',
+      });
+    });
+
+    it('should revoke a refresh token stored under its old name under its hashed name', async () => {
+      const { redis, redisStore, record, legacyKey } = legacyRefreshRow();
+      await redis.set(legacyKey, JSON.stringify(record));
+
+      await redisStore.revokeRefreshToken(record.token);
+
+      expect(await redis.get(legacyKey)).toBeNull();
+      expect(await redisStore.getRefreshToken(record.token)).toBeNull();
+    });
+
+    it('should read only the row under the hashed name when both names hold one', async () => {
+      const { redis, redisStore, record, legacyKey } = legacyRefreshRow();
+      await redis.set(`oauth:refresh:${hashed(record.token)}`, JSON.stringify({ ...record, revoked: true }));
+      await redis.set(legacyKey, JSON.stringify(record));
+
+      expect(await redisStore.getRefreshToken(record.token)).toBeNull();
+      await expect(
+        redisStore.rotateRefreshToken(
+          record.token,
+          redisStore.createRefreshTokenRecord({ clientId: 'client-1', userSub: 'user-1', scopes: [] }),
+        ),
+      ).rejects.toThrow('already rotated');
+    });
+  });
+
   describe('concurrent redemptions', () => {
     it('should let only one of two concurrent token requests mark a code used', async () => {
       const redisStore = new RedisAuthorizationStore(fakeRedis());
@@ -599,22 +684,23 @@ describe('RedisAuthorizationStore', () => {
   });
 
   describe('key format', () => {
-    it('should use namespace prefix for code keys', async () => {
+    it.each([
+      ['code', (id: string) => store.getAuthorizationCode(id)],
+      ['pending', (id: string) => store.getPendingAuthorization(id)],
+      ['refresh', (id: string) => store.getRefreshToken(id)],
+    ])('should read a %s row under its hashed name first, then under the name up to 1.13', async (type, read) => {
       mockRedis.get.mockResolvedValue(null);
-      await store.getAuthorizationCode('mycode');
-      expect(mockRedis.get).toHaveBeenCalledWith('test:code:mycode');
+      await read('my-value');
+      expect(mockRedis.get.mock.calls).toEqual([[`test:${type}:${hashed('my-value')}`], [`test:${type}:my-value`]]);
     });
 
-    it('should use namespace prefix for pending keys', async () => {
+    it('should name rows by a hash keyed with keyHashSecret', async () => {
+      const keyed = new RedisAuthorizationStore(mockRedis, 'test:', {
+        keyHashSecret: 'a-stable-secret-of-at-least-32-bytes',
+      });
       mockRedis.get.mockResolvedValue(null);
-      await store.getPendingAuthorization('myid');
-      expect(mockRedis.get).toHaveBeenCalledWith('test:pending:myid');
-    });
-
-    it('should use namespace prefix for refresh keys', async () => {
-      mockRedis.get.mockResolvedValue(null);
-      await store.getRefreshToken('mytoken');
-      expect(mockRedis.get).toHaveBeenCalledWith('test:refresh:mytoken');
+      await keyed.getRefreshToken('refresh-token-value');
+      expect(mockRedis.get).toHaveBeenNthCalledWith(1, 'test:refresh:Jcf7JBzyq8-e0Vf_YB3lOGwyNs20xdrA6Gd4hELgsB8');
     });
   });
 
@@ -648,7 +734,12 @@ describe('RedisAuthorizationStore', () => {
         used: false,
       };
       await store.storeAuthorizationCode(record);
-      expect(mockRedis.set).toHaveBeenCalledWith('test:code:test-code', expect.any(String), 'EX', expect.any(Number));
+      expect(mockRedis.set).toHaveBeenCalledWith(
+        `test:code:${hashed('test-code')}`,
+        expect.any(String),
+        'EX',
+        expect.any(Number),
+      );
       const storedJson = JSON.parse(mockRedis.set.mock.calls[0][1]);
       expect(storedJson.code).toBe('test-code');
     });
@@ -709,7 +800,7 @@ describe('RedisAuthorizationStore', () => {
   describe('deleteAuthorizationCode', () => {
     it('should call redis del', async () => {
       await store.deleteAuthorizationCode('c1');
-      expect(mockRedis.del).toHaveBeenCalledWith('test:code:c1');
+      expect(mockRedis.del.mock.calls).toEqual([[`test:code:${hashed('c1')}`], ['test:code:c1']]);
     });
   });
 
@@ -726,7 +817,7 @@ describe('RedisAuthorizationStore', () => {
       };
       await store.storePendingAuthorization(record);
       expect(mockRedis.set).toHaveBeenCalledWith(
-        'test:pending:pending-1',
+        `test:pending:${hashed('pending-1')}`,
         expect.any(String),
         'EX',
         expect.any(Number),
@@ -751,7 +842,7 @@ describe('RedisAuthorizationStore', () => {
   describe('deletePendingAuthorization', () => {
     it('should call redis del', async () => {
       await store.deletePendingAuthorization('p1');
-      expect(mockRedis.del).toHaveBeenCalledWith('test:pending:p1');
+      expect(mockRedis.del.mock.calls).toEqual([[`test:pending:${hashed('p1')}`], ['test:pending:p1']]);
     });
   });
 
@@ -767,7 +858,12 @@ describe('RedisAuthorizationStore', () => {
         revoked: false,
       };
       await store.storeRefreshToken(record);
-      expect(mockRedis.set).toHaveBeenCalledWith('test:refresh:rt-1', expect.any(String), 'EX', expect.any(Number));
+      expect(mockRedis.set).toHaveBeenCalledWith(
+        `test:refresh:${hashed('rt-1')}`,
+        expect.any(String),
+        'EX',
+        expect.any(Number),
+      );
     });
   });
 
@@ -852,7 +948,7 @@ describe('RedisAuthorizationStore', () => {
       const defaultStore = new RedisAuthorizationStore(mockRedis);
       mockRedis.get.mockResolvedValue(null);
       await defaultStore.getAuthorizationCode('test');
-      expect(mockRedis.get).toHaveBeenCalledWith('oauth:code:test');
+      expect(mockRedis.get).toHaveBeenNthCalledWith(1, `oauth:code:${hashed('test')}`);
     });
   });
 });

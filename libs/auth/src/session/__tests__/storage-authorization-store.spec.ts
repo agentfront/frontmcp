@@ -128,7 +128,8 @@ describe('StorageAuthorizationStore', () => {
         used: true,
         issuedRefreshToken: 'issued-refresh-token',
       });
-      expect(await adapter.ttl(`oauth:code:${record.code}`)).toBeGreaterThan(0);
+      const [key] = await adapter.keys('oauth:code:*');
+      expect(await adapter.ttl(key)).toBeGreaterThan(0);
     });
 
     it('refuses to redeem a code on an adapter that cannot compare and delete in one step', async () => {
