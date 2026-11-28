@@ -1293,3 +1293,24 @@ new MockOAuthServer(factory, { autoApprove: true, testUser, pkce: 'lenient', res
 ```
 
 **Codemod available:** no
+
+## BC-060: 1.14: better-sqlite3 is an optional peer of @frontmcp/storage-sqlite, and node:sqlite the default
+
+**Package:** `@frontmcp/storage-sqlite` | **Category:** change | **Severity:** medium
+
+`better-sqlite3` moved from the `optionalDependencies` of `@frontmcp/storage-sqlite` to its `peerDependencies`, marked optional in `peerDependenciesMeta`. Installing the package no longer builds the native module, and the stores open their files with Node's built-in `node:sqlite` by default. An installed `better-sqlite3` is still selected, and `FRONTMCP_SQLITE_DRIVER` (`node:sqlite` or `better-sqlite3`) still chooses; with `better-sqlite3` asked for but missing, opening a store fails with an error that says to install it. Both libraries write the same file, so no data moves. To keep `better-sqlite3`, add it to your own dependencies; code that calls `better-sqlite3`-only methods (`pluck()`, `iterate()`, `backup()`) on `getDatabase()` or `openDatabase()` needs it. An app installed with `frontmcp install` gets it only when its build lists it in `build.dependencies.nativeAddons`.
+
+**Before:**
+
+```typescript
+npm install @frontmcp/storage-sqlite // also builds better-sqlite3; the stores run on it
+```
+
+**After:**
+
+```typescript
+npm install @frontmcp/storage-sqlite // no native build; the stores run on node:sqlite
+npm install @frontmcp/storage-sqlite better-sqlite3 // the stores run on better-sqlite3
+```
+
+**Codemod available:** no

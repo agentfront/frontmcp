@@ -59,9 +59,9 @@ Point every MCP client at that entry, exactly like a stdio server:
 ```
 
 Starting the server takes the start lock in a SQLite file, so install `@frontmcp/storage-sqlite` next to
-`@frontmcp/sdk`. A session that finds its server running doesn't open it. The lock opens with `better-sqlite3`, which
-the package installs as an optional dependency, or with Node's built-in `node:sqlite` when it can't be installed, so a
-CLI published to npm needs no native build (see `setup-sqlite`, "The SQLite library").
+`@frontmcp/sdk`. A session that finds its server running doesn't open it. The lock opens with Node's built-in
+`node:sqlite`, or with `better-sqlite3`, an optional peer of the package, when it is installed, so a CLI published to
+npm needs no native build (see `setup-sqlite`, "The SQLite library").
 
 ## Options
 
