@@ -5,6 +5,7 @@ import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import { jsonWebKeySetSchema, jwkSchema } from '../common/jwt.types';
 import { redisConfigSchema, type RedisConfig } from '../session/transport-session.types';
+import type { PrincipalResolver } from '../session/utils/principal';
 import type { SecureStoreCustomBackend } from './interfaces';
 
 // ============================================
@@ -834,3 +835,8 @@ export {
 
 // Re-export types used from external modules
 export type { RedisConfig };
+
+/** The `principal` resolver of a mode that verifies tokens: a function of the claims and the detected principal. */
+export const principalResolverSchema = z.custom<PrincipalResolver>((value) => typeof value === 'function', {
+  message: 'auth.principal must be a function (claims, detected) => Partial<AuthPrincipal> | undefined',
+});

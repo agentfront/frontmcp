@@ -159,6 +159,10 @@ export {
   decryptAesGcm,
   // Utilities
   TinyTtlCache,
+  // Who a token speaks for: a person, a machine or no one (#1363)
+  detectPrincipal,
+  isAuthPrincipal,
+  resolvePrincipal,
   // Transport Session
   transportProtocolSchema,
   sseTransportStateSchema,
@@ -255,6 +259,10 @@ export {
 export type {
   // Anonymous / static-key caller claims
   AnonymousCallerClaimsOptions,
+  // The principal of a token, and a server's own resolver of it
+  AuthPrincipal,
+  PrincipalKind,
+  PrincipalResolver,
   // OAuth Authorization Store types
   AuthorizationStore,
   PkceChallenge,

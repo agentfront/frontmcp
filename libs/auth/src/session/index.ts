@@ -248,8 +248,11 @@ export {
   resetCachedKey,
   isSessionSecretConfigured,
   TinyTtlCache,
+  detectPrincipal,
+  isAuthPrincipal,
+  resolvePrincipal,
 } from './utils';
-export type { AnonymousCallerClaimsOptions } from './utils';
+export type { AnonymousCallerClaimsOptions, AuthPrincipal, PrincipalKind, PrincipalResolver } from './utils';
 
 // Storage-backed implementations (using @frontmcp/utils/storage)
 export {

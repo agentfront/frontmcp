@@ -99,6 +99,50 @@ describe('FrontMcpAuthContextImpl', () => {
   // Anonymous detection
   // =========================================================================
 
+  describe('principal', () => {
+    it('is the principal session verification resolved, when the request carries one', () => {
+      const resolved = { kind: 'machine' as const, sub: 'svc-sync', clientId: 'sync-service' };
+      const ctx = new FrontMcpAuthContextImpl({ user: { sub: 'svc-sync' }, extra: { principal: resolved } });
+
+      expect(ctx.principal).toEqual(resolved);
+      expect(Object.isFrozen(ctx.principal)).toBe(true);
+    });
+
+    it('is the one the claims name otherwise: a person, or a machine whose subject is its client', () => {
+      const person = new FrontMcpAuthContextImpl({
+        user: { sub: 'user-1', azp: 'desk-app', auth_time: 1_700_000_000 },
+      });
+      const machine = new FrontMcpAuthContextImpl({ user: { sub: 'billing-service', client_id: 'billing-service' } });
+
+      expect(person.principal).toEqual({
+        kind: 'person',
+        sub: 'user-1',
+        clientId: 'desk-app',
+        authTime: 1_700_000_000,
+      });
+      expect(machine.principal).toEqual({ kind: 'machine', sub: 'billing-service', clientId: 'billing-service' });
+    });
+
+    it('reads the claims of extra.authorization too', () => {
+      const ctx = new FrontMcpAuthContextImpl({
+        user: { sub: 'svc@clients' },
+        extra: { authorization: { claims: { gty: 'client-credentials' } } },
+      });
+
+      expect(ctx.principal).toMatchObject({ kind: 'machine', grantType: 'client_credentials' });
+    });
+
+    it('is anonymous for an anonymous caller, whatever the request carries', () => {
+      const anonymous = new FrontMcpAuthContextImpl({ user: { sub: 'anon:guest-42' } });
+      const claimed = new FrontMcpAuthContextImpl({
+        user: { sub: 'anon:guest-42' },
+        extra: { principal: { kind: 'person', sub: 'anon:guest-42' } },
+      });
+
+      expect([anonymous.principal.kind, claimed.principal.kind]).toEqual(['anonymous', 'anonymous']);
+    });
+  });
+
   describe('isAnonymous', () => {
     it('should be true when sub is empty string', () => {
       const ctx = new FrontMcpAuthContextImpl({ user: { sub: '' } });

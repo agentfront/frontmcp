@@ -237,6 +237,51 @@ describe('AuthoritiesContextBuilder', () => {
     });
   });
 
+  describe('the principal', () => {
+    const builder = new AuthoritiesContextBuilder();
+    const peopleOnly = { match: { 'user.principal': 'person' } };
+
+    it('is user.principal: a person, a machine or anonymous, as the claims name it', () => {
+      expect(
+        [
+          { user: { sub: 'user-1', azp: 'desk-app' } },
+          { user: { sub: 'billing-service', client_id: 'billing-service' } },
+          { user: { sub: 'svc@clients' }, extra: { authorization: { claims: { gty: 'client-credentials' } } } },
+          { user: { sub: 'anon:guest' } },
+          {},
+        ].map((authInfo) => builder.build(authInfo).user.principal),
+      ).toEqual(['person', 'machine', 'machine', 'anonymous', 'anonymous']);
+    });
+
+    it('is the kind session verification resolved, when the request carries one', () => {
+      const ctx = builder.build({
+        user: { sub: 'f81d4fae', azp: 'sync-service' },
+        extra: { principal: { kind: 'machine', sub: 'f81d4fae' } },
+      });
+
+      expect(ctx.user.principal).toBe('machine');
+    });
+
+    it('is set with a claimsResolver too', () => {
+      const resolving = new AuthoritiesContextBuilder({
+        claimsResolver: () => ({ roles: [], permissions: [], claims: {} }),
+      });
+
+      expect(resolving.build({ user: { sub: 'svc', client_id: 'svc' } }).user.principal).toBe('machine');
+    });
+
+    it("lets a rule allow people only with match: { 'user.principal': 'person' }", () => {
+      const person = evaluateAbac(peopleOnly, builder.build({ user: { sub: 'user-1' } }));
+      const machine = evaluateAbac(peopleOnly, builder.build({ user: { sub: 'svc', client_id: 'svc' } }));
+
+      expect(person.granted).toBe(true);
+      expect(machine).toMatchObject({
+        granted: false,
+        deniedBy: "attributes.match: 'user.principal' expected 'person' but got 'machine'",
+      });
+    });
+  });
+
   describe('with relationshipResolver', () => {
     it('should use provided resolver', () => {
       const mockResolver: RelationshipResolver = {
