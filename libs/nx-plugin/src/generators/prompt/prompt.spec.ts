@@ -41,6 +41,14 @@ describe('prompt generator', () => {
     expect(content).toContain('class SummarizePrompt extends PromptContext');
   });
 
+  it('imports GetPromptResult from @frontmcp/sdk, not the MCP SDK directly', async () => {
+    await promptGenerator(tree, { name: 'summarize', project: 'my-app', skipFormat: true });
+
+    const content = tree.read('apps/my-app/src/prompts/summarize.prompt.ts', 'utf-8');
+    expect(content).toContain("import { Prompt, PromptContext, type GetPromptResult } from '@frontmcp/sdk';");
+    expect(content).not.toContain('@modelcontextprotocol/sdk');
+  });
+
   it('should export default', async () => {
     const mod = await import('./prompt');
     expect(mod.default).toBe(promptGenerator);

@@ -164,8 +164,7 @@ export class UserResource extends ResourceContext<{ userId: string }> {
 ### Prompt
 
 ```typescript
-import { Prompt, PromptContext } from '@frontmcp/sdk';
-import type { GetPromptResult } from '@modelcontextprotocol/sdk/types.js';
+import { Prompt, PromptContext, type GetPromptResult } from '@frontmcp/sdk';
 
 @Prompt({
   name: 'summarize',
