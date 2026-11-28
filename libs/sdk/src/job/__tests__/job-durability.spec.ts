@@ -152,7 +152,8 @@ class SlowRetryJob extends JobContext {
 
 @Job({ name: 'quick_job', inputSchema: tagged, outputSchema: { ok: z.boolean() }, cleanup: recordCleanup })
 class QuickJob extends JobContext {
-  async execute(_input: { tag: string }) {
+  async execute({ tag }: { tag: string }) {
+    entered.push(tag);
     return { ok: true };
   }
 }
