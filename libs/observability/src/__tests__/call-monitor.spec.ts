@@ -1,4 +1,4 @@
-import { FRONTMCP_LOGGER, FrontMcpFlowHookTokens, PublicMcpError, type HookMetadata } from '@frontmcp/sdk';
+import { FRONTMCP_LOGGER, FrontMcpFlowHookTokens, PublicMcpError, trackWork, type HookMetadata } from '@frontmcp/sdk';
 
 import type { DevEvent, DevEventSink } from '../dev-events/dev-event-stream';
 import ObservabilityPlugin from '../plugin/observability.plugin';
@@ -142,6 +142,46 @@ describe('CallMonitor', () => {
     expect(second.stalls?.running).toBe(true);
     await second.onShutdown();
     expect(second.stalls?.running).toBe(false);
+  });
+
+  it('holds a work span in flight from trackWork() to its end, while the detector samples', async () => {
+    const unstarted = new CallMonitor({ thresholdMs: 250 }, false, logger());
+    const before = trackWork('ingest:batch');
+    expect(unstarted.stalls?.calls.running()).toEqual([]);
+    before();
+
+    const monitor = stallsOnly(250);
+    const end = trackWork('ingest:batch');
+    expect(monitor.stalls?.calls.running().map(({ method, entry }) => `${method} ${entry}`)).toEqual([
+      'work ingest:batch',
+    ]);
+    end();
+    expect(monitor.stalls?.calls.running()).toEqual([]);
+
+    await monitor.onShutdown();
+    trackWork('after shutdown');
+    expect(monitor.stalls?.calls.running()).toEqual([]);
+  });
+
+  it('records a work span once for the servers that share a detector, and stops following at the last shutdown', async () => {
+    const [first, second] = [logger(), logger()].map((log) => new CallMonitor({ thresholdMs: 300 }, false, log));
+    first.onReady();
+    second.onReady();
+
+    const end = trackWork('sync');
+    expect(first.stalls?.calls.running()).toHaveLength(1);
+    end();
+
+    await first.onShutdown();
+    trackWork('while one server serves')();
+    expect(second.stalls?.calls.during(0, Number.MAX_SAFE_INTEGER).map(({ entry }) => entry)).toEqual([
+      'sync',
+      'while one server serves',
+    ]);
+    await second.onShutdown();
+
+    const trackers = (globalThis as Record<symbol, Set<unknown>>)[Symbol.for('frontmcp:work-trackers')];
+    expect(trackers?.size ?? 0).toBe(0);
   });
 
   it('runs execute untracked without a stall detector or a resolved entry', async () => {

@@ -1,11 +1,14 @@
 import type { TelemetryCounter } from '../telemetry/telemetry.counters';
 import type { StalledCall, StallReport } from './stall-detector';
 
-/** Seconds the event loop was stalled, labelled `cause` (a call's method, `gc` or `unknown`) and `entry`. */
+/**
+ * Seconds the event loop was stalled, labelled `cause` (a call's method, a work span's kind, `gc` or `unknown`) and
+ * `entry`.
+ */
 export const STALL_SECONDS_COUNTER = 'frontmcp_event_loop_stall_seconds_total';
 
 export const STALL_SECONDS_DESCRIPTION =
-  'Seconds the event loop was stalled, by the method and entry of each call in flight, or gc, or unknown';
+  'Seconds the event loop was stalled, by the method and entry of each call or work in flight, or gc, or unknown';
 
 const MAX_NAMED_CALLS = 5;
 

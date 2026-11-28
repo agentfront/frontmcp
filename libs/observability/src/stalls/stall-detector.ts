@@ -15,9 +15,12 @@ export interface StallReport {
   stallMs: number;
   /** How much of the stall garbage collection took. */
   gcMs: number;
-  /** `gc` when the stall less its GC time is under the threshold; else `calls`, or `unknown` with no call in flight. */
+  /**
+   * `gc` when the stall less its GC time is under the threshold; else `calls`, or `unknown` with no call or work span
+   * in flight.
+   */
   cause: 'calls' | 'gc' | 'unknown';
-  /** The calls in flight during the stall. */
+  /** The calls and work spans in flight during the stall. */
   calls: StalledCall[];
 }
 

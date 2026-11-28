@@ -25,6 +25,21 @@ describe('InFlightCalls', () => {
     expect(calls.during(1_000, 1_040)).toEqual([{ ...call, startedAt: 1_000, endedAt: 1_040 }]);
   });
 
+  it('holds a work span from begin() until its end is first called', () => {
+    const { calls, advance } = registry();
+    const span = { method: 'duty' as const, entry: 'nightly-ingest' };
+
+    const end = calls.begin(span);
+    advance(25);
+    expect(calls.running()).toEqual([{ ...span, startedAt: 1_000 }]);
+    end();
+    advance(25);
+    end();
+
+    expect(calls.running()).toEqual([]);
+    expect(calls.during(1_000, 1_050)).toEqual([{ ...span, startedAt: 1_000, endedAt: 1_025 }]);
+  });
+
   it('finishes a call whose body throws, and rethrows', async () => {
     const { calls } = registry();
     const failure = new Error('boom');

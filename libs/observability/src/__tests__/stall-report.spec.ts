@@ -32,6 +32,24 @@ describe('describeStall', () => {
     );
   });
 
+  it('names a work span by its kind and name, without a session', () => {
+    const report: StallReport = {
+      stallMs: 620,
+      gcMs: 0,
+      cause: 'calls',
+      calls: [
+        { method: 'duty', entry: 'nightly-ingest', runningMs: 610 },
+        { method: 'http', entry: 'GET /board/:id', runningMs: 12 },
+        { method: 'work', entry: 'ingest:batch', runningMs: 300 },
+      ],
+    };
+
+    expect(describeStall(report)).toBe(
+      'Event loop stalled for 620 ms while running duty nightly-ingest (610 ms), http GET /board/:id (12 ms), ' +
+        'work ingest:batch (300 ms)',
+    );
+  });
+
   it('says when no call was in flight', () => {
     expect(describeStall({ stallMs: 250, gcMs: 0, cause: 'unknown', calls: [] })).toBe(
       'Event loop stalled for 250 ms with no call in flight',
@@ -54,6 +72,16 @@ describe('countStall', () => {
     countStall({ stallMs: 600, gcMs: 0, cause: 'calls', calls: [busy, { ...busy, session: 'other' }] }, counter);
 
     expect(counts).toEqual([{ by: 0.6, attributes: { cause: 'tools/call', entry: 'probe:busy-wait' } }]);
+  });
+
+  it('labels a work span by its kind as the cause and its name as the entry', () => {
+    const { counts, counter } = recordingCounter();
+    countStall(
+      { stallMs: 400, gcMs: 0, cause: 'calls', calls: [{ method: 'worker', entry: 'mailbox', runningMs: 9_000 }] },
+      counter,
+    );
+
+    expect(counts).toEqual([{ by: 0.4, attributes: { cause: 'worker', entry: 'mailbox' } }]);
   });
 
   it('adds GC time under the gc cause and the rest to the calls', () => {
