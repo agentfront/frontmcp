@@ -262,6 +262,9 @@ class SlowCleanupStepJob extends JobContext {
 @Workflow({ name: 'gated_flow', steps: [{ id: 'wait', jobName: 'progress_job', timeout: 60_000 }] })
 class GatedFlow {}
 
+@Workflow({ name: 'quick_flow', steps: [{ id: 'only', jobName: 'quick_job', input: { tag: 'quick-step' } }] })
+class QuickFlow {}
+
 @Workflow({ name: 'slow_cleanup_flow', steps: [{ id: 'hang', jobName: 'slow_cleanup_step_job', timeout: 60_000 }] })
 class SlowCleanupFlow {}
 
@@ -277,7 +280,7 @@ class GatedThenQuickFlow {}
 @App({
   id: 'durable',
   name: 'Durable',
-  workflows: [GatedFlow, GatedThenQuickFlow, SlowCleanupFlow],
+  workflows: [GatedFlow, GatedThenQuickFlow, SlowCleanupFlow, QuickFlow],
   jobs: [
     HangJob,
     DefaultTimeoutJob,
@@ -343,25 +346,51 @@ class SlowProgressStore extends MemoryJobStateStore {
   }
 }
 
-/** A store on which another server cancels each run just as this one writes that it completed. */
-class CancelledAsItCompletesStore extends MemoryJobStateStore {
-  private async cancelFirst(runId: string, updates: Partial<JobRunRecord>): Promise<void> {
-    if (updates.state !== 'completed') return;
+/**
+ * A store on which another server cancels a run while this one writes `matching` to it: between the read and the
+ * write of a plain update, as on SQLite or Redis, and before an update of an unfinished run.
+ */
+class CancelledMidWriteStore extends MemoryJobStateStore {
+  /** The run's state after each write, so a test sees one that undid the cancel for a while. */
+  readonly states: string[] = [];
+
+  constructor(private readonly matching: (updates: Partial<JobRunRecord>) => boolean) {
+    super();
+  }
+
+  /** The states written once the cancel landed. */
+  statesAfterCancel(): string[] {
+    return this.states.slice(this.states.indexOf('cancelled'));
+  }
+
+  private async recordState(runId: string): Promise<void> {
+    this.states.push((await this.getRun(runId))?.state ?? 'none');
+  }
+
+  private async cancelElsewhere(runId: string): Promise<void> {
     await this.requestCancel(runId);
     await super.updateRun(runId, { state: 'cancelled', completedAt: Date.now() });
   }
 
   override async updateRun(runId: string, updates: Partial<JobRunRecord | WorkflowRunRecord>): Promise<void> {
-    await this.cancelFirst(runId, updates);
-    return super.updateRun(runId, updates);
+    if (this.matching(updates)) {
+      const before = await this.getRun(runId);
+      await this.cancelElsewhere(runId);
+      if (before) await super.updateRun(runId, { ...before, ...updates });
+    } else {
+      await super.updateRun(runId, updates);
+    }
+    await this.recordState(runId);
   }
 
   override async updateUnfinishedRun(
     runId: string,
     updates: Partial<JobRunRecord | WorkflowRunRecord>,
   ): Promise<boolean> {
-    await this.cancelFirst(runId, updates);
-    return super.updateUnfinishedRun(runId, updates);
+    if (this.matching(updates)) await this.cancelElsewhere(runId);
+    const written = await super.updateUnfinishedRun(runId, updates);
+    await this.recordState(runId);
+    return written;
   }
 }
 
@@ -608,7 +637,7 @@ describe('durable jobs', () => {
       ['a workflow run', 'gated_flow'],
     ])('keeps %s cancelled when another server cancels it as it completes', async (_, name) => {
       const scope = scopeOf(server);
-      const store = new CancelledAsItCompletesStore();
+      const store = new CancelledMidWriteStore((updates) => updates.state === 'completed');
       const manager = new JobExecutionManager(store, scope.logger, undefined, scope);
       const workflow = scope.workflows?.findByName(name);
       const jobs = scope.jobs;
@@ -623,6 +652,46 @@ describe('durable jobs', () => {
       );
       await new Promise((resolve) => setTimeout(resolve, 50));
       expect((await store.getRun(runId))?.state).toBe('cancelled');
+      await manager.dispose();
+    });
+
+    it('keeps a run cancelled when another server cancels it while this one writes its progress', async () => {
+      const scope = scopeOf(server);
+      const store = new CancelledMidWriteStore((updates) => 'progress' in updates);
+      const manager = new JobExecutionManager(store, scope.logger, undefined, scope);
+      const { runId } = await manager.executeJob(jobOf(server, 'progress_job'), {}, { background: true });
+
+      await waitFor(
+        async () => FINISHED_JOB_STATES.has((await store.getRun(runId))?.state ?? 'pending'),
+        'the run to end',
+      );
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(store.statesAfterCancel().length).toBeGreaterThan(1);
+      expect(new Set(store.statesAfterCancel())).toEqual(new Set(['cancelled']));
+      await manager.dispose();
+    });
+
+    it.each([
+      ['a job run', 'quick_job'],
+      ['a workflow run', 'quick_flow'],
+    ])('never starts %s another server cancels as this one starts it', async (_, name) => {
+      const scope = scopeOf(server);
+      const store = new CancelledMidWriteStore((updates) => updates.state === 'running');
+      const manager = new JobExecutionManager(store, scope.logger, undefined, scope);
+      const workflow = scope.workflows?.findByName(name);
+      const jobs = scope.jobs;
+      if (!jobs) throw new Error('jobs are not enabled');
+      const { runId } = workflow
+        ? await manager.executeWorkflow(workflow, jobs, { background: true })
+        : await manager.executeJob(jobOf(server, name), { tag: 'quick-step' }, { background: true });
+
+      await waitFor(
+        async () => FINISHED_JOB_STATES.has((await store.getRun(runId))?.state ?? 'pending'),
+        'the run to end',
+      );
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect((await store.getRun(runId))?.state).toBe('cancelled');
+      expect(entered).not.toContain('quick-step');
       await manager.dispose();
     });
 
