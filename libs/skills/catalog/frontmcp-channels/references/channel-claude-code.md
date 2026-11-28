@@ -73,7 +73,7 @@ What stays as it was:
 
 - A server without channels is not declined. Its 2026-07-28 requests are forwarded as before.
 - `frontmcp dev --stdio --serve` uses no HTTP server: the dev server speaks stdio itself, as described above.
-- A shared session that runs the server in its own process (the fallback of `runShared()`) declines 2026-07-28 too, but gets no channel event: that server offers no notification stream.
+- A shared session that runs the server in its own process (the fallback of `runShared()`) declines 2026-07-28 too, and gets that server's channel events: since 1.14 the server listens on a socket or loopback port of its own, where the session opens its notification stream (up to 1.13 it was served per request, with no stream).
 - A shared server that was stopped, or whose checkout was removed, is not started again by a quiet session. The session moves at its next request, and gets no channel event until then.
 
 ## What Claude Code Does with a Notification
