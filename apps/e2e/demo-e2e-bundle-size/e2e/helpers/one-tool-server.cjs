@@ -1,5 +1,5 @@
 // A one-tool FrontMCP server over Streamable HTTP, measured over IPC (#948): node --expose-gc one-tool-server.cjs <sdkEntry> <port>
-// Sent `measure`, it runs a full GC and answers with its live heap, new space and RSS.
+// Sent `measure`, it runs a full GC and answers with its live heap, new space, RSS and the packages it loaded.
 const v8 = require('node:v8');
 
 const [sdkEntry, port] = process.argv.slice(2);
@@ -26,5 +26,10 @@ process.on('message', (message) => {
   globalThis.gc();
   const newSpace = v8.getHeapSpaceStatistics().find((space) => space.space_name === 'new_space');
   const { heapUsed, rss } = process.memoryUsage();
-  process.send({ liveHeap: heapUsed, newSpace: newSpace.space_size, rss });
+  const packages = new Set();
+  for (const file of Object.keys(require.cache)) {
+    const match = /.*node_modules[\\/]((?:@[^\\/]+[\\/])?[^\\/]+)/.exec(file);
+    if (match) packages.add(match[1].replace('\\', '/'));
+  }
+  process.send({ liveHeap: heapUsed, newSpace: newSpace.space_size, rss, packages: [...packages] });
 });

@@ -5,21 +5,25 @@
  *
  * Needs the packages built: `nx run-many -t build -p sdk plugin-webmcp`.
  */
-import { fork, type ChildProcess } from 'node:child_process';
+import { execFileSync, fork, type ChildProcess } from 'node:child_process';
 import { createConnection, createServer } from 'node:net';
 import { resolve } from 'node:path';
 
 import { workspaceRoot } from './helpers/browser-bundle';
 
-// 34.3 MB on 1.13, plus 2 MB of headroom
-const LIVE_HEAP_MAX_BYTES = 36_300_000;
+// 31.8 MB on the node:http host (34.3 MB on Express), plus 2 MB of headroom
+const LIVE_HEAP_MAX_BYTES = 33_800_000;
 // 32 MiB: still twice the official SDK's 16 MiB (#948), but another doubling fails
 const NEW_SPACE_MAX_BYTES = 33_554_432;
+// require('@frontmcp/sdk') alone: 24.7 MB, plus 1.5 MB of headroom. New space doubles to 32 MiB while it runs.
+const REQUIRE_LIVE_HEAP_MAX_BYTES = 26_200_000;
 
 interface Measurement {
   liveHeap: number;
   newSpace: number;
   rss: number;
+  /** The packages of the server's loaded modules, by name. */
+  packages: string[];
 }
 
 function freePort(): Promise<number> {
@@ -105,5 +109,29 @@ describe('a one-tool server after its first tools/call', () => {
     );
     expect(measured.liveHeap).toBeLessThanOrEqual(LIVE_HEAP_MAX_BYTES);
     expect(measured.newSpace).toBeLessThanOrEqual(NEW_SPACE_MAX_BYTES);
+    // A server whose routes are all FrontMCP's own runs on the node:http host
+    expect(measured.packages).not.toContain('express');
+    expect(measured.packages).not.toContain('body-parser');
+  });
+});
+
+describe("require('@frontmcp/sdk')", () => {
+  it('keeps its live heap within its budget', () => {
+    const script = [
+      `require(${JSON.stringify(resolve(workspaceRoot, 'libs/sdk/dist/index.js'))});`,
+      'globalThis.gc();',
+      'process.stdout.write(String(process.memoryUsage().heapUsed));',
+    ].join('');
+    const liveHeap = Number(
+      execFileSync(process.execPath, ['--expose-gc', '-e', script], {
+        encoding: 'utf8',
+        env: { ...process.env, NODE_ENV: 'production' },
+      }),
+    );
+    process.stdout.write(
+      `require('@frontmcp/sdk'): live heap ${liveHeap.toLocaleString('en-US')} bytes ` +
+        `(budget ${REQUIRE_LIVE_HEAP_MAX_BYTES.toLocaleString('en-US')})\n`,
+    );
+    expect(liveHeap).toBeLessThanOrEqual(REQUIRE_LIVE_HEAP_MAX_BYTES);
   });
 });
