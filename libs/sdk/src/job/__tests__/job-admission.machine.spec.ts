@@ -301,6 +301,42 @@ describe('MachineJobAdmission', () => {
       expect(outcome.value).toBe('admitted');
       waiting.release();
     });
+
+    it('renews at once a slot whose write the store answered late, so it outlasts the wait for its first renewal', async () => {
+      const store = new MemoryJobStateStore();
+      let answer: () => void = () => undefined;
+      const answered = new Promise<void>((resolve) => (answer = resolve));
+      let lateAnswers = 1;
+      const lateStore: AdmissionLeaseStore = {
+        readLeases: (key) => store.readLeases(key),
+        swapLeases: async (key, expected, next, ttlSeconds) => {
+          const swapped = await store.swapLeases(key, expected, next, ttlSeconds);
+          if (lateAnswers-- > 0) await answered;
+          return swapped;
+        },
+      };
+      const slow = new MachineJobAdmission({ concurrency: 1, scope: 'machine' }, lateStore, undefined, FAST);
+      const slot = slow.slot();
+      const acquiring = outcomeOf(slot.acquire('slow'));
+      // The store wrote the 30 s lease at once, and answers 25 s later
+      await jest.advanceTimersByTimeAsync(25_000);
+      answer();
+      await settle();
+      expect(acquiring.value).toBe('admitted');
+
+      // Past the 30 s that first write gave, before the first renewal is due, the slot is still taken
+      const other = new MachineJobAdmission({ concurrency: 1, scope: 'machine' }, store, undefined, FAST);
+      const otherSlot = other.slot();
+      const otherOutcome = outcomeOf(otherSlot.acquire('other'));
+      await jest.advanceTimersByTimeAsync(6_000);
+      expect(otherOutcome.value).toBeUndefined();
+      expect(slot.lost?.aborted).toBe(false);
+
+      slot.release();
+      await jest.advanceTimersByTimeAsync(100);
+      expect(otherOutcome.value).toBe('admitted');
+      otherSlot.release();
+    });
   });
 
   describe('on a SQLite job store two processes share', () => {

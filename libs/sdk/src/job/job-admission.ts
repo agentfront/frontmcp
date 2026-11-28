@@ -294,8 +294,9 @@ export class MachineJobAdmission implements JobAdmissionGate {
       pid: currentPid(),
       expiresAt: 0,
     };
+    let taken = false;
     try {
-      const taken = await this.changeClaims((claims) => {
+      taken = await this.changeClaims((claims) => {
         if (concurrency !== undefined && claims.length >= concurrency) {
           this.lastWait = `${claims.length} of ${concurrency} job runs on this machine are busy`;
           return undefined;
@@ -309,11 +310,39 @@ export class MachineJobAdmission implements JobAdmissionGate {
         claim.expiresAt = Date.now() + this.leaseSeconds * 1_000;
         return [...claims, claim];
       });
-      return taken ? this.keep(claim, jobName, onLost) : undefined;
+      if (!taken) return undefined;
+      // A write the store answered late leaves less than two renewals' time: renew the lease now, or give the slot up
+      const renewEveryMs = (this.leaseSeconds * 1_000) / 3;
+      if (claim.expiresAt - Date.now() < 2 * renewEveryMs && !(await this.renewClaim(claim))) {
+        this.lastWait = 'its lease ended before the job store answered';
+        return undefined;
+      }
+      return this.keep(claim, jobName, onLost);
     } catch (error) {
       this.reportStoreError(error);
+      if (taken) void this.removeClaim(claim).catch(() => undefined);
       return undefined;
     }
+  }
+
+  /** Extend `claim`'s lease in the machine's list; resolves to false once the lease is gone from it. */
+  private async renewClaim(claim: HeldClaim): Promise<boolean> {
+    const expiresAt = Date.now() + this.leaseSeconds * 1_000;
+    const renewed = await this.changeClaims((claims) => {
+      const own = claims.find((running) => running.id === claim.id);
+      return own && claims.map((running) => (running === own ? { ...own, expiresAt } : running));
+    });
+    if (renewed) claim.expiresAt = expiresAt;
+    return renewed;
+  }
+
+  /** Take `claim`'s lease out of the machine's list. */
+  private removeClaim(claim: HeldClaim): Promise<boolean> {
+    return this.changeClaims((claims) =>
+      claims.some((running) => running.id === claim.id)
+        ? claims.filter((running) => running.id !== claim.id)
+        : undefined,
+    );
   }
 
   /**
@@ -336,13 +365,9 @@ export class MachineJobAdmission implements JobAdmissionGate {
     const renew = setInterval(() => {
       if (renewing) return loseIfEnding();
       renewing = true;
-      const expiresAt = Date.now() + this.leaseSeconds * 1_000;
-      this.changeClaims((claims) => {
-        const own = claims.find((running) => running.id === claim.id);
-        return own && claims.map((running) => (running === own ? { ...own, expiresAt } : running));
-      })
+      this.renewClaim(claim)
         .then((renewed) => {
-          if (renewed) heldUntil = expiresAt;
+          if (renewed) heldUntil = claim.expiresAt;
           else lose('its lease in the job store ended');
         })
         .catch((error: unknown) => {
@@ -357,11 +382,7 @@ export class MachineJobAdmission implements JobAdmissionGate {
         if (!held) return;
         held = false;
         clearInterval(renew);
-        this.changeClaims((claims) =>
-          claims.some((running) => running.id === claim.id)
-            ? claims.filter((running) => running.id !== claim.id)
-            : undefined,
-        )
+        this.removeClaim(claim)
           .catch((error: unknown) => this.reportStoreError(error))
           .finally(() => this.wake());
       },
