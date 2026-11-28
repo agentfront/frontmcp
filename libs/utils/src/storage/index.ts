@@ -46,6 +46,7 @@ export {
   createRedisConnection,
   isRedisConnection,
   redisConnectionOf,
+  redisAdapterOptionsOf,
   hasRedisClusterNodes,
   adoptRedisClient,
   wantsRedisCluster,
@@ -79,6 +80,7 @@ export type {
   RedisPipelineResult,
   NodeRedisClientAdapterOptions,
   NodeRedisLike,
+  RedisScanClient,
 } from './redis-client';
 
 // Namespace utilities

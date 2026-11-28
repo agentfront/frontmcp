@@ -107,6 +107,13 @@ describe('createRedisConnection', () => {
       expect(MockRedis).toHaveBeenCalledWith(expect.objectContaining({ lazyConnect: true, enableReadyCheck: false }));
     });
 
+    it("applies a caller's own ioredis options as given (a TLS object, a keyPrefix)", () => {
+      createRedisConnection({ host: 'cache', ioredisOptions: { tls: { servername: 'cache' }, keyPrefix: 'app:' } });
+      expect(MockRedis).toHaveBeenCalledWith(
+        expect.objectContaining({ host: 'cache', tls: { servername: 'cache' }, keyPrefix: 'app:' }),
+      );
+    });
+
     it('attaches the rate-limited error listener unless told not to', () => {
       const listened = createRedisConnection({ host: 'cache' }).client as unknown as { on: jest.Mock };
       expect(listened.on).toHaveBeenCalledWith('error', expect.any(Function));
@@ -172,6 +179,19 @@ describe('createRedisConnection', () => {
       onReady();
       expect(clusterRetryStrategy(50)).toBe(200);
       expect(clusterRetryStrategy(5000)).toBe(2000);
+    });
+
+    it('puts keyPrefix on the cluster and a TLS object on each node', () => {
+      createRedisConnection({
+        host: 'cfg',
+        cluster: true,
+        ioredisOptions: { keyPrefix: 'app:', tls: { servername: 'cfg' } },
+      });
+      const options = MockCluster.mock.calls[0][1] as Record<string, unknown> & {
+        redisOptions: Record<string, unknown>;
+      };
+      expect(options['keyPrefix']).toBe('app:');
+      expect(options.redisOptions['tls']).toEqual({ servername: 'cfg' });
     });
 
     it('splits ioredisOptions between the cluster and its nodes', () => {

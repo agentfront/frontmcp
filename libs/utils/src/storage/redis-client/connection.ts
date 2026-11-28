@@ -75,7 +75,13 @@ function clusterRetryDelay(times: number): number {
 }
 
 /** Options of a Cluster as a whole; the rest of `ioredisOptions` go to each node. */
-const CLUSTER_LEVEL_OPTIONS = new Set(['lazyConnect', 'enableReadyCheck', 'enableOfflineQueue', 'scaleReads']);
+const CLUSTER_LEVEL_OPTIONS = new Set([
+  'lazyConnect',
+  'enableReadyCheck',
+  'enableOfflineQueue',
+  'scaleReads',
+  'keyPrefix',
+]);
 
 /** The connection fields a URL leaves out, as ioredis options. */
 function toFillInOptions({ port, password, db, tls }: RedisUrlMerge['fillIns']): IoredisOptions {
@@ -242,13 +248,16 @@ function openIoredisClient(settings: RedisConnectionSettings, overrides: Record<
     // A URL ioredis reads by itself (a socket path, another scheme)
     client = new RedisClass(url, base);
   } else {
+    // ioredisOptions come last: a caller that hands over its own ioredis options (a TLS object, a
+    // keyPrefix) has them applied as given
     client = new RedisClass({
-      ...base,
+      ...BASE_OPTIONS,
       host: host ?? 'localhost',
       port: port ?? 6379,
       password,
       db: db ?? 0,
       tls: tls ? {} : undefined,
+      ...overrides,
     });
   }
   return client as unknown as FrontMcpRedisClient;

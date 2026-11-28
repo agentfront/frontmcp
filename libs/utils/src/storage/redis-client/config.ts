@@ -1,6 +1,7 @@
 /**
  * The Redis connection config every FrontMCP option shares, and the one guard for it (#1503).
  */
+import type { RedisAdapterOptions } from '../types';
 import type { RedisConnectionConfig } from './types';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -35,4 +36,16 @@ export function redisConnectionOf(config: RedisConnectionConfig): RedisConnectio
   return Object.fromEntries(
     Object.entries({ url, host, port, password, db, tls, cluster }).filter(([, value]) => value !== undefined),
   ) as RedisConnectionConfig;
+}
+
+/**
+ * The `RedisStorageAdapter` options for a connection config: its `client`, or its `url` with the
+ * fields beside it filling in, or its host (or cluster seed nodes). `keyPrefix` is the caller's.
+ */
+export function redisAdapterOptionsOf(config: RedisConnectionConfig): RedisAdapterOptions {
+  const connection = redisConnectionOf(config);
+  if (connection.client !== undefined) return { client: connection.client };
+  const { url, ...fields } = connection;
+  if (url !== undefined) return { url, config: fields };
+  return { config: fields as RedisAdapterOptions['config'] };
 }
