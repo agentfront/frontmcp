@@ -172,8 +172,8 @@ With the Unix socket, a socket path longer than a socket address holds (103 byte
    `The shared server "<key>" did not start: app "<id>" has auth of its own (mode <mode>), which the shared server's token would not guard; remove auth from its @App, or serve it without runShared()`.
    The identity challenge and the drain are flows of their own, `shared:identify`
    (`POST /.well-known/frontmcp-shared-server`) and `shared:drain`, hookable like any other.
-7. **Exit.** The server exits once it had no request carrying the token (or identity challenge), and no session
-   holding its notification stream, for `idleTimeoutMs`, once its `checkout` folder is removed, when a newer session
+7. **Exit.** The server exits once it had no request carrying the token (or identity challenge), no request to one of
+   its routes, and no session holding its notification stream, for `idleTimeoutMs`, once its `checkout` folder is removed, when a newer session
    drains it, or on `SIGTERM` / `SIGINT`. Each way, it refuses new requests as `exiting` (and closes their
    connection), cuts off the notification streams its sessions hold, removes its record and its socket, lets the
    requests in flight finish, and logs `The shared server "<key>" exits: <reason>` to its log file. A session that
@@ -224,6 +224,8 @@ FrontMcpInstance.runShared(serverConfig, { key: 'my-server', transport: 'http' }
 - The server refuses every request whose `Origin` is another origin; its own (`http://127.0.0.1:<port>`,
   `http://localhost:<port>`) is taken, so its pages post back to it, as the people sign-in page does. MCP still needs
   the token.
+- A request to a route is activity, as a session's is: the server does not exit idle while a route answers one, an
+  event stream included, and an exiting server refuses new ones as `exiting` and waits for those in flight (up to 5 s).
 - A session that runs the server in its own process serves the same routes on its own listener (see Fallback), which
   people don't find: hand them a link from a tool there too.
 

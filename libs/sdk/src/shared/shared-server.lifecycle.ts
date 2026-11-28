@@ -2,6 +2,8 @@ import { FlowHooksOf, httpRespond } from '../common';
 import { SHARED_EXITING, SHARED_STATE_HEADER } from './shared-endpoint';
 
 const { Will } = FlowHooksOf('http:request');
+const RouteHook = FlowHooksOf('http:route');
+const HostRouteHook = FlowHooksOf('http:ip-filter');
 
 /** The answer to a request that reaches a shared server once it is exiting: sent again, it reaches the next one. */
 export function exitingResponse(): ReturnType<typeof httpRespond.json> {
@@ -17,18 +19,23 @@ interface TrackedResponse {
   destroy?(): unknown;
 }
 
-/** The part of an `http:request` run the lifecycle reads: whether it is authorized, its method and Node response, and how to answer. */
-interface HttpRequestRun {
+/** The part of a route's run the lifecycle reads: its Node response, and how to answer. */
+interface HttpRouteRun {
   readonly rawInput: { request?: { method?: string }; response?: TrackedResponse };
-  readonly state: { get(key: 'verifyResult'): { kind: string } | undefined };
   respond(output: ReturnType<typeof httpRespond.json>): void;
+}
+
+/** The part of an `http:request` run the lifecycle reads: whether it is authorized, its method and Node response, and how to answer. */
+interface HttpRequestRun extends HttpRouteRun {
+  readonly state: { get(key: 'verifyResult'): { kind: string } | undefined };
 }
 
 /**
  * How long a shared server has gone without a request, and its exit: once asked to exit, it answers every new
  * request 503 with `x-frontmcp-shared-server: exiting`, so its sessions send it to the next server instead. Only a
- * request that carries the token, or an identity challenge, counts as activity. A notification stream a session
- * holds open (its `GET`) keeps the server from being idle, and is cut off, not waited for, when the server exits.
+ * request that carries the token, a request to one of its routes, or an identity challenge, counts as activity. A
+ * notification stream a session holds open (its `GET`) keeps the server from being idle, and is cut off, not waited
+ * for, when the server exits; a route's request, its event streams included, is waited for.
  */
 export class SharedServerLifecycle {
   #inFlight = 0;
@@ -87,6 +94,27 @@ export class SharedServerLifecycle {
       this.holdStream(response);
       return;
     }
+    this.startRequest(response);
+  }
+
+  /** A request an `@HttpRoute` admitted, people pages included. */
+  @RouteHook.Will('handle')
+  trackRouteRequest(run: HttpRouteRun): void {
+    this.trackRoute(run);
+  }
+
+  /** A request to a route the host mounts (`http.routes`, channel webhooks). */
+  @HostRouteHook.Will('checkIpFilter')
+  trackHostRouteRequest(run: HttpRouteRun): void {
+    this.trackRoute(run);
+  }
+
+  private trackRoute(run: HttpRouteRun): void {
+    if (this.isExiting) run.respond(exitingResponse());
+    this.startRequest(run.rawInput.response);
+  }
+
+  private startRequest(response: TrackedResponse | undefined): void {
     this.#inFlight++;
     this.#lastActivity = Date.now();
     if (typeof response?.once === 'function') response.once('close', () => this.finishRequest());
