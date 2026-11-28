@@ -4,6 +4,7 @@ import { type ScopeEntry } from '../../common';
 import { type JobEntry } from '../../common/entries/job.entry';
 import { type WorkflowEntry } from '../../common/entries/workflow.entry';
 import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
+import { type WorkflowExecutionResult } from '../../common/interfaces/workflow.interface';
 import { type JobInterruptReason, type JobPermission, type JobRunner } from '../../common/metadata/job.metadata';
 import { FrontMcpContext } from '../../context';
 import {
@@ -13,7 +14,6 @@ import {
   JobRunFinishedError,
   JobRunnerBootError,
   JobRunnerUnavailableError,
-  JobRunNotCancellableError,
   JobRunNotFoundError,
   JobTimeoutError,
 } from '../../errors';
@@ -21,7 +21,7 @@ import { outlasts } from '../../provider/provider.lifecycle';
 import { isAlive } from '../../task/helpers/process-liveness';
 import { WorkflowEngine } from '../../workflow/engine/workflow.engine';
 import { parseWorkflowInput } from '../../workflow/workflow.utils';
-import { type JobAdmission } from '../job-admission';
+import { type JobAdmissionGate } from '../job-admission';
 import {
   abortableDelay,
   retryDelayMs,
@@ -65,13 +65,15 @@ export interface JobExecutionManagerOptions {
   /** How long an attempt of a job that sets no `timeout` may run, in ms; 0 for no limit. @default 300000 */
   defaultTimeoutMs?: number;
   /** When attempts may start (`jobs.admission`); unset admits every attempt at once. */
-  admission?: JobAdmission;
+  admission?: JobAdmissionGate;
   /** How often an active run reads the store for a cancel another process wrote, in ms; unset never reads it. */
   cancelPollMs?: number;
   /** Where the attempts of a job that sets no `runner` run (`jobs.runner`). @default 'inline' */
   runner?: JobRunner;
   /** The job of a run by its name, for a detached run's runner and the cleanup of a run whose runner is gone. */
   findJob?: (name: string) => JobEntry | undefined;
+  /** The workflows by name, and the job registry their steps run on, for a detached workflow run's runner. */
+  workflows?: { find(name: string): WorkflowEntry | undefined; jobs: JobRegistryInterface };
   /** Why this server cannot start a detached run, and what to do instead; unset when it can. */
   detachedUnavailable?: { why: string; remedy: string };
   /** Starts the process of a detached run. @default a process running the server's own command again */
@@ -278,6 +280,12 @@ export class JobExecutionManager {
   ): Promise<boolean> {
     if (await this.stateStore.getRun(runId)) return false;
     const run = await this.prepareWorkflowRun(workflow, runId, { ...opts, background: true });
+    if (workflow.metadata.runner === 'detached') {
+      return (
+        (await this.startDetachedWorkflow(workflow, run.record, (record) => this.createRunIfAbsent(record))) !==
+        undefined
+      );
+    }
     if (!(await this.createRunIfAbsent(run.record))) return false;
     await this.launchWorkflowRun(workflow, jobRegistry, run);
     return true;
@@ -290,6 +298,13 @@ export class JobExecutionManager {
     opts: ExecuteWorkflowOptions,
   ): Promise<InlineJobResult | BackgroundJobResult> {
     const run = await this.prepareWorkflowRun(workflow, runId, opts);
+    if (workflow.metadata.runner === 'detached') {
+      const create = async (record: WorkflowRunRecord) => {
+        await this.stateStore.createRun(record);
+        return true;
+      };
+      return (await this.startDetachedWorkflow(workflow, run.record, create)) ?? { runId, state: 'pending' };
+    }
     await this.stateStore.createRun(run.record);
     return this.launchWorkflowRun(workflow, jobRegistry, run);
   }
@@ -388,12 +403,12 @@ export class JobExecutionManager {
   }
 
   /**
-   * Cancel a job run: the cancel is written to the store first, where every process sharing it reads it,
+   * Cancel a job or workflow run: the cancel is written to the store first, where every process sharing it reads it,
    * then the run's `this.signal` is aborted with `JobCancelledError` when this process runs it (another
-   * process polls the store and aborts its own run). The caller checks it may cancel the run.
+   * process polls the store and aborts its own run). A workflow run starts no more steps, and the attempts of its
+   * running steps are aborted. The caller checks it may cancel the run.
    *
    * @throws JobRunNotFoundError for an unknown run
-   * @throws JobRunNotCancellableError for a workflow run
    * @throws JobRunFinishedError for a run that already ended
    */
   async cancel(runId: string): Promise<void> {
@@ -401,10 +416,12 @@ export class JobExecutionManager {
     await this.withRunLock(runId, async () => {
       const record = await this.stateStore.getRun(runId);
       if (!record) throw new JobRunNotFoundError(runId);
-      if ('workflowName' in record) throw new JobRunNotCancellableError(runId);
       if (FINISHED_JOB_STATES.has(record.state)) throw new JobRunFinishedError(runId, record.state);
       await this.stateStore.requestCancel?.(runId);
-      await this.write(runId, cancelledUpdate(reason));
+      if (!(await this.write(runId, cancelledUpdate(reason)))) {
+        const ended = await this.stateStore.getRun(runId);
+        throw new JobRunFinishedError(runId, ended?.state ?? 'completed');
+      }
     });
     this.activeRuns.get(runId)?.controller.abort(reason);
   }
@@ -451,6 +468,7 @@ export class JobExecutionManager {
   async runDetached(runId: string): Promise<void> {
     const record = await this.stateStore.getRun(runId);
     if (!record?.runner || FINISHED_JOB_STATES.has(record.state)) return;
+    if ('workflowName' in record) return this.runDetachedWorkflow(record);
     const job = this.options.findJob?.(record.jobName);
     if (!job) {
       await this.failToBoot(record, `the server has no job named "${record.jobName}"`);
@@ -459,7 +477,7 @@ export class JobExecutionManager {
     const warn = (error: unknown) => this.logger.warn(`Detached run ${runId}: ${toJobError(error).message}`);
     const release = await new RunnerHeartbeat(this.stateStore, record.runner.id, warn).hold();
     const flusher = new LatestValueFlusher<JobRunProgress>(
-      (progress) => this.updateState(runId, { progress }),
+      (progress) => this.updateState(runId, { progress }).then(() => undefined),
       DETACHED_FLUSH_MS,
       warn,
     );
@@ -472,6 +490,32 @@ export class JobExecutionManager {
     } finally {
       flusher.stop();
       this.progressFlushers.delete(runId);
+      release();
+    }
+  }
+
+  /** Run a detached workflow run in this process, which becomes its runner, as `runDetached()` runs a job's. */
+  private async runDetachedWorkflow(record: WorkflowRunRecord): Promise<void> {
+    const { runId } = record;
+    const workflow = this.options.workflows?.find(record.workflowName);
+    const runner = record.runner;
+    if (!workflow || !runner) {
+      await this.failToBoot(record, `the server has no workflow named "${record.workflowName}"`);
+      return;
+    }
+    const warn = (error: unknown) => this.logger.warn(`Detached run ${runId}: ${toJobError(error).message}`);
+    const release = await new RunnerHeartbeat(this.stateStore, runner.id, warn).hold();
+    try {
+      await this.updateState(runId, { runner: { ...runner, pid: currentPid(), hostname: getHostname() } });
+      const scopeId = this.scope?.id ?? workflow.providers.getActiveScope().id;
+      const opts = withBackgroundContext<ExecuteWorkflowOptions>(
+        { sessionId: record.sessionId, authInfo: {}, workflowInput: record.input as Record<string, unknown> },
+        scopeId,
+      );
+      const jobs = this.options.workflows?.jobs;
+      if (!jobs) throw new JobRunnerBootError(runId, 'the server has no jobs for the steps');
+      await this.executeWorkflowInline(workflow, jobs, runId, opts).catch(() => undefined);
+    } finally {
       release();
     }
   }
@@ -512,6 +556,38 @@ export class JobExecutionManager {
     return { runId: record.runId, state: 'pending' };
   }
 
+  /**
+   * Start a detached workflow run. The run is stored first, through `create`, which may decline it (a run another
+   * process started already), with this server as its runner until the process it then starts takes the run over;
+   * a process that can't be started ends the run with `JobRunnerBootError`. Answers at once; this server watches the
+   * run until it ends. Answers undefined when `create` declined.
+   */
+  private async startDetachedWorkflow(
+    workflow: WorkflowEntry,
+    record: WorkflowRunRecord,
+    create: (record: WorkflowRunRecord) => Promise<boolean>,
+  ): Promise<BackgroundJobResult | undefined> {
+    const unavailable = this.options.detachedUnavailable;
+    if (unavailable) {
+      throw new JobRunnerUnavailableError(workflow.name, unavailable.why, unavailable.remedy, 'Workflow');
+    }
+    const runner: JobRunnerInfo = { kind: 'detached', id: randomUUID(), pid: currentPid(), hostname: getHostname() };
+    await this.stateStore.touchRunner?.(runner.id, DETACHED_BOOT_TTL_SECONDS);
+    const stored: WorkflowRunRecord = { ...record, background: true, runner };
+    if (!(await create(stored))) return undefined;
+    let child: DetachedRunnerProcess;
+    try {
+      child = (this.options.spawnDetached ?? spawnDetachedRunner)(record.runId);
+    } catch (error) {
+      await this.failToBoot(stored, toJobError(error).message);
+      throw error;
+    }
+    child.once('error', (error) => void this.failToBoot(stored, error.message));
+    if (child.pid) await this.updateState(record.runId, { runner: { ...runner, pid: child.pid } });
+    this.watch(record.runId);
+    return { runId: record.runId, state: 'pending' };
+  }
+
   /** Read a detached run every second: tell its subscribers when it changed, and settle it if its runner is gone. */
   private watch(runId: string): void {
     if (this.watchers.has(runId)) return;
@@ -528,7 +604,7 @@ export class JobExecutionManager {
         }
         if (!record || FINISHED_JOB_STATES.has(record.state)) {
           this.unwatch(runId);
-          if (record) await this.notify({ type: 'job:status', runId, state: record.state, jobName: record.jobName });
+          if (record) await this.notify(statusOf(record, record.state));
         } else if (record.runner && (await this.runnerGone(record.runner, record.startedAt))) {
           this.unwatch(runId);
           await this.endOrphan(record);
@@ -572,7 +648,8 @@ export class JobExecutionManager {
       ? new JobRunnerBootError(runId, 'its process exited before it took the run over')
       : new JobInterruptedError(runId, 'its runner is gone');
     const state = await this.endRun(record, error);
-    if (state && record.state === 'running') {
+    // A workflow has no cleanup of its own
+    if (state && record.state === 'running' && !('workflowName' in record)) {
       await this.cleanupOrphan(record, state === 'cancelled' ? 'cancel' : 'interrupt');
     }
   }
@@ -590,7 +667,7 @@ export class JobExecutionManager {
     });
     if (!state) return undefined;
     this.unwatch(runId);
-    await this.notify({ type: 'job:status', runId, state, jobName: record.jobName });
+    await this.notify(statusOf(record, state));
     return state;
   }
 
@@ -685,15 +762,11 @@ export class JobExecutionManager {
     opts: ExecuteJobOptions,
     signal: AbortSignal,
   ): Promise<InlineJobResult> {
-    // A run cancelled before it started never starts
-    const started = await this.withRunLock(runId, async () => {
-      if (await this.cancelRequested(runId)) return false;
-      await this.write(runId, { state: 'running' });
-      return true;
-    });
-    if (!started) {
-      await this.notify({ type: 'job:status', runId, state: 'cancelled', jobName: job.name });
-      throw new JobCancelledError(runId);
+    // A run cancelled, or ended by another process, before it started never starts
+    const refused = await this.markRunning(runId);
+    if (refused) {
+      await this.notify({ type: 'job:status', runId, state: finishedStateOf(refused), jobName: job.name });
+      throw refused;
     }
     await this.notify({ type: 'job:status', runId, state: 'running', jobName: job.name });
 
@@ -772,36 +845,41 @@ export class JobExecutionManager {
   private async writeOutcome(runId: string, outcome: JobAttemptOutcome): Promise<JobExecutionState | undefined> {
     if (await this.cancelRequested(runId)) {
       if (outcome.state === 'retrying') return undefined;
-      await this.write(runId, { ...cancelledUpdate(new JobCancelledError(runId)), attempt: outcome.attempt });
-      return 'cancelled';
+      return this.writeEnd(runId, { ...cancelledUpdate(new JobCancelledError(runId)), attempt: outcome.attempt });
     }
-    const current = await this.stateStore.getRun(runId);
-    if (current && FINISHED_JOB_STATES.has(current.state)) return undefined;
     switch (outcome.state) {
       case 'completed':
-        await this.write(runId, {
+        return this.writeEnd(runId, {
           state: 'completed',
           result: outcome.result,
           completedAt: Date.now(),
           attempt: outcome.attempt,
           logs: [...outcome.logs],
         });
-        return 'completed';
       case 'retrying':
-        await this.write(runId, { state: 'retrying', attempt: outcome.attempt });
-        return 'retrying';
+        return this.writeEnd(runId, { state: 'retrying', attempt: outcome.attempt });
       case 'failed': {
         const { error } = outcome;
-        const state = finishedStateOf(error);
-        await this.write(runId, {
-          state,
+        return this.writeEnd(runId, {
+          state: finishedStateOf(error),
           error: { message: error.message, name: error.name, stack: error.stack },
           completedAt: Date.now(),
           attempt: outcome.attempt,
         });
-        return state;
       }
     }
+  }
+
+  /**
+   * Write the state a run moves to unless it already ended, answering the state written; when another process
+   * ended it first, a cancel is still this run's end to tell, and any other end is not.
+   */
+  private async writeEnd(
+    runId: string,
+    update: Partial<JobRunRecord> & { state: JobExecutionState },
+  ): Promise<JobExecutionState | undefined> {
+    if (await this.write(runId, update)) return update.state;
+    return (await this.stateStore.getRun(runId))?.state === 'cancelled' ? 'cancelled' : undefined;
   }
 
   // ---- Private: background execution ----
@@ -819,52 +897,75 @@ export class JobExecutionManager {
     }
   }
 
+  /**
+   * Run a stored workflow run in this process, under its signal: a cancel (in this process, or read from the store) or
+   * a shutdown aborts it, and it then starts no more steps and ends `cancelled` or `interrupted`. A run cancelled
+   * before it started never starts.
+   */
   private async executeWorkflowInline(
     workflow: WorkflowEntry,
     jobRegistry: JobRegistryInterface,
     runId: string,
     opts: ExecuteWorkflowOptions,
   ): Promise<InlineJobResult> {
-    await this.updateState(runId, { state: 'running' });
-    await this.notify({ type: 'workflow:status', runId, state: 'running', workflowName: workflow.name });
-
+    const status = (state: JobExecutionState) =>
+      this.notify({ type: 'workflow:status', runId, state, workflowName: workflow.name });
+    const { signal, end } = this.startRun(runId);
     try {
-      const engine = new WorkflowEngine(workflow.metadata, jobRegistry, this.logger, {
-        authInfo: opts.authInfo ?? {},
-        contextProviders: opts.contextProviders,
-        context: opts.context,
-        authoritiesContextBuilder: opts.authoritiesContextBuilder,
-        workflowRunId: runId,
-        admission: this.options.admission,
-        defaultTimeoutMs: this.options.defaultTimeoutMs,
-      });
+      const refused = await this.markRunning(runId);
+      if (refused) {
+        await status(finishedStateOf(refused));
+        throw refused;
+      }
+      await status('running');
 
-      const result = await engine.execute(opts.workflowInput);
+      let result: WorkflowExecutionResult;
+      try {
+        const engine = new WorkflowEngine(workflow.metadata, jobRegistry, this.logger, {
+          authInfo: opts.authInfo ?? {},
+          contextProviders: opts.contextProviders,
+          context: opts.context,
+          authoritiesContextBuilder: opts.authoritiesContextBuilder,
+          workflowRunId: runId,
+          admission: this.options.admission,
+          defaultTimeoutMs: this.options.defaultTimeoutMs,
+          signal,
+        });
+        result = await engine.execute(opts.workflowInput);
+      } catch (err) {
+        const error = toJobError(err);
+        const state = await this.withRunLock(runId, () =>
+          this.writeWorkflowEnd(runId, { state: finishedStateOf(error), error }),
+        );
+        if (state) await status(state);
+        throw error;
+      }
 
-      await this.updateState(runId, {
-        state: result.state === 'completed' ? 'completed' : 'failed',
-        result,
-        completedAt: Date.now(),
-      });
-
-      await this.notify({
-        type: 'workflow:status',
-        runId,
-        state: result.state === 'completed' ? 'completed' : 'failed',
-        workflowName: workflow.name,
-      });
-
-      return { runId, result, state: result.state === 'completed' ? 'completed' : 'failed', logs: [] };
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error(String(err));
-      await this.updateState(runId, {
-        state: 'failed',
-        error: { message: error.message, name: error.name, stack: error.stack },
-        completedAt: Date.now(),
-      });
-      await this.notify({ type: 'workflow:status', runId, state: 'failed', workflowName: workflow.name });
-      throw error;
+      const ended = result.state === 'completed' ? 'completed' : 'failed';
+      const state = await this.withRunLock(runId, () => this.writeWorkflowEnd(runId, { state: ended, result }));
+      if (state) await status(state);
+      return { runId, result, state: state ?? ended, logs: [] };
+    } finally {
+      end();
     }
+  }
+
+  /**
+   * Write how a workflow run ended, answering the state written: a cancel written to the store wins over it, and a
+   * run another process already ended (its runner taken for gone) keeps that end.
+   */
+  private async writeWorkflowEnd(
+    runId: string,
+    outcome: { state: JobExecutionState; result?: WorkflowExecutionResult; error?: Error },
+  ): Promise<JobExecutionState | undefined> {
+    if (await this.cancelRequested(runId)) return this.writeEnd(runId, cancelledUpdate(new JobCancelledError(runId)));
+    const { error } = outcome;
+    return this.writeEnd(runId, {
+      state: outcome.state,
+      ...(outcome.result === undefined ? {} : { result: outcome.result }),
+      ...(error ? { error: { message: error.message, name: error.name, stack: error.stack } } : {}),
+      completedAt: Date.now(),
+    });
   }
 
   private async executeWorkflowBackground(
@@ -883,14 +984,41 @@ export class JobExecutionManager {
   // ---- Helpers ----
 
   /** Write to the run record once this process's earlier writes to it landed (see {@link write}). */
-  private updateState(runId: string, updates: Partial<JobRunRecord | WorkflowRunRecord>): Promise<void> {
+  private updateState(runId: string, updates: Partial<JobRunRecord | WorkflowRunRecord>): Promise<boolean> {
     return this.withRunLock(runId, () => this.write(runId, updates));
   }
 
-  /** Write to the run record, and tell the subscribers to `job://runs/{runId}`; callers hold the run's lock. */
-  private async write(runId: string, updates: Partial<JobRunRecord | WorkflowRunRecord>): Promise<void> {
-    await this.stateStore.updateRun(runId, updates);
-    this.scope?.resources.notifyContentChanged(jobRunUri(runId));
+  /**
+   * Write to the run record unless the run already ended, in one step on a store that can (`updateUnfinishedRun`),
+   * and tell the subscribers to `job://runs/{runId}`; resolves to whether it wrote. Callers hold the run's lock.
+   */
+  private async write(runId: string, updates: Partial<JobRunRecord | WorkflowRunRecord>): Promise<boolean> {
+    const store = this.stateStore;
+    let written: boolean;
+    if (store.updateUnfinishedRun) {
+      written = await store.updateUnfinishedRun(runId, updates);
+    } else {
+      const current = await store.getRun(runId);
+      written = !!current && !FINISHED_JOB_STATES.has(current.state);
+      if (written) await store.updateRun(runId, updates);
+    }
+    if (written) this.scope?.resources.notifyContentChanged(jobRunUri(runId));
+    return written;
+  }
+
+  /**
+   * Mark a stored run `running` unless it was cancelled or already ended, in one step with the write; resolves to
+   * why it did not start: `JobCancelledError`, or `JobInterruptedError` for a run another process ended.
+   */
+  private markRunning(runId: string): Promise<Error | undefined> {
+    return this.withRunLock(runId, async () => {
+      if (await this.cancelRequested(runId)) return new JobCancelledError(runId);
+      if (await this.write(runId, { state: 'running' })) return undefined;
+      const ended = (await this.stateStore.getRun(runId))?.state;
+      return ended && ended !== 'cancelled'
+        ? new JobInterruptedError(runId, 'another process ended it')
+        : new JobCancelledError(runId);
+    });
   }
 
   /**
@@ -980,8 +1108,15 @@ function currentPid(): number {
   return typeof process === 'undefined' ? 0 : process.pid;
 }
 
+/** The status notification of a run that reached `state`: `workflow:status` for a workflow run, else `job:status`. */
+function statusOf(record: JobRunRecord | WorkflowRunRecord, state: JobExecutionState): Record<string, unknown> {
+  if ('workflowName' in record)
+    return { type: 'workflow:status', runId: record.runId, state, workflowName: record.workflowName };
+  return { type: 'job:status', runId: record.runId, state, jobName: record.jobName };
+}
+
 /** What a cancel writes to the run record. */
-function cancelledUpdate(reason: JobCancelledError): Partial<JobRunRecord> {
+function cancelledUpdate(reason: JobCancelledError): Partial<JobRunRecord> & { state: 'cancelled' } {
   return { state: 'cancelled', error: { message: reason.message, name: reason.name }, completedAt: Date.now() };
 }
 

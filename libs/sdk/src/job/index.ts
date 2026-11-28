@@ -5,8 +5,14 @@ export { JobInstance } from './job.instance';
 export * from './job.events';
 export * from './job.utils';
 export * from './job-permission.guard';
-export { JobAdmission } from './job-admission';
-export type { JobAdmissionOptions, JobAdmissionSlot } from './job-admission';
+export { JobAdmission, MachineJobAdmission, createJobAdmission } from './job-admission';
+export type {
+  AdmissionLeaseStore,
+  JobAdmissionGate,
+  JobAdmissionOptions,
+  JobAdmissionScope,
+  JobAdmissionSlot,
+} from './job-admission';
 export { jobRunUri, mayAccessRun } from './job-run-access';
 export { JobRunResource } from './resources/job-run.resource';
 export { default as ExecuteJobFlow } from './flows/execute-job.flow';

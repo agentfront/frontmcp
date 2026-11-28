@@ -78,12 +78,24 @@ function fakeRedis(): RedisStateStoreLike {
       return 'OK';
     },
     del: async (key) => (values.delete(String(key)) ? 1 : 0),
+    expire: async (key, seconds) => {
+      if (live(key) === undefined) return 0;
+      expiries.set(key, Date.now() + seconds * 1000);
+      return 1;
+    },
     sadd: async (key, ...members) => {
       members.forEach((member) => setOf(key).add(member));
       return members.length;
     },
     srem: async (key, ...members) => members.filter((member) => setOf(key).delete(member)).length,
     smembers: async (key) => [...setOf(key)],
+    // The one script the store runs: swap a lease list while it holds the expected value
+    eval: async (_script, _keys, key, expected, next, ttlSeconds) => {
+      if ((live(String(key)) ?? '') !== expected) return 0;
+      values.set(String(key), String(next));
+      expiries.set(String(key), Date.now() + Number(ttlSeconds) * 1000);
+      return 1;
+    },
     scan: async (_cursor, _match, pattern) => [
       '0',
       [...values.keys()].filter((key) => key.startsWith(String(pattern).replace(/\*$/, ''))),
@@ -185,6 +197,38 @@ describe.each(stateBackends)('%s job state store', (_backend, open) => {
     expect(await store.isRunnerAlive?.('runner-2')).toBe(false);
     await new Promise((resolve) => setTimeout(resolve, 1_100));
     expect(await store.isRunnerAlive?.('runner-1')).toBe(false);
+  });
+
+  it('swaps a lease list only from the value it holds, one swap from none at a time, and ends it at its TTL', async () => {
+    expect(await store.readLeases?.('admission:box')).toBe('');
+    expect(await store.swapLeases?.('admission:box', 'stale', 'mine', 30)).toBe(false);
+    const fromNone = await Promise.all([
+      store.swapLeases?.('admission:box', '', 'mine', 1),
+      store.swapLeases?.('admission:box', '', 'theirs', 1),
+    ]);
+    expect(fromNone.filter(Boolean)).toHaveLength(1);
+    const first = await store.readLeases?.('admission:box');
+    expect(['mine', 'theirs']).toContain(first);
+    expect(await store.readLeases?.('admission:elsewhere')).toBe('');
+
+    expect(await store.swapLeases?.('admission:box', first ?? '', 'ours', 1)).toBe(true);
+    expect(await store.swapLeases?.('admission:box', first ?? '', 'late', 30)).toBe(false);
+    expect(await store.readLeases?.('admission:box')).toBe('ours');
+
+    await new Promise((resolve) => setTimeout(resolve, 1_100));
+    expect(await store.readLeases?.('admission:box')).toBe('');
+    expect(await store.swapLeases?.('admission:box', 'ours', 'late', 30)).toBe(false);
+    expect(await store.swapLeases?.('admission:box', '', 'next', 30)).toBe(true);
+  });
+
+  it('writes to a run only while it is unfinished', async () => {
+    await store.createRun(run('r1'));
+
+    expect(await store.updateUnfinishedRun?.('r1', { state: 'running' })).toBe(true);
+    expect(await store.updateUnfinishedRun?.('r1', { state: 'cancelled' })).toBe(true);
+    expect(await store.updateUnfinishedRun?.('r1', { state: 'completed', result: { late: true } })).toBe(false);
+    expect(await store.getRun('r1')).toEqual(expect.objectContaining({ state: 'cancelled', revision: 3 }));
+    expect(await store.updateUnfinishedRun?.('unknown', { state: 'completed' })).toBe(false);
   });
 
   it('lets one caller claim a run', async () => {

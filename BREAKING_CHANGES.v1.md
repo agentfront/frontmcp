@@ -1380,3 +1380,23 @@ FrontMcpInstance.runShared({ ...config, http }, { key }); // MCP at /mcp, routes
 ```
 
 **Codemod available:** no
+
+## BC-064: 1.14: cancel_job cancels workflow runs, and a shutdown interrupts them
+
+**Package:** `@frontmcp/sdk` | **Category:** change | **Severity:** low
+
+`cancel_job` cancels a workflow run as it cancels a job run: the cancel is written to the job store, the run ends `cancelled`, no step starts after it, and the attempts of its running steps are aborted with `JobCancelledError` (their jobs' `cleanup` runs with `'cancel'`). Up to 1.13 it refused a workflow run with `JobRunNotCancellableError` (`JOB_RUN_NOT_CANCELLABLE`), which nothing throws any more and is deprecated. A workflow run cancelled before it started never starts. At shutdown a server interrupts the workflow runs it runs, which end `interrupted`, as job runs do; up to 1.13 they ran on until the process exited. Code that relied on the refusal checks the run's state instead.
+
+**Before:**
+
+```typescript
+await callTool('cancel_job', { runId: workflowRunId }); // JOB_RUN_NOT_CANCELLABLE; the run goes on
+```
+
+**After:**
+
+```typescript
+await callTool('cancel_job', { runId: workflowRunId }); // { runId, state: 'cancelled' }; no step starts after it
+```
+
+**Codemod available:** no

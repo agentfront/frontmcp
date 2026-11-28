@@ -30,11 +30,11 @@ import WorkflowRegistry, { type WorkflowRegistryInterface } from '../workflow/wo
 import { normalizeWorkflow } from '../workflow/workflow.utils';
 import { DETACHED_FLUSH_MS, JobExecutionManager } from './execution/job-execution.manager';
 import ExecuteJobFlow from './flows/execute-job.flow';
-import { JobAdmission, type JobAdmissionOptions } from './job-admission';
+import { createJobAdmission, type JobAdmissionOptions } from './job-admission';
 import JobRegistry, { type JobRegistryInterface } from './job.registry';
 import { normalizeJob } from './job.utils';
 import { JobRunResource } from './resources/job-run.resource';
-import { assertRunnersAvailable } from './runner/job-runner';
+import { assertRunnersAvailable, assertWorkflowRunnersAvailable } from './runner/job-runner';
 import { createJobDefinitionStore } from './store/job-definition-store.factory';
 import { type JobDefinitionStore } from './store/job-definition.interface';
 import { createJobStateStore } from './store/job-state-store.factory';
@@ -73,6 +73,19 @@ export interface JobsConfig {
   admission?: JobAdmissionOptions;
   /** Where the attempts of a job that sets no `runner` run. @default 'inline' */
   runner?: JobRunner;
+  /** The processes of detached runs (see {@link JobsDetachedConfig}). */
+  detached?: JobsDetachedConfig;
+}
+
+/** `jobs.detached`: what the process of a detached job or workflow run boots. */
+export interface JobsDetachedConfig {
+  /**
+   * `'server'` boots the server's whole config. `'app'` boots only the apps the run needs: the app that declares its
+   * job, or the workflow's and its steps' jobs', with the server-level providers and plugins; the whole config when one
+   * of them is on no app declared as a class (a job registered at runtime, an app loaded from a package).
+   * @default 'server'
+   */
+  boot?: 'server' | 'app';
 }
 
 /** `jobs.store`: Redis, or a SQLite file the processes on one machine share; memory when neither is set. */
@@ -207,12 +220,29 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
   // a schedule workflow whose cron can't be read
   try {
     assertRunnersAvailable(jobRegistry.getJobs(), jobsConfig.runner);
+    assertWorkflowRunnersAvailable(workflowRegistry.getWorkflows(true), (name) => jobRegistry.findByName(name));
     assertWorkflowTriggers(workflowRegistry.getWorkflows(true));
     await assertWorkflowSchedules(workflowRegistry.getWorkflows(true));
   } catch (error) {
     await stateStore.dispose();
     await definitionStore.dispose();
     throw error;
+  }
+
+  // Machine-wide admission keeps its leases in the job store, which a memory store shares with no other process
+  let admission: ReturnType<typeof createJobAdmission>;
+  try {
+    admission = createJobAdmission(jobsConfig.admission, stateStore, (message) => logger.warn(message));
+  } catch (error) {
+    await stateStore.dispose();
+    await definitionStore.dispose();
+    throw error;
+  }
+  if (jobsConfig.admission?.scope === 'machine' && stateStoreType === 'memory') {
+    logger.warn(
+      "jobs.admission.scope 'machine' keeps its leases in the job store, which is in memory here: it bounds this " +
+        "process's attempts only. Set jobs.store.sqlite, a top-level sqlite, or redis to bound the machine's.",
+    );
   }
 
   // 4. Create execution manager. Its status notifications also publish finished job and workflow
@@ -229,11 +259,12 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
     scope,
     {
       defaultTimeoutMs: jobsConfig.defaultTimeoutMs,
-      admission: jobsConfig.admission ? new JobAdmission(jobsConfig.admission) : undefined,
+      admission,
       // A store other processes share can carry a cancel this process must notice
       cancelPollMs: stateStoreType === 'memory' ? undefined : jobWorker ? DETACHED_FLUSH_MS : CANCEL_POLL_MS,
       runner: jobsConfig.runner,
       findJob: (name) => jobRegistry.findByName(name),
+      workflows: { find: (name) => workflowRegistry.findByName(name), jobs: jobRegistry },
       detachedUnavailable: detachedUnavailable(stateStoreType, !entryServer && !jobWorker),
     },
   );
@@ -317,6 +348,13 @@ export async function registerAppJobEntries(args: {
   );
   const jobTokens = await jobRegistry.registerAppJobs(args.jobs, args.providers);
   try {
+    assertWorkflowRunnersAvailable(
+      args.workflows.map((workflow) => {
+        const { metadata } = normalizeWorkflow(workflow);
+        return { name: metadata.name, metadata };
+      }),
+      (name) => jobRegistry.findByName(name),
+    );
     const workflowTokens = workflowRegistry.registerAppWorkflows(args.workflows);
     return () => {
       jobRegistry.unregisterJobs(jobTokens);

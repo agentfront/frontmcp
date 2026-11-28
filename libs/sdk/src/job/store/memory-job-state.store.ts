@@ -1,4 +1,5 @@
 import {
+  FINISHED_JOB_STATES,
   type JobExecutionState,
   type JobRunRecord,
   type JobStateStore,
@@ -14,6 +15,7 @@ export class MemoryJobStateStore implements JobStateStore {
   private readonly cancelRequests = new Set<string>();
   private readonly runnerExpiries = new Map<string, number>();
   private readonly claims = new Set<string>();
+  private readonly leases = new Map<string, { value: string; expiresAt: number }>();
 
   async createRun(record: JobRunRecord | WorkflowRunRecord): Promise<void> {
     this.runs.set(record.runId, { ...record, revision: 1, updatedAt: Date.now() });
@@ -27,10 +29,20 @@ export class MemoryJobStateStore implements JobStateStore {
 
   async updateRun(runId: string, updates: Partial<JobRunRecord | WorkflowRunRecord>): Promise<void> {
     const existing = this.runs.get(runId);
-    if (!existing) return;
+    if (existing) this.merge(existing, updates);
+  }
+
+  async updateUnfinishedRun(runId: string, updates: Partial<JobRunRecord | WorkflowRunRecord>): Promise<boolean> {
+    const existing = this.runs.get(runId);
+    if (!existing || FINISHED_JOB_STATES.has(existing.state)) return false;
+    this.merge(existing, updates);
+    return true;
+  }
+
+  private merge(existing: JobRunRecord | WorkflowRunRecord, updates: Partial<JobRunRecord | WorkflowRunRecord>): void {
     const { runId: _ignoreRunId, ...safeUpdates } = updates;
     const revision = (existing.revision ?? 0) + 1;
-    this.runs.set(runId, { ...existing, ...safeUpdates, revision, updatedAt: Date.now() });
+    this.runs.set(existing.runId, { ...existing, ...safeUpdates, revision, updatedAt: Date.now() });
   }
 
   async getRun(runId: string): Promise<JobRunRecord | WorkflowRunRecord | null> {
@@ -100,7 +112,28 @@ export class MemoryJobStateStore implements JobStateStore {
     return true;
   }
 
+  async readLeases(key: string): Promise<string> {
+    return this.liveLease(key)?.value ?? '';
+  }
+
+  async swapLeases(key: string, expected: string, next: string, ttlSeconds: number): Promise<boolean> {
+    if ((this.liveLease(key)?.value ?? '') !== expected) return false;
+    this.leases.set(key, { value: next, expiresAt: Date.now() + ttlSeconds * 1000 });
+    return true;
+  }
+
+  /** The lease `key`, unless it expired, which removes it. */
+  private liveLease(key: string): { value: string; expiresAt: number } | undefined {
+    const lease = this.leases.get(key);
+    if (lease && lease.expiresAt <= Date.now()) {
+      this.leases.delete(key);
+      return undefined;
+    }
+    return lease;
+  }
+
   async dispose(): Promise<void> {
+    this.leases.clear();
     this.runs.clear();
     this.cancelRequests.clear();
     this.runnerExpiries.clear();

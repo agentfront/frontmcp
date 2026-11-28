@@ -1,5 +1,9 @@
+import { isClass } from '@frontmcp/di';
+
+import { collectAppMetadata } from '../../app/app.utils';
 import {
   frontMcpMetadataSchema,
+  type AppType,
   type FrontMcpConfigInput,
   type FrontMcpConfigType,
   type ScopeEntry,
@@ -8,12 +12,19 @@ import { resolveDefaultSqlitePath } from '../../common/types/options/sqlite/reso
 import { JobRunnerBootError } from '../../errors';
 import { JOB_WORKER_FLAG, RUN_JOB_ENV_VAR } from '../../front-mcp/detached-job.flag';
 import { markDirectOnly } from '../../front-mcp/direct-only.flag';
+import { normalizeWorkflow } from '../../workflow/workflow.utils';
 import { type JobExecutionManager } from '../execution/job-execution.manager';
 import { toJobError } from '../job-attempt';
 import { jobExecutionManagerOf } from '../job-run-access';
 import { resolveJobsStore, type JobsConfig } from '../job-scope.helper';
+import { normalizeJob } from '../job.utils';
 import { createJobStateStore } from '../store/job-state-store.factory';
-import { FINISHED_JOB_STATES } from '../store/job-state.interface';
+import {
+  FINISHED_JOB_STATES,
+  type JobRunRecord,
+  type JobStateStore,
+  type WorkflowRunRecord,
+} from '../store/job-state.interface';
 
 /** The server a detached runner boots: its scopes, and its shutdown. */
 export interface DetachedJobHost {
@@ -37,7 +48,7 @@ export async function runDetachedJob(
   delete process.env[RUN_JOB_ENV_VAR];
   let host: DetachedJobHost;
   try {
-    host = await boot(config);
+    host = await boot(await configForRun(config, runId));
   } catch (error) {
     await reportBootFailure(config, runId, error);
     return 1;
@@ -78,29 +89,98 @@ async function managerOf(host: DetachedJobHost, runId: string): Promise<JobExecu
   return undefined;
 }
 
-/** Open the job store the server would and end the run with `JobRunnerBootError`, unless it was cancelled. */
-async function reportBootFailure(config: ServerConfig, runId: string, cause: unknown): Promise<void> {
+/** The job store the server would open. */
+async function openRunStore(config: ServerConfig): Promise<JobStateStore> {
   const sqlite = config.sqlite && {
     ...config.sqlite,
     path: config.sqlite.path || resolveDefaultSqlitePath({ appName: config.info?.name, cliMode: false }),
   };
   const jobs = config.jobs as JobsConfig | undefined;
   const store = resolveJobsStore(jobs?.store, { redis: config.redis, sqlite });
+  const { store: stateStore } = await createJobStateStore({
+    redis: store?.redis,
+    sqlite: store?.sqlite,
+    keyPrefix: store?.keyPrefix ?? 'mcp:jobs:',
+  });
+  return stateStore;
+}
+
+/**
+ * The config a runner boots for `runId`: the server's, or with `jobs.detached.boot: 'app'`, the server's with only the
+ * apps the run needs (see {@link appsForRun}); the whole config when the run can't be read or its apps can't be found.
+ */
+async function configForRun(config: ServerConfig, runId: string): Promise<ServerConfig> {
+  const jobs = config.jobs as JobsConfig | undefined;
+  if (jobs?.detached?.boot !== 'app' || !Array.isArray(config.apps)) return config;
+  let record: JobRunRecord | WorkflowRunRecord | null;
   try {
-    const { store: stateStore } = await createJobStateStore({
-      redis: store?.redis,
-      sqlite: store?.sqlite,
-      keyPrefix: store?.keyPrefix ?? 'mcp:jobs:',
-    });
+    const store = await openRunStore(config);
+    try {
+      record = await store.getRun(runId);
+    } finally {
+      await store.dispose();
+    }
+  } catch {
+    return config;
+  }
+  const apps = record ? appsForRun(config.apps as readonly unknown[], record) : undefined;
+  return apps ? ({ ...config, apps } as ServerConfig) : config;
+}
+
+/**
+ * The apps a run needs, of `apps` in their order: the app that declares its job, or for a workflow run, the app that
+ * declares the workflow and those that declare its steps' jobs. Undefined when one of them is on no app declared as a
+ * class (a job registered at runtime, an app loaded from a package), so the whole config boots.
+ */
+export function appsForRun(
+  apps: readonly unknown[],
+  run: Pick<JobRunRecord, 'jobName'> & { workflowName?: string },
+): unknown[] | undefined {
+  const declared = apps.map((app) => {
+    if (!isClass(app)) return { app, jobs: new Set<string>(), workflows: new Map<string, string[]>() };
+    const metadata = collectAppMetadata(app as AppType) as { jobs?: unknown[]; workflows?: unknown[] };
+    const jobs = new Set((metadata.jobs ?? []).map((job) => normalizeJob(job).metadata.name));
+    const workflows = new Map(
+      (metadata.workflows ?? []).map((workflow) => {
+        const { metadata: flow } = normalizeWorkflow(workflow);
+        return [flow.name, flow.steps.map((step) => step.jobName)] as const;
+      }),
+    );
+    return { app, jobs, workflows };
+  });
+  const needed = new Set<unknown>();
+  const take = (found: (typeof declared)[number] | undefined): boolean => {
+    if (found) needed.add(found.app);
+    return found !== undefined;
+  };
+  const { workflowName } = run;
+  if (workflowName !== undefined) {
+    const owner = declared.find(({ workflows }) => workflows.has(workflowName));
+    if (!take(owner)) return undefined;
+    for (const jobName of owner?.workflows.get(workflowName) ?? []) {
+      if (!take(declared.find(({ jobs }) => jobs.has(jobName)))) return undefined;
+    }
+  } else if (!take(declared.find(({ jobs }) => jobs.has(run.jobName)))) {
+    return undefined;
+  }
+  return apps.filter((app) => needed.has(app));
+}
+
+/** Open the job store the server would and end the run with `JobRunnerBootError`, unless it was cancelled. */
+async function reportBootFailure(config: ServerConfig, runId: string, cause: unknown): Promise<void> {
+  try {
+    const stateStore = await openRunStore(config);
     try {
       const record = await stateStore.getRun(runId);
       if (!record || FINISHED_JOB_STATES.has(record.state) || (await stateStore.isCancelRequested?.(runId))) return;
       const error = new JobRunnerBootError(runId, toJobError(cause).message);
-      await stateStore.updateRun(runId, {
-        state: 'failed',
+      const failed = {
+        state: 'failed' as const,
         error: { name: error.name, message: error.message },
         completedAt: Date.now(),
-      });
+      };
+      if (stateStore.updateUnfinishedRun) await stateStore.updateUnfinishedRun(runId, failed);
+      else await stateStore.updateRun(runId, failed);
     } finally {
       await stateStore.dispose();
     }

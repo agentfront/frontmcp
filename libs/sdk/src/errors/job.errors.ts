@@ -59,8 +59,8 @@ export class JobInterruptedError extends PublicMcpError {
 
 /** The job's runner cannot run here: a detached run needs a Node server started from its entry and a shared store. */
 export class JobRunnerUnavailableError extends PublicMcpError {
-  constructor(jobName: string, why: string, remedy: string) {
-    super(`Job "${jobName}" cannot use its runner: ${why}`, 'JOB_RUNNER_UNAVAILABLE', 501, undefined, {
+  constructor(jobName: string, why: string, remedy: string, kind: 'Job' | 'Workflow' = 'Job') {
+    super(`${kind} "${jobName}" cannot use its runner: ${why}`, 'JOB_RUNNER_UNAVAILABLE', 501, undefined, {
       say: remedy,
     });
   }
@@ -91,6 +91,13 @@ export class JobAdmissionTimeoutError extends PublicMcpError {
   }
 }
 
+/** A running attempt lost its machine-wide admission slot (its lease ended unrenewed), so it was stopped. */
+export class JobAdmissionLostError extends PublicMcpError {
+  constructor(jobName: string, why: string) {
+    super(`Job "${jobName}" lost its admission slot and was stopped: ${why}`, 'JOB_ADMISSION_LOST', 503);
+  }
+}
+
 /** No run with this id, or one the caller may not see: both read the same, so run ids cannot be probed. */
 export class JobRunNotFoundError extends PublicMcpError {
   constructor(runId: string) {
@@ -111,7 +118,11 @@ export class JobRunFinishedError extends PublicMcpError {
   }
 }
 
-/** `cancel_job` cancels job runs; a workflow run runs until it finishes. */
+/**
+ * A workflow run `cancel_job` did not cancel, up to 1.13.
+ *
+ * @deprecated Since 1.14 `cancel_job` cancels workflow runs too, and nothing throws it.
+ */
 export class JobRunNotCancellableError extends PublicMcpError {
   constructor(runId: string) {
     super(

@@ -669,5 +669,16 @@
     "new": "const http = { entryPath: '/mcp', routes, auth: { people: 'loopback-token' } };\nFrontMcpInstance.runShared({ ...config, http }, { key }); // MCP at /mcp, routes and people pages served",
     "migration": "The shared local server keeps `entryPath`, `routes`, `auth` (people sign-in), `bodyLimit`, `urlencodedLimit`, `securityHeaders` and `forwardHeaders` of the config's `http`; up to 1.13 it replaced `http` whole, so its MCP endpoint was at `/`, `http.routes` were not served and an `@HttpRoute` with `auth: 'people'` failed the start. Sessions read the MCP path from the server's record, so nothing changes for MCP clients. On loopback HTTP the server accepts a request carrying its own `Origin` (`http://127.0.0.1:<port>`, `http://localhost:<port>`), so its pages post back to it; every other `Origin` is still refused. A session that runs the server in its own process listens on a socket of its own in the key's folder (`s-<random>.sock`), or a loopback port with transport `'http'`, and writes no record; up to 1.13 it was served per request, with no notification stream. `@Job({ runner: 'detached' })` runs on both, where it was refused with `JOB_RUNNER_UNAVAILABLE`. Remove from `http` what the shared server should not serve.",
     "codemod": "no"
+  },
+  {
+    "id": "BC-064",
+    "title": "1.14: cancel_job cancels workflow runs, and a shutdown interrupts them",
+    "package": "@frontmcp/sdk",
+    "category": "change",
+    "severity": "low",
+    "old": "await callTool('cancel_job', { runId: workflowRunId }); // JOB_RUN_NOT_CANCELLABLE; the run goes on",
+    "new": "await callTool('cancel_job', { runId: workflowRunId }); // { runId, state: 'cancelled' }; no step starts after it",
+    "migration": "`cancel_job` cancels a workflow run as it cancels a job run: the cancel is written to the job store, the run ends `cancelled`, no step starts after it, and the attempts of its running steps are aborted with `JobCancelledError` (their jobs' `cleanup` runs with `'cancel'`). Up to 1.13 it refused a workflow run with `JobRunNotCancellableError` (`JOB_RUN_NOT_CANCELLABLE`), which nothing throws any more and is deprecated. A workflow run cancelled before it started never starts. At shutdown a server interrupts the workflow runs it runs, which end `interrupted`, as job runs do; up to 1.13 they ran on until the process exited. Code that relied on the refusal checks the run's state instead.",
+    "codemod": "no"
   }
 ]

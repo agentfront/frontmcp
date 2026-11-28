@@ -29,7 +29,6 @@ import {
   JobAdmissionTimeoutError,
   JobCancelledError,
   JobRunFinishedError,
-  JobRunNotCancellableError,
   JobRunNotFoundError,
   JobTimeoutError,
   ResourceNotFoundError,
@@ -37,7 +36,13 @@ import {
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { type Scope } from '../../scope/scope.instance';
 import { JobExecutionManager } from '../execution/job-execution.manager';
-import { type JobRunRecord, type JobStateStore, type WorkflowRunRecord } from '../store/job-state.interface';
+import { MachineJobAdmission } from '../job-admission';
+import {
+  FINISHED_JOB_STATES,
+  type JobRunRecord,
+  type JobStateStore,
+  type WorkflowRunRecord,
+} from '../store/job-state.interface';
 import { MemoryJobStateStore } from '../store/memory-job-state.store';
 
 const entered: string[] = [];
@@ -147,7 +152,8 @@ class SlowRetryJob extends JobContext {
 
 @Job({ name: 'quick_job', inputSchema: tagged, outputSchema: { ok: z.boolean() }, cleanup: recordCleanup })
 class QuickJob extends JobContext {
-  async execute(_input: { tag: string }) {
+  async execute({ tag }: { tag: string }) {
+    entered.push(tag);
     return { ok: true };
   }
 }
@@ -233,13 +239,48 @@ class SlowCleanupHangJob extends JobContext {
   }
 }
 
+@Job({
+  name: 'slow_cleanup_step_job',
+  inputSchema: {},
+  outputSchema: {},
+  timeout: 0,
+  cleanup: {
+    run: async (_job, reason) => {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      cleanups.push(`step:${reason}`);
+    },
+    timeoutMs: 5_000,
+  },
+})
+class SlowCleanupStepJob extends JobContext {
+  async execute(): Promise<Record<string, never>> {
+    entered.push('slow-cleanup-step');
+    return new Promise(() => undefined);
+  }
+}
+
 @Workflow({ name: 'gated_flow', steps: [{ id: 'wait', jobName: 'progress_job', timeout: 60_000 }] })
 class GatedFlow {}
+
+@Workflow({ name: 'quick_flow', steps: [{ id: 'only', jobName: 'quick_job', input: { tag: 'quick-step' } }] })
+class QuickFlow {}
+
+@Workflow({ name: 'slow_cleanup_flow', steps: [{ id: 'hang', jobName: 'slow_cleanup_step_job', timeout: 60_000 }] })
+class SlowCleanupFlow {}
+
+@Workflow({
+  name: 'gated_then_quick_flow',
+  steps: [
+    { id: 'wait', jobName: 'progress_job', timeout: 60_000 },
+    { id: 'after', jobName: 'quick_job', dependsOn: ['wait'], input: { tag: 'after-the-gate' } },
+  ],
+})
+class GatedThenQuickFlow {}
 
 @App({
   id: 'durable',
   name: 'Durable',
-  workflows: [GatedFlow],
+  workflows: [GatedFlow, GatedThenQuickFlow, SlowCleanupFlow, QuickFlow],
   jobs: [
     HangJob,
     DefaultTimeoutJob,
@@ -256,6 +297,7 @@ class GatedFlow {}
     PartingProgressJob,
     ChattyHangJob,
     SlowCleanupHangJob,
+    SlowCleanupStepJob,
   ],
 })
 class DurableApp {}
@@ -301,6 +343,54 @@ class SlowProgressStore extends MemoryJobStateStore {
     const before = await this.getRun(runId);
     await new Promise((resolve) => setTimeout(resolve, 20));
     if (before) await super.updateRun(runId, { ...before, ...updates });
+  }
+}
+
+/**
+ * A store on which another server cancels a run while this one writes `matching` to it: between the read and the
+ * write of a plain update, as on SQLite or Redis, and before an update of an unfinished run.
+ */
+class CancelledMidWriteStore extends MemoryJobStateStore {
+  /** The run's state after each write, so a test sees one that undid the cancel for a while. */
+  readonly states: string[] = [];
+
+  constructor(private readonly matching: (updates: Partial<JobRunRecord>) => boolean) {
+    super();
+  }
+
+  /** The states written once the cancel landed. */
+  statesAfterCancel(): string[] {
+    return this.states.slice(this.states.indexOf('cancelled'));
+  }
+
+  private async recordState(runId: string): Promise<void> {
+    this.states.push((await this.getRun(runId))?.state ?? 'none');
+  }
+
+  private async cancelElsewhere(runId: string): Promise<void> {
+    await this.requestCancel(runId);
+    await super.updateRun(runId, { state: 'cancelled', completedAt: Date.now() });
+  }
+
+  override async updateRun(runId: string, updates: Partial<JobRunRecord | WorkflowRunRecord>): Promise<void> {
+    if (this.matching(updates)) {
+      const before = await this.getRun(runId);
+      await this.cancelElsewhere(runId);
+      if (before) await super.updateRun(runId, { ...before, ...updates });
+    } else {
+      await super.updateRun(runId, updates);
+    }
+    await this.recordState(runId);
+  }
+
+  override async updateUnfinishedRun(
+    runId: string,
+    updates: Partial<JobRunRecord | WorkflowRunRecord>,
+  ): Promise<boolean> {
+    if (this.matching(updates)) await this.cancelElsewhere(runId);
+    const written = await super.updateUnfinishedRun(runId, updates);
+    await this.recordState(runId);
+    return written;
   }
 }
 
@@ -486,20 +576,156 @@ describe('durable jobs', () => {
       expect((await store.getRun(started.runId))?.state).toBe('cancelled');
     });
 
-    it('refuses to cancel a workflow run', async () => {
+    it('cancels a workflow run: its running step is aborted, no later step starts, and it ends cancelled', async () => {
       closeGate();
       const response = await server.callTool(
         'execute_workflow',
-        { name: 'gated_flow', background: true },
+        { name: 'gated_then_quick_flow', background: true },
         { authContext: alice },
       );
       const { runId } = response.structuredContent as unknown as StartedRun;
+      await waitFor(async () => (await managerOf(server).getStatus(runId))?.state === 'running', 'the run to start');
 
-      await expect(server.callTool('cancel_job', { runId }, { authContext: alice })).rejects.toBeInstanceOf(
-        JobRunNotCancellableError,
-      );
+      const cancelled = await server.callTool('cancel_job', { runId }, { authContext: alice });
+      const run = await finished(server, runId);
       openGate();
-      await finished(server, runId);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(cancelled.structuredContent).toEqual({ runId, state: 'cancelled' });
+      expect(run).toEqual(
+        expect.objectContaining({ state: 'cancelled', error: expect.objectContaining({ name: 'JobCancelledError' }) }),
+      );
+      expect(entered).not.toContain('after-the-gate');
+      expect((await managerOf(server).getStatus(runId))?.state).toBe('cancelled');
+    });
+
+    it('never starts a detached workflow run cancelled before its runner took it over', async () => {
+      const store = new MemoryJobStateStore();
+      const scope = scopeOf(server);
+      const workflow = scope.workflows?.findByName('gated_then_quick_flow');
+      const jobs = scope.jobs;
+      if (!workflow || !jobs) throw new Error('the workflow is not registered');
+      const manager = new JobExecutionManager(store, scope.logger, undefined, scope, {
+        workflows: { find: (name) => scope.workflows?.findByName(name), jobs },
+      });
+      await store.createRun({
+        runId: 'early',
+        jobId: workflow.name,
+        jobName: workflow.name,
+        workflowName: workflow.name,
+        state: 'pending',
+        input: {},
+        startedAt: Date.now(),
+        attempt: 1,
+        maxAttempts: 1,
+        logs: [],
+        background: true,
+        stepResults: {},
+        runner: { kind: 'detached', id: 'runner-early', pid: process.pid },
+        scopeId: scope.id,
+      } as WorkflowRunRecord);
+      await manager.cancel('early');
+
+      await manager.runDetached('early');
+
+      expect((await store.getRun('early'))?.state).toBe('cancelled');
+      expect(entered).not.toContain('after-the-gate');
+    });
+
+    it.each([
+      ['a job run', 'quick_job'],
+      ['a workflow run', 'gated_flow'],
+    ])('keeps %s cancelled when another server cancels it as it completes', async (_, name) => {
+      const scope = scopeOf(server);
+      const store = new CancelledMidWriteStore((updates) => updates.state === 'completed');
+      const manager = new JobExecutionManager(store, scope.logger, undefined, scope);
+      const workflow = scope.workflows?.findByName(name);
+      const jobs = scope.jobs;
+      if (!jobs) throw new Error('jobs are not enabled');
+      const { runId } = workflow
+        ? await manager.executeWorkflow(workflow, jobs, { background: true })
+        : await manager.executeJob(jobOf(server, name), { tag: 'raced' }, { background: true });
+
+      await waitFor(
+        async () => FINISHED_JOB_STATES.has((await store.getRun(runId))?.state ?? 'pending'),
+        'the run to end',
+      );
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect((await store.getRun(runId))?.state).toBe('cancelled');
+      await manager.dispose();
+    });
+
+    it('keeps a run cancelled when another server cancels it while this one writes its progress', async () => {
+      const scope = scopeOf(server);
+      const store = new CancelledMidWriteStore((updates) => 'progress' in updates);
+      const manager = new JobExecutionManager(store, scope.logger, undefined, scope);
+      const { runId } = await manager.executeJob(jobOf(server, 'progress_job'), {}, { background: true });
+
+      await waitFor(
+        async () => FINISHED_JOB_STATES.has((await store.getRun(runId))?.state ?? 'pending'),
+        'the run to end',
+      );
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(store.statesAfterCancel().length).toBeGreaterThan(1);
+      expect(new Set(store.statesAfterCancel())).toEqual(new Set(['cancelled']));
+      await manager.dispose();
+    });
+
+    it.each([
+      ['a job run', 'quick_job'],
+      ['a workflow run', 'quick_flow'],
+    ])('never starts %s another server cancels as this one starts it', async (_, name) => {
+      const scope = scopeOf(server);
+      const store = new CancelledMidWriteStore((updates) => updates.state === 'running');
+      const manager = new JobExecutionManager(store, scope.logger, undefined, scope);
+      const workflow = scope.workflows?.findByName(name);
+      const jobs = scope.jobs;
+      if (!jobs) throw new Error('jobs are not enabled');
+      const { runId } = workflow
+        ? await manager.executeWorkflow(workflow, jobs, { background: true })
+        : await manager.executeJob(jobOf(server, name), { tag: 'quick-step' }, { background: true });
+
+      await waitFor(
+        async () => FINISHED_JOB_STATES.has((await store.getRun(runId))?.state ?? 'pending'),
+        'the run to end',
+      );
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect((await store.getRun(runId))?.state).toBe('cancelled');
+      expect(entered).not.toContain('quick-step');
+      await manager.dispose();
+    });
+
+    it('waits for the cleanup of the steps it interrupts before it is disposed', async () => {
+      const scope = scopeOf(server);
+      const store = new MemoryJobStateStore();
+      const manager = new JobExecutionManager(store, scope.logger, undefined, scope);
+      const workflow = scope.workflows?.findByName('slow_cleanup_flow');
+      const jobs = scope.jobs;
+      if (!workflow || !jobs) throw new Error('the workflow is not registered');
+      const { runId } = await manager.executeWorkflow(workflow, jobs, { background: true });
+      await waitFor(() => entered.includes('slow-cleanup-step'), 'the step to start');
+
+      await manager.dispose();
+
+      expect(cleanups).toEqual(['step:interrupt']);
+      expect((await store.getRun(runId))?.state).toBe('interrupted');
+    });
+
+    it('interrupts the workflow runs it runs when it shuts down', async () => {
+      closeGate();
+      const scope = scopeOf(server);
+      const store = new MemoryJobStateStore();
+      const manager = new JobExecutionManager(store, scope.logger, undefined, scope);
+      const workflow = scope.workflows?.findByName('gated_flow');
+      const jobs = scope.jobs;
+      if (!workflow || !jobs) throw new Error('the workflow is not registered');
+      const { runId } = await manager.executeWorkflow(workflow, jobs, { background: true });
+      await waitFor(async () => (await store.getRun(runId))?.state === 'running', 'the run to start');
+
+      await manager.dispose();
+      openGate();
+
+      expect((await store.getRun(runId))?.state).toBe('interrupted');
     });
   });
 
@@ -740,6 +966,36 @@ describe('admission', () => {
       await managerOf(server).dispose();
       expect((await finished(server, interrupted.runId)).state).toBe('interrupted');
       await expectSlotFree();
+    } finally {
+      await server.dispose();
+    }
+  });
+
+  it('stops an attempt that lost its machine-wide slot, and runs its cleanup', async () => {
+    const server = await FrontMcpInstance.createDirect({
+      info: { name: 'durable-lost-slot', version: '1.0.0' },
+      apps: [DurableApp],
+      logging: { level: LogLevel.Off },
+      jobs: { enabled: true },
+    });
+    try {
+      const scope = scopeOf(server);
+      const store = new MemoryJobStateStore();
+      const admission = new MachineJobAdmission({ concurrency: 1, scope: 'machine' }, store, undefined, {
+        leaseSeconds: 1,
+        hostname: () => 'box',
+      });
+      const manager = new JobExecutionManager(store, scope.logger, undefined, scope, { admission });
+      const { runId } = await manager.executeJob(jobOf(server, 'hang_job'), { tag: 'lost' }, { background: true });
+      await waitFor(() => entered.includes('lost'), 'the job to start');
+
+      // Another process found its lease ended and took the machine's leases over
+      await store.swapLeases('admission:box', await store.readLeases('admission:box'), '[]', 30);
+      await waitFor(async () => (await store.getRun(runId))?.state === 'failed', 'the run to stop');
+
+      expect((await store.getRun(runId))?.error).toEqual(expect.objectContaining({ name: 'JobAdmissionLostError' }));
+      expect(cleanups).toEqual(['lost:interrupt']);
+      await manager.dispose();
     } finally {
       await server.dispose();
     }

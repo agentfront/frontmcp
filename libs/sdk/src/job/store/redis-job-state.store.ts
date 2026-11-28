@@ -2,6 +2,7 @@ import { scanRedisKeys, type RedisScanClient } from '@frontmcp/utils';
 
 import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
 import {
+  FINISHED_JOB_STATES,
   type JobExecutionState,
   type JobRunRecord,
   type JobStateStore,
@@ -21,12 +22,32 @@ export interface RedisStateStoreLike extends RedisScanClient {
   srem(key: string, ...members: string[]): Promise<number>;
   smembers(key: string): Promise<string[]>;
   expire?(key: string, seconds: number): Promise<unknown>;
+  /** `EVAL script numKeys ...keys ...args`: the leases and a run's end are swapped by a script on one key. */
+  eval(script: string, numKeys: number, ...keysAndArgs: (string | number)[]): Promise<unknown>;
   quit?(): Promise<unknown>;
 }
 
 export interface RedisJobStateStoreOptions {
   /** Close the client on `dispose()`: set when the store created it (the factory does). @default false */
   ownsClient?: boolean;
+}
+
+/** How many times a conditional write of a run is read again after another write landed first. */
+const MAX_SWAPS = 20;
+
+/** Replace a key's value while it holds the expected one (an absent key holds `''`), with a TTL. */
+const SWAP_SCRIPT = `
+local current = redis.call('GET', KEYS[1]) or ''
+if current ~= ARGV[1] then return 0 end
+redis.call('SET', KEYS[1], ARGV[2], 'EX', ARGV[3])
+return 1
+`;
+
+/** The stored run `raw` with `updates` merged in (never its `runId`), at the next revision. */
+function updatedRun(raw: string, updates: Partial<JobRunRecord | WorkflowRunRecord>): string {
+  const existing = JSON.parse(raw) as JobRunRecord;
+  const { runId: _ignoreRunId, ...safeUpdates } = updates;
+  return JSON.stringify({ ...existing, ...safeUpdates, revision: (existing.revision ?? 0) + 1, updatedAt: Date.now() });
 }
 
 /**
@@ -96,11 +117,19 @@ export class RedisJobStateStore implements JobStateStore {
     const key = this.key(runId);
     const raw = await this.client.get(key);
     if (!raw) return;
+    await this.client.set(key, updatedRun(raw, updates), 'EX', this.ttlSeconds);
+  }
 
-    const existing = JSON.parse(raw) as JobRunRecord;
-    const { runId: _ignoreRunId, ...safeUpdates } = updates;
-    const updated = { ...existing, ...safeUpdates, revision: (existing.revision ?? 0) + 1, updatedAt: Date.now() };
-    await this.client.set(key, JSON.stringify(updated), 'EX', this.ttlSeconds);
+  async updateUnfinishedRun(runId: string, updates: Partial<JobRunRecord | WorkflowRunRecord>): Promise<boolean> {
+    const key = this.key(runId);
+    for (let swaps = 0; swaps < MAX_SWAPS; swaps++) {
+      const raw = await this.client.get(key);
+      if (!raw || FINISHED_JOB_STATES.has((JSON.parse(raw) as JobRunRecord).state)) return false;
+      if ((await this.client.eval(SWAP_SCRIPT, 1, key, raw, updatedRun(raw, updates), this.ttlSeconds)) === 1) {
+        return true;
+      }
+    }
+    throw new Error(`run ${runId} changed under each of ${MAX_SWAPS} writes`);
   }
 
   async getRun(runId: string): Promise<JobRunRecord | WorkflowRunRecord | null> {
@@ -191,6 +220,18 @@ export class RedisJobStateStore implements JobStateStore {
 
   async claimRun(runId: string): Promise<boolean> {
     return (await this.client.set(`${this.keyPrefix}claim:${runId}`, '1', 'NX', 'EX', this.ttlSeconds)) === 'OK';
+  }
+
+  async readLeases(key: string): Promise<string> {
+    return (await this.client.get(this.leaseKey(key))) ?? '';
+  }
+
+  async swapLeases(key: string, expected: string, next: string, ttlSeconds: number): Promise<boolean> {
+    return (await this.client.eval(SWAP_SCRIPT, 1, this.leaseKey(key), expected, next, ttlSeconds)) === 1;
+  }
+
+  private leaseKey(key: string): string {
+    return `${this.keyPrefix}lease:${key}`;
   }
 
   async dispose(): Promise<void> {

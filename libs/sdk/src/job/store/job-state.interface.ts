@@ -90,6 +90,11 @@ export interface JobStateStore {
   createRunIfAbsent?(record: JobRunRecord | WorkflowRunRecord): Promise<boolean>;
   /** Merge `updates` into the run (never its `runId`), bump its revision and stamp `updatedAt`; an unknown run is ignored. */
   updateRun(runId: string, updates: Partial<JobRunRecord | WorkflowRunRecord>): Promise<void>;
+  /**
+   * {@link updateRun}, unless the run already ended (a state of {@link FINISHED_JOB_STATES}), in one atomic step;
+   * resolves to whether it wrote. A store without it is read, then written.
+   */
+  updateUnfinishedRun?(runId: string, updates: Partial<JobRunRecord | WorkflowRunRecord>): Promise<boolean>;
   getRun(runId: string): Promise<JobRunRecord | WorkflowRunRecord | null>;
   listRuns(opts?: {
     jobId?: string;
@@ -112,5 +117,15 @@ export interface JobStateStore {
   isRunnerAlive?(runnerId: string): Promise<boolean>;
   /** True for the one caller that claims an orphaned run, so only one process ends it and runs its cleanup. */
   claimRun?(runId: string): Promise<boolean>;
+  /**
+   * The value `key` holds, `''` when none. With {@link swapLeases}, the leases `jobs.admission` with `scope: 'machine'`
+   * keeps: one value per machine, which lists its running attempts.
+   */
+  readLeases?(key: string): Promise<string>;
+  /**
+   * Write `next` to `key` for `ttlSeconds` while it holds `expected` (`''`: none), in one atomic step; resolves to
+   * whether it did.
+   */
+  swapLeases?(key: string, expected: string, next: string, ttlSeconds: number): Promise<boolean>;
   dispose(): Promise<void>;
 }

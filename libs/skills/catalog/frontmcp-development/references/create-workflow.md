@@ -1,6 +1,6 @@
 ---
 name: create-workflow
-description: Connect multiple jobs into managed DAG pipelines with dependencies, conditions, and triggers
+description: Connect multiple jobs into managed DAG pipelines with dependencies, conditions, triggers, cancel and detached runs
 ---
 
 # Creating Workflows
@@ -44,6 +44,7 @@ Create a class decorated with `@Workflow`. The decorator requires `name` and `st
 | `webhook`        | `WebhookConfig`                                  | No          | --                  | The route of a `trigger: 'webhook'` workflow: `secret` is required; set without that trigger, the server refuses to start                                                                      |
 | `event`          | `string`                                         | No          | The workflow's name | The event that starts a `trigger: 'event'` workflow; set without that trigger, the server refuses to start                                                                                     |
 | `schedule`       | `WorkflowScheduleConfig`                         | No          | --                  | When a `trigger: 'schedule'` workflow runs: `{ cron, timezone?, input? }`; `cron` is required; set without that trigger, the server refuses to start                                           |
+| `runner`         | `'inline' \| 'detached'`                         | No          | `'inline'`          | Where the workflow's runs run: in the server's process, or in a process of their own that outlives the server (see [Detached Runs and Cancel](#detached-runs-and-cancel)); since 1.14          |
 | `timeout`        | `number`                                         | No          | `600000` (10 min)   | Maximum total workflow execution time in milliseconds                                                                                                                                          |
 | `maxConcurrency` | `number`                                         | No          | `5`                 | Maximum number of steps running in parallel                                                                                                                                                    |
 | `permissions`    | `JobPermission[]`                                | No          | --                  | Array of permission rules. Multiple rules may target the same action; all matching rules must pass. Same shape and semantics as job permissions; **enforced from 1.7.2** (GHSA-58v2-gpcc-jmqv) |
@@ -62,7 +63,7 @@ Create a class decorated with `@Workflow`. The decorator requires `name` and `st
 | `timeout`         | `number`                                     | No       | Per-step timeout in milliseconds (overrides workflow timeout for this step)                                    |
 | `retry`           | `RetryPolicy`                                | No       | Per-step retry policy (overrides the job's); with neither, one attempt                                         |
 
-When a step's `timeout` passes, the step fails with `WorkflowJobTimeoutError`. An attempt whose job has not started never starts it. A job already in `execute()` is not stopped: its `this.signal` (`ctx.signal` in a `job()` function) is aborted with the timeout as its reason, so pass it to `fetch` and other cancellable work, or check it. Its attempt's `jobs:execute-job` flow ends as failed at once: `Did('execute')` and `Did('validateOutput')` don't run, the job's `cleanup` runs with `'timeout'`, and the finalize hooks see the `WorkflowJobTimeoutError` as `state.flowError`. Up to 1.10 the flow waited for `execute()` to return first; up to 1.9.4 the flow of such an attempt ran on as a success, so audit and metrics hooks recorded a success for a step the workflow reported as failed. Each step attempt also waits for a slot under `jobs.admission` (see `create-job`). `cancel_job` cancels job runs only: a workflow run is refused with `JOB_RUN_NOT_CANCELLABLE`. A step whose job sets `runner: 'worker'` runs its `execute()` on the offload pool; a job on the `'detached'` runner runs inline as a step, in the workflow's process, since the workflow run owns its steps.
+When a step's `timeout` passes, the step fails with `WorkflowJobTimeoutError`. An attempt whose job has not started never starts it. A job already in `execute()` is not stopped: its `this.signal` (`ctx.signal` in a `job()` function) is aborted with the timeout as its reason, so pass it to `fetch` and other cancellable work, or check it. Its attempt's `jobs:execute-job` flow ends as failed at once: `Did('execute')` and `Did('validateOutput')` don't run, the job's `cleanup` runs with `'timeout'`, and the finalize hooks see the `WorkflowJobTimeoutError` as `state.flowError`. Up to 1.10 the flow waited for `execute()` to return first; up to 1.9.4 the flow of such an attempt ran on as a success, so audit and metrics hooks recorded a success for a step the workflow reported as failed. Each step attempt also waits for a slot under `jobs.admission` (see `create-job`). `cancel_job` cancels a workflow run too (see [Detached Runs and Cancel](#detached-runs-and-cancel)); up to 1.13 it refused one with `JOB_RUN_NOT_CANCELLABLE`. A step whose job sets `runner: 'worker'` runs its `execute()` on the offload pool; a job on the `'detached'` runner runs inline as a step, in the workflow's process, since the workflow run owns its steps.
 
 ### Basic Example
 
@@ -96,6 +97,25 @@ import { Workflow } from '@frontmcp/sdk';
   ],
 })
 class DeployPipeline {}
+```
+
+## Detached Runs and Cancel
+
+**Cancel.** `cancel_job({ runId })` cancels a workflow run, in this process or in any process on the job store (since 1.14). The cancel is written to the store first, and the run is marked `cancelled`. The process that runs it aborts it at once, or, in another process, within a second (500 ms for a detached run): no step starts after that, and the attempts of the running steps are aborted with `JobCancelledError` (their jobs' `this.signal` aborts, and their `cleanup` runs with `'cancel'`). A step that ignores its signal keeps running, but the run no longer waits for it; it waits only for the flows of the aborted attempts to end, their jobs' `cleanup` and admission slots included, so a shutdown waits for those cleanups too (at most `lifecycle.shutdownHookTimeoutMs`). A run cancelled before it started never starts. The caller who started the run may cancel it, and so may a caller who passes the workflow's `delete` rule. At shutdown the server interrupts the workflow runs it runs, which end `interrupted`.
+
+**Detached runs.** `@Workflow({ runner: 'detached' })` runs each run in a process of its own, as a detached job does (see `create-job`, Runners): `execute_workflow` answers at once with `{ runId, state: 'pending' }`, whatever `background` says; the server starts a process that runs its own entry again, which boots the config, runs the workflow's steps (inline in that process, whatever their jobs' runners) and exits. The run lives in the job store, survives the server that started it, and any server on the store reads it (`get_workflow_status`) and cancels it. A run whose process died ends `interrupted` when a server reconciles the store; one whose process never took it over ends `failed` with `JOB_RUNNER_BOOT_FAILED`. It needs what a detached job needs: a Node server started from its entry and a job store other processes share; otherwise the run is refused with `JOB_RUNNER_UNAVAILABLE` (`Workflow "<name>" cannot use its runner: ...`). Its process receives no caller credentials, so a step whose job has `execute` permissions fails the start. `jobs.runner` does not apply to workflows, and `jobs.detached.boot: 'app'` boots the workflow's app and its steps' jobs' apps only. A scheduled detached workflow starts one process for each scheduled time.
+
+```typescript
+@Workflow({
+  name: 'nightly-reindex',
+  runner: 'detached', // survives a restart of the server that started it
+  permissions: [{ action: 'read' }, { action: 'delete' }],
+  steps: [
+    { id: 'scan', jobName: 'scan-files' },
+    { id: 'index', jobName: 'build-index', dependsOn: ['scan'] },
+  ],
+})
+class NightlyReindex {}
 ```
 
 ## Step Dependencies and DAG Execution
@@ -943,6 +963,7 @@ class CiServer {}
 | A schedule starts no run                                   | The workflow's rules don't allow `schedule:<workflow name>`, the input doesn't match the `inputSchema`, or the lease store can't be opened | The server's log names the reason; add the role to the `create` and `execute` rules, or install `@frontmcp/storage-sqlite` (or set a top-level `redis`) |
 | A scheduled workflow runs an hour off                      | The cron is read in UTC                                                                                                                    | Set `schedule.timezone` to the IANA zone the schedule is meant in                                                                                       |
 | Workflow exceeds timeout                                   | Total step execution time exceeds the default 600000 ms                                                                                    | Increase `timeout` at the workflow level or add per-step `timeout` overrides                                                                            |
+| `Workflow "<name>" cannot use its runner`                  | A detached workflow on a server a runner can't run again, or with a step job that has `execute` permissions                                | Start the server from its entry with a shared job store, drop the step job's `execute` rules, or set `runner: 'inline'`                                 |
 | `Invalid input for workflow "<name>"`                      | The run's input doesn't match the workflow's `inputSchema`                                                                                 | Pass `input` that matches it; the error's details name each field that doesn't                                                                          |
 | A failure-notification step never runs                     | The step it watches failed without `continueOnError`, so it was skipped                                                                    | Set `continueOnError: true` on the watched step                                                                                                         |
 

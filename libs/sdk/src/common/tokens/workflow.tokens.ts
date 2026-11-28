@@ -12,6 +12,7 @@ export const FrontMcpWorkflowTokens = {
   webhook: tokenFactory.meta('workflowWebhook'),
   event: tokenFactory.meta('workflowEvent'),
   schedule: tokenFactory.meta('workflowSchedule'),
+  runner: tokenFactory.meta('workflowRunner'),
   timeout: tokenFactory.meta('workflowTimeout'),
   maxConcurrency: tokenFactory.meta('workflowMaxConcurrency'),
   tags: tokenFactory.meta('workflowTags'),
