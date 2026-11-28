@@ -72,10 +72,14 @@ export class RedisCimdCache implements CimdCacheBackend {
     // Build Redis adapter options
     const redisOptions: RedisAdapterOptions = {};
 
-    if (config.redis.url) {
+    const { cluster } = config.redis;
+    if (config.redis.client) {
+      // A client the application made: used, never closed
+      redisOptions.client = config.redis.client;
+    } else if (config.redis.url) {
       const { port, password, db, tls } = config.redis;
       redisOptions.url = config.redis.url;
-      redisOptions.config = { port, password, db, tls };
+      redisOptions.config = { port, password, db, tls, ...(cluster !== undefined ? { cluster } : {}) };
     } else if (config.redis.host) {
       redisOptions.config = {
         host: config.redis.host,
@@ -83,7 +87,12 @@ export class RedisCimdCache implements CimdCacheBackend {
         password: config.redis.password,
         db: config.redis.db,
         tls: config.redis.tls,
+        ...(cluster !== undefined ? { cluster } : {}),
       };
+    } else if (cluster !== undefined) {
+      // A cluster named by its seed nodes
+      const { port, password, db, tls } = config.redis;
+      redisOptions.config = { port, password, db, tls, cluster } as RedisAdapterOptions['config'];
     }
 
     this.redis = new RedisStorageAdapter(redisOptions);

@@ -73,7 +73,7 @@ describe('createSecureStore', () => {
 
   it.each([
     [{ sqlite: { path: '' } }, 'secureStore.sqlite.path'],
-    [{ redis: { url: 'redis://cache.internal' } }, 'secureStore.redis.host'],
+    [{ redis: { port: 6379 } }, 'secureStore.redis.host'],
     [{ backend: { get: async () => null } }, 'secureStore.backend must implement'],
   ])('refuses %j at startup instead of opening a store it cannot use', async (config, message) => {
     await expect(createSecureStore({ config: config as never })).rejects.toThrow(

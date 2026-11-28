@@ -1,6 +1,14 @@
 // session/transport-session.types.ts
 
 import { internalZ as z } from '@frontmcp/lazy-zod';
+import {
+  describeRedisUrlConflicts,
+  isRedisClientInput,
+  mergeRedisUrlFields,
+  UNSUPPORTED_REDIS_CLIENT_MESSAGE,
+  type RedisClientInput,
+  type RedisConnectionConfig,
+} from '@frontmcp/utils';
 
 /**
  * Transport protocol types supported by MCP
@@ -236,14 +244,14 @@ export type SessionStorageConfig =
   | { mode: 'stateful'; store: 'redis'; config: RedisConfig };
 
 /**
- * Redis configuration
+ * Redis configuration of a session store, token storage or secure store: the connection, in any
+ * form FrontMCP takes (`host`/`port`, a `url`, a Redis Cluster with `cluster`, or a `client` you
+ * made, alone), and the store's key prefix and TTL.
+ *
+ * Since 1.14 `host` is optional (a `url`, `cluster: { nodes }` or `client` names the server instead);
+ * `isRedisConnection()` tells whether a config names one.
  */
-export interface RedisConfig {
-  host: string;
-  port?: number;
-  password?: string;
-  db?: number;
-  tls?: boolean;
+export interface RedisConfig extends RedisConnectionConfig {
   keyPrefix?: string;
   /** Default TTL in milliseconds for session extension on access (sliding expiration) */
   defaultTtlMs?: number;
@@ -402,12 +410,86 @@ export const storedSessionSchema = z.object({
   reassignedFrom: z.string().optional(),
 });
 
-export const redisConfigSchema = z.object({
-  host: z.string().min(1),
-  port: z.number().int().positive().optional().default(6379),
-  password: z.string().optional(),
-  db: z.number().int().nonnegative().optional().default(0),
-  tls: z.boolean().optional().default(false),
-  keyPrefix: z.string().optional().default('mcp:session:'),
-  defaultTtlMs: z.number().int().positive().optional().default(3600000), // 1 hour default
-});
+const redisClusterNodeSchema = z.union([
+  z.string().trim().min(1),
+  z.object({ host: z.string().trim().min(1), port: z.number().int().positive().max(65535).optional() }),
+]);
+
+/** `true`: the host (or url) is a Redis Cluster endpoint; or `{ nodes, options }`. */
+const redisClusterSchema = z.union([
+  z.boolean(),
+  z.object({
+    nodes: z.array(redisClusterNodeSchema).optional(),
+    options: z.record(z.string(), z.unknown()).optional(),
+  }),
+]);
+
+/** The connection fields a `client` replaces. */
+const CONNECTION_FIELDS = ['host', 'port', 'password', 'db', 'tls', 'url', 'cluster'] as const;
+
+/**
+ * A Redis config in any form: a `host` (as before, with port 6379, db 0 and no TLS by default), a
+ * `redis://` / `rediss://` `url` (the fields beside it fill in what it leaves out), cluster seed
+ * nodes (`cluster: { nodes }`), or a `client` you made, alone. With `cluster`, the database is 0.
+ */
+export const redisConfigSchema = z
+  .object({
+    provider: z.literal('redis').optional(),
+    url: z.string().trim().min(1).optional(),
+    host: z.string().min(1).optional(),
+    port: z.number().int().positive().optional(),
+    password: z.string().optional(),
+    db: z.number().int().nonnegative().optional(),
+    tls: z.boolean().optional(),
+    cluster: redisClusterSchema.optional(),
+    client: z
+      .custom<RedisClientInput>((value) => value === undefined || isRedisClientInput(value), {
+        error: UNSUPPORTED_REDIS_CLIENT_MESSAGE,
+      })
+      .optional(),
+    keyPrefix: z.string().optional().default('mcp:session:'),
+    defaultTtlMs: z.number().int().positive().optional().default(3600000), // 1 hour default
+  })
+  .superRefine((val, ctx) => {
+    if (val.client !== undefined) {
+      const beside = CONNECTION_FIELDS.filter((field) => val[field] !== undefined);
+      if (beside.length > 0) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `redis.client carries its own connection; drop ${beside.join(', ')} beside it`,
+          path: ['client'],
+        });
+      }
+      return;
+    }
+    const hasNodes = typeof val.cluster === 'object' && (val.cluster.nodes?.length ?? 0) > 0;
+    if (val.host === undefined && val.url === undefined && !hasNodes) {
+      ctx.addIssue({ code: 'custom', message: 'redis needs host, url, cluster.nodes or client', path: ['host'] });
+      return;
+    }
+    if (val.url !== undefined) {
+      const merge = mergeRedisUrlFields(val.url, val);
+      if (!merge) {
+        ctx.addIssue({ code: 'custom', message: 'redis.url must be a redis:// or rediss:// URL', path: ['url'] });
+        return;
+      }
+      if (merge.conflicts.length > 0) {
+        ctx.addIssue({ code: 'custom', message: describeRedisUrlConflicts(merge.conflicts), path: ['url'] });
+        return;
+      }
+    }
+    const cluster = val.cluster === true || typeof val.cluster === 'object';
+    if (cluster && val.db !== undefined && val.db !== 0) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `redis.db is ${val.db}, but a Redis Cluster has database 0 only`,
+        path: ['db'],
+      });
+    }
+  })
+  .transform((val) =>
+    // A host config gets the defaults it always had; a url's own port/db/TLS must not be overridden
+    val.host !== undefined && val.url === undefined && val.client === undefined
+      ? { ...val, host: val.host, port: val.port ?? 6379, db: val.db ?? 0, tls: val.tls ?? false }
+      : val,
+  );
