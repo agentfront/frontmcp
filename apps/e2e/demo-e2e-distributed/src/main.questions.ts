@@ -5,7 +5,13 @@ import { QuestionsApp } from './apps/questions-app';
 
 const port = parseInt(process.env['PORT'] ?? '3200', 10);
 const redisUrl = new URL(process.env['REDIS_URL'] ?? 'redis://localhost:6379');
-const redis = { provider: 'redis' as const, host: redisUrl.hostname, port: parseInt(redisUrl.port || '6379', 10) };
+// REDIS_CLUSTER=1: the same endpoint as a Redis Cluster (`cluster: true`), as in main.ts
+const redis = {
+  provider: 'redis' as const,
+  host: redisUrl.hostname,
+  port: parseInt(redisUrl.port || '6379', 10),
+  ...(process.env['REDIS_CLUSTER'] === '1' ? { cluster: true as const } : {}),
+};
 
 /** main.ts with persistent questions, kept in the same Redis, and the inbox where a person answers them. */
 @FrontMcp({
