@@ -31,9 +31,10 @@ const BUDGETS: Array<{ entry: string; label: string; maxBytes: number }> = [
   // +2,357: the server's enabled map, onError and the surface hash a tools/call sends back (#1352), then +104 and +104:
   // no widget tool name completes for a ui://widget/ resource that is off. Then +1,493 and +1,504: the principal a
   // token speaks for, and the typed auth_time, azp and client_id (#1363), then +437 and +438: a principal's optional
-  // fields checked, and the principal told by the subject claimsMapping.userId resolves
-  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_357_387 },
-  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_364_633 },
+  // fields checked, and the principal told by the subject claimsMapping.userId resolves. Then +30 and +30: the shared
+  // server's changes (#1349)
+  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_357_417 },
+  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_364_663 },
 ];
 
 // +413 bytes, the 1.13.2 batch: producer-backed resource keys (#1354, +241), the client metadata a transparent server
