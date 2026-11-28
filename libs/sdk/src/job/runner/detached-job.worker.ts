@@ -174,11 +174,13 @@ async function reportBootFailure(config: ServerConfig, runId: string, cause: unk
       const record = await stateStore.getRun(runId);
       if (!record || FINISHED_JOB_STATES.has(record.state) || (await stateStore.isCancelRequested?.(runId))) return;
       const error = new JobRunnerBootError(runId, toJobError(cause).message);
-      await stateStore.updateRun(runId, {
-        state: 'failed',
+      const failed = {
+        state: 'failed' as const,
         error: { name: error.name, message: error.message },
         completedAt: Date.now(),
-      });
+      };
+      if (stateStore.updateUnfinishedRun) await stateStore.updateUnfinishedRun(runId, failed);
+      else await stateStore.updateRun(runId, failed);
     } finally {
       await stateStore.dispose();
     }

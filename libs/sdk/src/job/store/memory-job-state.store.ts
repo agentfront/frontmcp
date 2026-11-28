@@ -1,4 +1,5 @@
 import {
+  FINISHED_JOB_STATES,
   type JobExecutionState,
   type JobRunRecord,
   type JobStateStore,
@@ -28,10 +29,20 @@ export class MemoryJobStateStore implements JobStateStore {
 
   async updateRun(runId: string, updates: Partial<JobRunRecord | WorkflowRunRecord>): Promise<void> {
     const existing = this.runs.get(runId);
-    if (!existing) return;
+    if (existing) this.merge(existing, updates);
+  }
+
+  async updateUnfinishedRun(runId: string, updates: Partial<JobRunRecord | WorkflowRunRecord>): Promise<boolean> {
+    const existing = this.runs.get(runId);
+    if (!existing || FINISHED_JOB_STATES.has(existing.state)) return false;
+    this.merge(existing, updates);
+    return true;
+  }
+
+  private merge(existing: JobRunRecord | WorkflowRunRecord, updates: Partial<JobRunRecord | WorkflowRunRecord>): void {
     const { runId: _ignoreRunId, ...safeUpdates } = updates;
     const revision = (existing.revision ?? 0) + 1;
-    this.runs.set(runId, { ...existing, ...safeUpdates, revision, updatedAt: Date.now() });
+    this.runs.set(existing.runId, { ...existing, ...safeUpdates, revision, updatedAt: Date.now() });
   }
 
   async getRun(runId: string): Promise<JobRunRecord | WorkflowRunRecord | null> {

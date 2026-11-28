@@ -1,6 +1,6 @@
 /**
- * Machine-wide admission on a real Redis Cluster (#1351): the lease list of a machine is swapped by one script on one
- * key, so two processes never both take the only slot, and a swap from a value the list no longer holds is refused.
+ * The Redis job store's swaps on a real Redis Cluster (#1351): the lease list of a machine is swapped by one script on
+ * one key, so two processes never both take the only slot, and a run's end is written only while it is unfinished.
  *
  * Runs when REDIS_CLUSTER_NODES lists the cluster's nodes (`host:port,host:port,...`), as
  * `scripts/redis-cluster-docker.sh up` prints; skipped otherwise.
@@ -57,6 +57,27 @@ describeCluster('MachineJobAdmission on a Redis Cluster', () => {
     expect(await first.swapLeases?.(key, 'stale', 'late', 30)).toBe(false);
     expect(await first.swapLeases?.(key, held, '[]', 1)).toBe(true);
     expect(await second.readLeases?.(key)).toBe('[]');
+  });
+
+  it('writes the end of a run only while it is unfinished', async () => {
+    const [first, second] = stores;
+    const runId = `run-${Date.now()}`;
+    await first.createRun({
+      runId,
+      jobId: 'report',
+      jobName: 'report',
+      state: 'running',
+      input: {},
+      startedAt: Date.now(),
+      attempt: 1,
+      maxAttempts: 1,
+      logs: [],
+      background: true,
+    });
+
+    expect(await second.updateUnfinishedRun?.(runId, { state: 'cancelled' })).toBe(true);
+    expect(await first.updateUnfinishedRun?.(runId, { state: 'completed' })).toBe(false);
+    expect((await first.getRun(runId))?.state).toBe('cancelled');
   });
 
   it('admits one attempt at a time across two processes', async () => {

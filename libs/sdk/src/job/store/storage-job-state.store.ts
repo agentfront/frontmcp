@@ -1,6 +1,7 @@
 import { randomUUID, type NamespacedStorage } from '@frontmcp/utils';
 
 import {
+  FINISHED_JOB_STATES,
   type JobExecutionState,
   type JobRunRecord,
   type JobStateStore,
@@ -8,6 +9,9 @@ import {
 } from './job-state.interface';
 
 type RunRecord = JobRunRecord | WorkflowRunRecord;
+
+/** How many times a conditional write of a run is read again after another write landed first. */
+const MAX_SWAPS = 20;
 
 /** A field only the stored copy of a new run carries, so its creator can tell its own write from another's. */
 const CREATE_CLAIM_FIELD = 'createClaim';
@@ -42,8 +46,21 @@ export class StorageJobStateStore implements JobStateStore {
   async updateRun(runId: string, updates: Partial<RunRecord>): Promise<void> {
     const existing = await this.getRun(runId);
     if (!existing) return;
-    const { runId: _ignoreRunId, ...safeUpdates } = updates;
-    await this.write({ ...existing, ...safeUpdates, revision: (existing.revision ?? 0) + 1, updatedAt: Date.now() });
+    await this.write(updatedRun(existing, updates));
+  }
+
+  async updateUnfinishedRun(runId: string, updates: Partial<RunRecord>): Promise<boolean> {
+    for (let swaps = 0; swaps < MAX_SWAPS; swaps++) {
+      const raw = await this.storage.get(runKey(runId));
+      if (!raw) return false;
+      const existing = parseRun(raw);
+      if (FINISHED_JOB_STATES.has(existing.state)) return false;
+      const next = JSON.stringify(updatedRun(existing, updates));
+      if (!(await this.storage.setIfEquals(runKey(runId), raw, next))) continue;
+      await this.storage.expireIfEquals(runKey(runId), next, this.ttlSeconds);
+      return true;
+    }
+    throw new Error(`run ${runId} changed under each of ${MAX_SWAPS} writes`);
   }
 
   async getRun(runId: string): Promise<RunRecord | null> {
@@ -126,6 +143,12 @@ export class StorageJobStateStore implements JobStateStore {
     const values = await this.storage.mget(keys);
     return values.filter((raw): raw is string => raw !== null).map(parseRun);
   }
+}
+
+/** `existing` with `updates` merged in (never its `runId`), at the next revision. */
+function updatedRun(existing: RunRecord, updates: Partial<RunRecord>): RunRecord {
+  const { runId: _ignoreRunId, ...safeUpdates } = updates;
+  return { ...existing, ...safeUpdates, revision: (existing.revision ?? 0) + 1, updatedAt: Date.now() } as RunRecord;
 }
 
 function runKey(runId: string): string {

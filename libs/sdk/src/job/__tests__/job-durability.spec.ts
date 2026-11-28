@@ -37,7 +37,12 @@ import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { type Scope } from '../../scope/scope.instance';
 import { JobExecutionManager } from '../execution/job-execution.manager';
 import { MachineJobAdmission } from '../job-admission';
-import { type JobRunRecord, type JobStateStore, type WorkflowRunRecord } from '../store/job-state.interface';
+import {
+  FINISHED_JOB_STATES,
+  type JobRunRecord,
+  type JobStateStore,
+  type WorkflowRunRecord,
+} from '../store/job-state.interface';
 import { MemoryJobStateStore } from '../store/memory-job-state.store';
 
 const entered: string[] = [];
@@ -313,6 +318,28 @@ class SlowProgressStore extends MemoryJobStateStore {
   }
 }
 
+/** A store on which another server cancels each run just as this one writes that it completed. */
+class CancelledAsItCompletesStore extends MemoryJobStateStore {
+  private async cancelFirst(runId: string, updates: Partial<JobRunRecord>): Promise<void> {
+    if (updates.state !== 'completed') return;
+    await this.requestCancel(runId);
+    await super.updateRun(runId, { state: 'cancelled', completedAt: Date.now() });
+  }
+
+  override async updateRun(runId: string, updates: Partial<JobRunRecord | WorkflowRunRecord>): Promise<void> {
+    await this.cancelFirst(runId, updates);
+    return super.updateRun(runId, updates);
+  }
+
+  override async updateUnfinishedRun(
+    runId: string,
+    updates: Partial<JobRunRecord | WorkflowRunRecord>,
+  ): Promise<boolean> {
+    await this.cancelFirst(runId, updates);
+    return super.updateUnfinishedRun(runId, updates);
+  }
+}
+
 /** A JobStateStore written before cancel requests existed: it has none of their methods. */
 function withoutCancelRequests(store: MemoryJobStateStore): JobStateStore {
   return {
@@ -549,6 +576,29 @@ describe('durable jobs', () => {
 
       expect((await store.getRun('early'))?.state).toBe('cancelled');
       expect(entered).not.toContain('after-the-gate');
+    });
+
+    it.each([
+      ['a job run', 'quick_job'],
+      ['a workflow run', 'gated_flow'],
+    ])('keeps %s cancelled when another server cancels it as it completes', async (_, name) => {
+      const scope = scopeOf(server);
+      const store = new CancelledAsItCompletesStore();
+      const manager = new JobExecutionManager(store, scope.logger, undefined, scope);
+      const workflow = scope.workflows?.findByName(name);
+      const jobs = scope.jobs;
+      if (!jobs) throw new Error('jobs are not enabled');
+      const { runId } = workflow
+        ? await manager.executeWorkflow(workflow, jobs, { background: true })
+        : await manager.executeJob(jobOf(server, name), { tag: 'raced' }, { background: true });
+
+      await waitFor(
+        async () => FINISHED_JOB_STATES.has((await store.getRun(runId))?.state ?? 'pending'),
+        'the run to end',
+      );
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect((await store.getRun(runId))?.state).toBe('cancelled');
+      await manager.dispose();
     });
 
     it('interrupts the workflow runs it runs when it shuts down', async () => {

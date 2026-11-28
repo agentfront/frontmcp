@@ -227,11 +227,13 @@ export class JobExecutionManager {
         .catch(async (err) => {
           this.logger.error(`Background job execution failed: ${err}`);
           try {
-            await this.updateState(runId, {
-              state: 'failed',
-              error: { message: err?.message ?? String(err), name: err?.name ?? 'Error' },
-              completedAt: Date.now(),
-            });
+            await this.withRunLock(runId, () =>
+              this.writeUnlessFinished(runId, {
+                state: 'failed',
+                error: { message: err?.message ?? String(err), name: err?.name ?? 'Error' },
+                completedAt: Date.now(),
+              }),
+            );
           } catch (updateErr) {
             this.logger.error(`Failed to update run state after error: ${updateErr}`);
           }
@@ -359,11 +361,13 @@ export class JobExecutionManager {
         async (err) => {
           this.logger.error(`Background workflow execution failed: ${err}`);
           try {
-            await this.updateState(runId, {
-              state: 'failed',
-              error: { message: err?.message ?? String(err), name: err?.name ?? 'Error' },
-              completedAt: Date.now(),
-            });
+            await this.withRunLock(runId, () =>
+              this.writeUnlessFinished(runId, {
+                state: 'failed',
+                error: { message: err?.message ?? String(err), name: err?.name ?? 'Error' },
+                completedAt: Date.now(),
+              }),
+            );
           } catch (updateErr) {
             this.logger.error(`Failed to update run state after error: ${updateErr}`);
           }
@@ -418,7 +422,10 @@ export class JobExecutionManager {
       if (!record) throw new JobRunNotFoundError(runId);
       if (FINISHED_JOB_STATES.has(record.state)) throw new JobRunFinishedError(runId, record.state);
       await this.stateStore.requestCancel?.(runId);
-      await this.write(runId, cancelledUpdate(reason));
+      if (!(await this.writeUnlessFinished(runId, cancelledUpdate(reason)))) {
+        const ended = await this.stateStore.getRun(runId);
+        throw new JobRunFinishedError(runId, ended?.state ?? 'completed');
+      }
     });
     this.activeRuns.get(runId)?.controller.abort(reason);
   }
@@ -846,36 +853,59 @@ export class JobExecutionManager {
   private async writeOutcome(runId: string, outcome: JobAttemptOutcome): Promise<JobExecutionState | undefined> {
     if (await this.cancelRequested(runId)) {
       if (outcome.state === 'retrying') return undefined;
-      await this.write(runId, { ...cancelledUpdate(new JobCancelledError(runId)), attempt: outcome.attempt });
-      return 'cancelled';
+      return this.writeEnd(runId, { ...cancelledUpdate(new JobCancelledError(runId)), attempt: outcome.attempt });
     }
-    const current = await this.stateStore.getRun(runId);
-    if (current && FINISHED_JOB_STATES.has(current.state)) return undefined;
     switch (outcome.state) {
       case 'completed':
-        await this.write(runId, {
+        return this.writeEnd(runId, {
           state: 'completed',
           result: outcome.result,
           completedAt: Date.now(),
           attempt: outcome.attempt,
           logs: [...outcome.logs],
         });
-        return 'completed';
       case 'retrying':
-        await this.write(runId, { state: 'retrying', attempt: outcome.attempt });
-        return 'retrying';
+        return this.writeEnd(runId, { state: 'retrying', attempt: outcome.attempt });
       case 'failed': {
         const { error } = outcome;
-        const state = finishedStateOf(error);
-        await this.write(runId, {
-          state,
+        return this.writeEnd(runId, {
+          state: finishedStateOf(error),
           error: { message: error.message, name: error.name, stack: error.stack },
           completedAt: Date.now(),
           attempt: outcome.attempt,
         });
-        return state;
       }
     }
+  }
+
+  /**
+   * Write the state a run moves to unless it already ended, answering the state written; when another process
+   * ended it first, a cancel is still this run's end to tell, and any other end is not.
+   */
+  private async writeEnd(
+    runId: string,
+    update: Partial<JobRunRecord> & { state: JobExecutionState },
+  ): Promise<JobExecutionState | undefined> {
+    if (await this.writeUnlessFinished(runId, update)) return update.state;
+    return (await this.stateStore.getRun(runId))?.state === 'cancelled' ? 'cancelled' : undefined;
+  }
+
+  /** {@link write}, unless the run already ended, in one step on a store that can (`updateUnfinishedRun`). */
+  private async writeUnlessFinished(
+    runId: string,
+    updates: Partial<JobRunRecord | WorkflowRunRecord>,
+  ): Promise<boolean> {
+    const store = this.stateStore;
+    let written: boolean;
+    if (store.updateUnfinishedRun) {
+      written = await store.updateUnfinishedRun(runId, updates);
+    } else {
+      const current = await store.getRun(runId);
+      written = !!current && !FINISHED_JOB_STATES.has(current.state);
+      if (written) await store.updateRun(runId, updates);
+    }
+    if (written) this.scope?.resources.notifyContentChanged(jobRunUri(runId));
+    return written;
   }
 
   // ---- Private: background execution ----
@@ -958,20 +988,14 @@ export class JobExecutionManager {
     runId: string,
     outcome: { state: JobExecutionState; result?: WorkflowExecutionResult; error?: Error },
   ): Promise<JobExecutionState | undefined> {
-    const current = await this.stateStore.getRun(runId);
-    if (await this.cancelRequested(runId)) {
-      if (current?.state !== 'cancelled') await this.write(runId, cancelledUpdate(new JobCancelledError(runId)));
-      return 'cancelled';
-    }
-    if (current && FINISHED_JOB_STATES.has(current.state)) return undefined;
+    if (await this.cancelRequested(runId)) return this.writeEnd(runId, cancelledUpdate(new JobCancelledError(runId)));
     const { error } = outcome;
-    await this.write(runId, {
+    return this.writeEnd(runId, {
       state: outcome.state,
       ...(outcome.result === undefined ? {} : { result: outcome.result }),
       ...(error ? { error: { message: error.message, name: error.name, stack: error.stack } } : {}),
       completedAt: Date.now(),
     });
-    return outcome.state;
   }
 
   private async executeWorkflowBackground(
@@ -1095,7 +1119,7 @@ function statusOf(record: JobRunRecord | WorkflowRunRecord, state: JobExecutionS
 }
 
 /** What a cancel writes to the run record. */
-function cancelledUpdate(reason: JobCancelledError): Partial<JobRunRecord> {
+function cancelledUpdate(reason: JobCancelledError): Partial<JobRunRecord> & { state: 'cancelled' } {
   return { state: 'cancelled', error: { message: reason.message, name: reason.name }, completedAt: Date.now() };
 }
 
