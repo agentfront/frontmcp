@@ -32,4 +32,8 @@ module.exports = {
   '^#semver$': path.resolve(root, 'libs/sdk/src/third-party/semver.ts'),
   '^#uipack-render$': path.resolve(root, 'libs/sdk/src/third-party/uipack-render.ts'),
   '^#protocol-client$': path.resolve(root, 'libs/sdk/src/third-party/protocol-client.ts'),
+
+  // One ioredis for every package under test: @frontmcp/utils opens every Redis client (#1503), so a
+  // spec's jest.mock('ioredis') must reach the copy utils loads, not a package's own nested copy.
+  '^ioredis$': require.resolve('ioredis', { paths: [root] }),
 };

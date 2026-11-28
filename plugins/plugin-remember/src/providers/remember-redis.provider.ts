@@ -1,6 +1,11 @@
-import type { Redis as RedisClient, RedisOptions } from 'ioredis';
-
 import { Provider, ProviderScope } from '@frontmcp/sdk';
+import {
+  adoptRedisClient,
+  createRedisConnection,
+  isRedisClusterClient,
+  scanRedisKeys,
+  type FrontMcpRedisClient,
+} from '@frontmcp/utils';
 
 import type { RedisClientRememberPluginOptions, RedisRememberPluginOptions } from '../remember.types';
 import {
@@ -10,15 +15,6 @@ import {
   SET_IF_NEITHER_KEY_EXISTS_SCRIPT,
 } from './remember-key-prefix';
 import type { RememberStoreInterface } from './remember-store.interface';
-
-type RedisConstructor = typeof import('ioredis').default;
-
-/** ioredis, loaded when a store on Redis is built, so a page that never builds one does not bundle it. */
-function createRedisClient(options: RedisOptions): RedisClient {
-  const ioredis = require('ioredis') as RedisConstructor & { default?: RedisConstructor };
-  const Redis = ioredis.default ?? ioredis;
-  return new Redis(options);
-}
 
 /**
  * Combined options type for Redis provider.
@@ -35,7 +31,7 @@ export type RedisRememberOptions = RedisRememberPluginOptions | RedisClientRemem
   scope: ProviderScope.GLOBAL,
 })
 export default class RememberRedisProvider implements RememberStoreInterface {
-  private readonly client: RedisClient;
+  private readonly client: FrontMcpRedisClient;
   /**
    * Prefix prepended to Redis keys that don't already start with it.
    * Include any separator (e.g., "myapp:" or "user:123:") as part of the prefix.
@@ -51,18 +47,26 @@ export default class RememberRedisProvider implements RememberStoreInterface {
     this.defaultTTL = options.defaultTTL;
 
     if (options.type === 'redis-client') {
-      this.client = options.client;
+      // The app's client (ioredis or node-redis), behind a guard that never closes it
+      this.client = adoptRedisClient(options.client as object).client;
       this.ownsClient = false;
       return;
     }
 
     this.ownsClient = true;
 
-    this.client = createRedisClient({
-      lazyConnect: false,
-      maxRetriesPerRequest: 3,
-      ...options.config,
-    });
+    // ioredis is loaded when a store on Redis is built, so a page that never builds one does not bundle it.
+    // Every config field goes to ioredis as given (a TLS object); `cluster` opens a Cluster.
+    const { host, port, password, db, cluster, ...ioredisOptions } = options.config;
+    this.client = createRedisConnection({
+      host,
+      port,
+      password,
+      db,
+      cluster,
+      ioredisOptions,
+      noErrorListener: true,
+    }).client;
 
     this.client.on('connect', () => {
       // Silent connect - log only in debug mode (strict check for 'true')
@@ -130,7 +134,12 @@ export default class RememberRedisProvider implements RememberStoreInterface {
     const hasTtl = ttl !== undefined && ttl > 0;
     const doubledKey = doubledPrefixKey(this.keyPrefix, key);
 
-    if (doubledKey) {
+    // On a cluster the doubled key lives in another hash slot, so one script can't check both: the
+    // legacy key is checked first, then the key is set if absent. A legacy entry still there wins,
+    // as it does in the script.
+    if (doubledKey && isRedisClusterClient(this.client)) {
+      if ((await this.client.exists(doubledKey)) === 1) return false;
+    } else if (doubledKey) {
       const ttlArgument = hasTtl ? String(ttl) : '';
       const created = await this.client.eval(
         SET_IF_NEITHER_KEY_EXISTS_SCRIPT,
@@ -208,15 +217,9 @@ export default class RememberRedisProvider implements RememberStoreInterface {
     return [...result];
   }
 
+  /** SCAN for `match`: on a single node as before, on every master of a cluster. */
   private async scan(match: string): Promise<string[]> {
-    const found: string[] = [];
-    let cursor = '0';
-    do {
-      const [nextCursor, keys] = await this.client.scan(cursor, 'MATCH', match, 'COUNT', 100);
-      cursor = nextCursor;
-      found.push(...keys);
-    } while (cursor !== '0');
-    return found;
+    return scanRedisKeys(this.client, match, 100);
   }
 
   /**

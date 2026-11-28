@@ -1,5 +1,7 @@
 import type { Redis as RedisClient, RedisOptions } from 'ioredis';
 
+import type { RedisClientInput, RedisClusterOption } from '@frontmcp/utils';
+
 declare global {
   interface ExtendFrontMcpToolMetadata {
     cache?: CachePluginToolOptions | true;
@@ -80,7 +82,11 @@ export interface BaseCachePluginOptions {
 
 export interface RedisClientCachePluginOptions extends BaseCachePluginOptions {
   type: 'redis-client';
-  client: RedisClient;
+  /**
+   * A Redis client you made: an ioredis `Redis` or `Cluster`, a node-redis client or cluster, or a
+   * FrontMcpRedisClient. The plugin never closes it; you do, after the server stops.
+   */
+  client: RedisClient | RedisClientInput;
 }
 
 export interface RedisCachePluginOptions extends BaseCachePluginOptions {
@@ -94,6 +100,11 @@ export interface RedisCachePluginOptions extends BaseCachePluginOptions {
     tls?: RedisOptions['tls'];
     /** Prefix of every cache key, so servers that share one Redis database keep their entries apart. */
     keyPrefix?: string;
+    /**
+     * The host is a Redis Cluster endpoint (`true`, e.g. an AWS ElastiCache configuration endpoint),
+     * or `{ nodes, options }` with seed nodes and ioredis ClusterOptions. A cluster has database 0 only.
+     */
+    cluster?: RedisClusterOption;
   };
 }
 
