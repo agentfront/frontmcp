@@ -14,8 +14,11 @@
  *   - #472/#458: `tokenStorage: { sqlite: { path } }` survives a server restart
  *
  * `tokenStorage` is selected from env so a single entry can be reused for both
- * the in-memory and the sqlite-restart-persistence scenarios:
- *   - TOKEN_STORAGE_SQLITE_PATH set  → `{ sqlite: { path } }` (persistent)
+ * the in-memory and the persistent scenarios:
+ *   - TOKEN_STORAGE_SQLITE_PATH set  → `{ sqlite: { path } }` (persistent), encrypted
+ *                                      with TOKEN_STORAGE_SQLITE_SECRET when set
+ *   - TOKEN_STORAGE_REDIS_CLUSTER    → `{ redis: { cluster: { nodes }, keyPrefix } }`, the nodes
+ *                                      as `host:port,...`, the prefix TOKEN_STORAGE_REDIS_PREFIX
  *   - otherwise                      → 'memory' (default)
  */
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
@@ -26,7 +29,25 @@ const parsedPort = parseInt(process.env['PORT'] ?? '3155', 10);
 const port = Number.isNaN(parsedPort) ? 3155 : parsedPort;
 
 const sqlitePath = process.env['TOKEN_STORAGE_SQLITE_PATH'];
-const tokenStorage = sqlitePath ? ({ sqlite: { path: sqlitePath } } as const) : ('memory' as const);
+const sqliteSecret = process.env['TOKEN_STORAGE_SQLITE_SECRET'];
+const redisClusterNodes = (process.env['TOKEN_STORAGE_REDIS_CLUSTER'] ?? '')
+  .split(',')
+  .filter(Boolean)
+  .map((node) => ({ host: node.split(':')[0], port: Number(node.split(':')[1]) }));
+
+function selectTokenStorage() {
+  if (sqlitePath) {
+    return { sqlite: { path: sqlitePath, ...(sqliteSecret ? { encryption: { secret: sqliteSecret } } : {}) } };
+  }
+  if (redisClusterNodes.length > 0) {
+    return {
+      redis: { cluster: { nodes: redisClusterNodes }, keyPrefix: process.env['TOKEN_STORAGE_REDIS_PREFIX'] ?? '' },
+    };
+  }
+  return 'memory' as const;
+}
+
+const tokenStorage = selectTokenStorage();
 
 // Email opt-out is the focus of #468. Default to opted-out for this single
 // operator server, but allow a test to force the historical require-email
