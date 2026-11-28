@@ -84,8 +84,13 @@ function parse(raw: string): SessionEndMessage | undefined {
 }
 
 export class SessionEndChannel {
-  /** This process, as the channel's messages name it (several may run on one machine). */
-  readonly instanceId = randomUUID();
+  private ownInstanceId?: string;
+
+  /** This process, as the channel's messages name it (several may run on one machine); made on first use. */
+  get instanceId(): string {
+    return (this.ownInstanceId ??= randomUUID());
+  }
+
   private readonly confirmTimeoutMs: number;
   private readonly retryAfterSeconds: number;
   private readonly pending = new Map<string, PendingEnd>();
