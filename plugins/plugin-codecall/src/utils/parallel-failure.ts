@@ -4,26 +4,29 @@
  */
 const PARALLEL_FAILED_RE = /^(\d+) of (\d+) parallel operations failed:\n/;
 
-/** The shortest end of a cut message that counts as that message: the sandbox cuts the list at its size limit. */
-const MIN_CUT_MESSAGE_CHARS = 24;
+/** The index some builds put before each listed message. */
+const LISTED_INDEX_RE = /^\[\d+\]: /;
 
 /**
  * Whether a message is one of the failures a failed `parallel()`'s error lists, for that error's message; undefined
- * for any other error. A listed message may be cut short where the list reaches the sandbox's size limit.
+ * for any other error. A failure is listed when an entry starts a line with its whole message, up to the next line or
+ * the end. The sandbox cuts the last entry at its size limit without marking it, so a cut message is not listed.
  */
 export function parallelFailuresOf(message: string | undefined): ((failure: string) => boolean) | undefined {
   const match = message ? PARALLEL_FAILED_RE.exec(message) : null;
   if (!message || !match) return undefined;
   const list = message.slice(match[0].length);
-  const lineStarts = [0];
-  for (let index = list.indexOf('\n'); index !== -1; index = list.indexOf('\n', index + 1)) lineStarts.push(index + 1);
+  const entryStarts = [0];
+  for (let index = list.indexOf('\n'); index !== -1; index = list.indexOf('\n', index + 1)) entryStarts.push(index + 1);
+  const entries = entryStarts.flatMap((start) => {
+    const indexed = LISTED_INDEX_RE.exec(list.slice(start, start + 24));
+    return indexed ? [start, start + indexed[0].length] : [start];
+  });
   return (failure) => {
     if (!failure) return false;
-    if (list.includes(failure)) return true;
-    // The last listed message, cut at the limit: the list ends with its start.
-    return lineStarts.some((start) => {
-      const tail = list.slice(start).replace(/^\[\d+\]: /, '');
-      return tail.length >= MIN_CUT_MESSAGE_CHARS && tail.length < failure.length && failure.startsWith(tail);
+    return entries.some((start) => {
+      const end = start + failure.length;
+      return list.startsWith(failure, start) && (end === list.length || list[end] === '\n');
     });
   };
 }

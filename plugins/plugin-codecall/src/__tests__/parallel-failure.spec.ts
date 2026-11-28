@@ -18,12 +18,25 @@ describe('parallelFailuresOf', () => {
     expect(listed?.('')).toBe(false);
   });
 
-  it('finds the last failure it lists cut short at the size limit, but not a start too short to tell', () => {
-    const failure = 'Invalid tool input: the order id must start with o and hold 8 digits';
-    const cut = parallelFailuresOf(`2 of 2 parallel operations failed:\nfirst\n${failure.slice(0, 40)}`);
-    const tooShort = parallelFailuresOf(`2 of 2 parallel operations failed:\nfirst\n${failure.slice(0, 10)}`);
+  it('finds a failure only by its whole message, not one that starts or ends another listed one', () => {
+    const listed = parallelFailuresOf(
+      '2 of 3 parallel operations failed:\nReview denied the call to orders.void: not allowed\n[2]: Locked: try later',
+    );
 
-    expect(cut?.(failure)).toBe(true);
-    expect(tooShort?.(failure)).toBe(false);
+    expect(listed?.('Review denied the call to orders.void: no')).toBe(false);
+    expect(listed?.('Review denied the call to orders.void: not allowed here')).toBe(false);
+    expect(listed?.('try later')).toBe(false);
+    expect(listed?.('Review denied the call to orders.void: not allowed')).toBe(true);
+    expect(listed?.('Locked: try later')).toBe(true);
+  });
+
+  it('does not find a message the sandbox cut at its size limit, which it leaves unmarked', () => {
+    const failure = 'Invalid tool input: the order id must start with o and hold 8 digits';
+    const cut = parallelFailuresOf(
+      `3 of 3 parallel operations failed:\nfirst\n${failure.slice(0, 40)}\n(1 more not shown)`,
+    );
+
+    expect(cut?.(failure)).toBe(false);
+    expect(cut?.('first')).toBe(true);
   });
 });
