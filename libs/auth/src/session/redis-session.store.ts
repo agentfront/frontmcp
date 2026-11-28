@@ -1,7 +1,7 @@
 // auth/session/redis-session.store.ts
 import type { Redis } from 'ioredis';
 
-import { randomUUID, RedisStorageAdapter } from '@frontmcp/utils';
+import { randomUUID, redisAdapterOptionsOf, RedisStorageAdapter, type RedisClientInput } from '@frontmcp/utils';
 
 import type { AuthLogger } from '../common/auth-logger.interface';
 import { SessionIdEmptyError } from '../errors/auth-internal.errors';
@@ -50,7 +50,13 @@ export class RedisSessionStore implements SessionStore {
   constructor(
     config:
       | RedisSessionStoreConfig
-      | { redis: Redis; keyPrefix?: string; defaultTtlMs?: number; security?: SessionSecurityConfig },
+      | {
+          /** A client you made: ioredis Redis/Cluster, node-redis client/cluster, or a FrontMcpRedisClient. Never closed here. */
+          redis: Redis | RedisClientInput;
+          keyPrefix?: string;
+          defaultTtlMs?: number;
+          security?: SessionSecurityConfig;
+        },
     logger?: AuthLogger,
   ) {
     // Default TTL of 1 hour for session extension on access
@@ -77,16 +83,14 @@ export class RedisSessionStore implements SessionStore {
       });
       this.externalInstance = true;
     } else {
-      // Create new Redis connection from config
+      // A connection from config: host (as before), url, cluster, or a client you made
       const redisConfig = config as RedisConfig;
+      const connection =
+        redisConfig.host !== undefined && redisConfig.url === undefined && redisConfig.client === undefined
+          ? { ...redisConfig, port: redisConfig.port ?? 6379, db: redisConfig.db ?? 0 }
+          : redisConfig;
       this.storage = new RedisStorageAdapter({
-        config: {
-          host: redisConfig.host,
-          port: redisConfig.port ?? 6379,
-          password: redisConfig.password,
-          db: redisConfig.db ?? 0,
-          tls: redisConfig.tls,
-        },
+        ...redisAdapterOptionsOf(connection),
         keyPrefix: this.keyPrefix,
       });
     }

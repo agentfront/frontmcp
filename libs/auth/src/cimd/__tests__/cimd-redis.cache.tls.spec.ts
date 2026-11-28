@@ -6,9 +6,19 @@ function createCache(redis: Partial<NonNullable<CimdCacheConfig['redis']>>): Red
   return new RedisCimdCache({ redis } as CimdCacheConfig);
 }
 
-/** The ioredis options the cache's storage adapter resolved for its url. */
+const mockConstructed: Array<Record<string, unknown>> = [];
+jest.mock('ioredis', () =>
+  jest.fn().mockImplementation((options: Record<string, unknown>) => {
+    mockConstructed.push(options);
+    return { on: jest.fn(), removeListener: jest.fn() };
+  }),
+);
+
+/** The ioredis options the cache's storage adapter opens its client with for its url. */
 function connectionOptions(cache: RedisCimdCache): Record<string, unknown> | undefined {
-  return (cache as unknown as { redis: { urlOptions?: Record<string, unknown> } }).redis.urlOptions;
+  mockConstructed.length = 0;
+  (cache as unknown as { redis: { newClient(): unknown } }).redis.newClient();
+  return mockConstructed[0];
 }
 
 describe('RedisCimdCache with a url and tls', () => {
