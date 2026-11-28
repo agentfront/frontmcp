@@ -76,14 +76,27 @@ export async function publishRedisMessage(
   const node = await pubsubNodeFor(client, channel);
   const received = Number(await node.publish(channel, message));
   if (received > 0) return received;
+  return countRedisSubscribers(client, channel);
+}
+
+/**
+ * How many connections listen on `channel` (`PUBSUB NUMSUB`). A cluster node counts only the connections
+ * subscribed through it, so a cluster's count adds up every node's. A node that can't answer (failing
+ * over) counts none.
+ */
+export async function countRedisSubscribers(
+  client: Pick<FrontMcpRedisClient, 'pubsub'> & ClusterShape,
+  channel: string,
+): Promise<number> {
+  const nodes: Array<Pick<FrontMcpRedisClient, 'pubsub'>> =
+    isRedisClusterClient(client) && typeof client.nodes === 'function' ? client.nodes('all') : [client];
   const counts = await Promise.all(
-    client.nodes('all').map(async (node) => {
+    nodes.map(async (node) => {
       if (typeof node.pubsub !== 'function') return 0;
       try {
         const reply = (await node.pubsub('NUMSUB', channel)) as unknown[];
         return Number(reply?.[1] ?? 0);
       } catch {
-        // A node that can't answer (failing over) counts none
         return 0;
       }
     }),

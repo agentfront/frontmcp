@@ -29,6 +29,7 @@ export { borrowRedisClient, isBorrowedRedisClient } from './borrow';
 export { NodeRedisClientAdapter } from './node-redis-adapter';
 export type { NodeRedisClientAdapterOptions, NodeRedisLike } from './node-redis-adapter';
 export {
+  countRedisSubscribers,
   deleteRedisKeys,
   getRedisKeys,
   isRedisClusterClient,

@@ -3,6 +3,7 @@
  */
 import { borrowRedisClient, isBorrowedRedisClient } from '../borrow';
 import {
+  countRedisSubscribers,
   deleteRedisKeys,
   getRedisKeys,
   isRedisClusterClient,
@@ -320,5 +321,29 @@ describe('publishRedisMessage', () => {
     await publishRedisMessage(client as never, 'x', 'm');
     await publishRedisMessage(client as never, 'x', 'm');
     expect(masters.filter((m) => m.publish.mock.calls.length === 2)).toHaveLength(1);
+  });
+});
+
+describe('countRedisSubscribers', () => {
+  it('asks a single node how many connections listen on the channel', async () => {
+    const client = { pubsub: jest.fn().mockResolvedValue(['ch', 2]) };
+    await expect(countRedisSubscribers(client, 'ch')).resolves.toBe(2);
+    expect(client.pubsub).toHaveBeenCalledWith('NUMSUB', 'ch');
+  });
+
+  it('adds up the count of every node of a cluster, even when PUBLISH reached one of them', async () => {
+    const all = [
+      { pubsub: jest.fn().mockResolvedValue(['ch', 1]) },
+      { pubsub: jest.fn().mockResolvedValue(['ch', 2]) },
+      { pubsub: jest.fn().mockRejectedValue(new Error('failing over')) },
+      {},
+    ];
+    const client = { isCluster: true, nodes: jest.fn(() => all) };
+    await expect(countRedisSubscribers(client as never, 'ch')).resolves.toBe(3);
+    expect(client.nodes).toHaveBeenCalledWith('all');
+  });
+
+  it('counts none on a client that cannot ask', async () => {
+    await expect(countRedisSubscribers({}, 'ch')).resolves.toBe(0);
   });
 });
