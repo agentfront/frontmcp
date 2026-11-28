@@ -5,8 +5,12 @@
  *   the server (see `compat-handlers.ts`). A method name (the v2 form) still works.
  * - `callTool(params, resultSchema?, options?)` keeps v1's three arguments. v2 takes `(params, options)` and
  *   validates the result itself, so a result schema passed as the second argument is dropped.
+ * - An error a server answered with `-32002` keeps that code. v2 turns a `-32002` whose data names a `uri` into its
+ *   `ResourceNotFoundError`, whose code is `-32602`; v1 kept the server's code.
  */
 import {
+  isJSONRPCErrorResponse,
+  ProtocolErrorCode,
   SdkHttpError,
   Client as V2Client,
   StreamableHTTPClientTransport as V2StreamableHTTPClientTransport,
@@ -18,6 +22,8 @@ import {
   type Transport as ClientTransport,
   type ConnectOptions,
   type Implementation,
+  type JSONRPCErrorResponse,
+  type JSONRPCResponse,
   type RequestOptions,
   type MessageExtraInfo as V2MessageExtraInfo,
 } from '@modelcontextprotocol/client';
@@ -37,6 +43,8 @@ import {
 export type { ClientOptions };
 
 type V2SetHandler = (method: string, ...rest: unknown[]) => void;
+/** v2's map of the handlers waiting for a response, by request id. */
+type ResponseHandlers = Map<number, (response: unknown) => void>;
 
 function isStandardSchema(value: unknown): boolean {
   return typeof value === 'object' && value !== null && '~standard' in value;
@@ -53,6 +61,23 @@ export class Client extends V2Client {
    */
   override connect(transport: ClientTransport | ServerTransport, options?: ConnectOptions): Promise<void> {
     return super.connect(transport as ClientTransport, options);
+  }
+
+  protected override _onresponse(response: JSONRPCResponse | JSONRPCErrorResponse): void {
+    if (isJSONRPCErrorResponse(response) && response.error.code === ProtocolErrorCode.ResourceNotFound) {
+      const handlers = (this as unknown as { _responseHandlers: ResponseHandlers })._responseHandlers;
+      const id = Number(response.id);
+      const handler = handlers.get(id);
+      if (handler) {
+        // v2 settles an error response with a ProtocolError built from it; give it back the server's code
+        handlers.set(id, (error) =>
+          handler(
+            Object.defineProperty(Object(error), 'code', { value: ProtocolErrorCode.ResourceNotFound, writable: true }),
+          ),
+        );
+      }
+    }
+    super._onresponse(response);
   }
 
   protected override buildContext(ctx: BaseContext, transportInfo?: V2MessageExtraInfo): ClientContext {

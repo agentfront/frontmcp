@@ -15,6 +15,7 @@ import {
   ElicitResultSchema,
   InitializeRequestSchema,
   ListToolsRequestSchema,
+  ReadResourceRequestSchema,
   type InitializeResult,
 } from '../index';
 import { StdioServerTransport } from '../node-stdio-server';
@@ -164,5 +165,76 @@ describe('ToolSchema', () => {
     const tool = (properties: Record<string, unknown>) => ({ name: 't', inputSchema: { type: 'object', properties } });
     expect(ToolSchema.safeParse(tool({ a: { type: 'string' } })).success).toBe(true);
     expect(ToolSchema.safeParse(tool({ a: 'string' })).success).toBe(false);
+  });
+});
+
+describe('resource not found', () => {
+  async function readWith(code: number, version?: string) {
+    const server = new Server({ name: 'test', version: '1.0.0' }, { capabilities: { resources: {} } });
+    server.setRequestHandler(ReadResourceRequestSchema, async (request: { params: { uri: string } }) => {
+      throw new McpError(code, `Resource not found: ${request.params.uri}`, { uri: request.params.uri });
+    });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const wire: unknown[] = [];
+    await server.connect(serverTransport);
+    const client = new Client({ name: 'c', version: '1' });
+    await client.connect(clientTransport);
+    const received = clientTransport.onmessage;
+    clientTransport.onmessage = (message, extra) => {
+      wire.push(message);
+      received?.(message, extra);
+    };
+    if (version) (server as unknown as { _negotiatedProtocolVersion: string })._negotiatedProtocolVersion = version;
+    const failure = await client.readResource({ uri: 'notes://missing' }).catch((error: unknown) => error);
+    return { failure: failure as { code: number }, wire: wire as Array<{ error?: { code: number } }> };
+  }
+
+  it('answers -32002 on a 2025-era session, and the client keeps it', async () => {
+    const { failure, wire } = await readWith(-32002);
+    expect(wire[0]?.error?.code).toBe(-32002);
+    expect(failure.code).toBe(-32002);
+  });
+
+  it('leaves -32602 on a 2026-07-28 session, and other invalid params alone', async () => {
+    expect((await readWith(-32002, '2026-07-28')).wire[0]?.error?.code).toBe(-32602);
+    const invalid = await readWith(-32602);
+    expect(invalid.wire[0]?.error?.code).toBe(-32602);
+    expect(invalid.failure.code).toBe(-32602);
+  });
+});
+
+describe('resource not found across connections', () => {
+  const serve = () => {
+    const server = new Server({ name: 'test', version: '1.0.0' }, { capabilities: { resources: {}, tools: {} } });
+    server.setRequestHandler(ReadResourceRequestSchema, async (request: { params: { uri: string } }) => {
+      throw new McpError(-32002, `Resource not found: ${request.params.uri}`, { uri: request.params.uri });
+    });
+    server.setRequestHandler('tools/list', () => {
+      throw 'not an error object';
+    });
+    return server;
+  };
+
+  it('wraps a reused transport once and answers for the server now on it', async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await serve().connect(serverTransport);
+    const second = serve();
+    await second.connect(serverTransport);
+    const client = new Client({ name: 'c', version: '1' });
+    await client.connect(clientTransport);
+
+    await expect(client.readResource({ uri: 'notes://gone' })).rejects.toMatchObject({ code: -32002 });
+    await expect(client.listTools()).rejects.toThrow();
+
+    // Before a version is negotiated the session counts as 2025-era
+    (second as unknown as { _negotiatedProtocolVersion?: string })._negotiatedProtocolVersion = undefined;
+    await expect(client.readResource({ uri: 'notes://gone' })).rejects.toMatchObject({ code: -32002 });
+
+    // A response to a request nobody waits for still goes to v2's own handling
+    const onerror = jest.fn();
+    client.onerror = onerror;
+    await serverTransport.send({ jsonrpc: '2.0', id: 999, error: { code: -32002, message: 'late' } });
+    expect(onerror).toHaveBeenCalled();
+    await client.close();
   });
 });
