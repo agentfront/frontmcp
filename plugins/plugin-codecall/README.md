@@ -80,7 +80,7 @@ the options when your module is imported, and throws a `ZodError` naming a wrong
 | `codecall:status`          | Reads a run's status: how it ended, or that it is paused.     |
 | `codecall:cancel`          | Cancels a paused run.                                         |
 
-Together they take about 18.6 KB of `tools/list` (the JSON of its `tools` array), whatever the number of tools
+Together they take about 18.7 KB of `tools/list` (the JSON of its `tools` array), whatever the number of tools
 CodeCall searches. Their output schemas list each result's fields and keep nested objects (errors, findings,
 approvals, `paused`) loose, so the list stays small; `codecall:resume` lists its answer as an object with a `status`,
 since it answers as `codecall:execute` does.
