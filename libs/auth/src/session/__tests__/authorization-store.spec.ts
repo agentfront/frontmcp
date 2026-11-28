@@ -447,6 +447,11 @@ describe('InMemoryAuthorizationStore', () => {
       );
     });
 
+    it("should keep the client's display name (#1505)", () => {
+      expect(makePendingRecord(store, { clientName: 'ChatGPT' }).clientName).toBe('ChatGPT');
+      expect(makePendingRecord(store).clientName).toBeUndefined();
+    });
+
     it('should set incremental auth fields', () => {
       const record = makePendingRecord(store, {
         isIncremental: true,

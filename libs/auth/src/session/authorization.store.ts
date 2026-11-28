@@ -207,6 +207,12 @@ export interface PendingAuthorizationRecord {
   signinBinding?: string;
   /** How the client authenticates at the token endpoint, from its registration when the authorization started. */
   clientAuthMethod?: string;
+  /**
+   * The name the sign-in and consent pages show for the client, resolved when the authorization started: its CIMD
+   * document's `client_name`, else the `client_name` it registered, else its `client_id`. Self-asserted by the
+   * client, so every page escapes it. Absent on records written before it was kept.
+   */
+  clientName?: string;
 }
 
 /**
@@ -361,6 +367,8 @@ export interface CreatePendingRecordParams {
   /** SHA-256 of the sign-in binding cookie (see `PendingAuthorizationRecord.signinBinding`). */
   signinBinding?: string;
   clientAuthMethod?: string;
+  /** The client's display name (see `PendingAuthorizationRecord.clientName`). */
+  clientName?: string;
 }
 
 /**
@@ -465,6 +473,7 @@ export function buildPendingRecord(params: CreatePendingRecordParams): PendingAu
     authUiCsrf: params.authUiCsrf,
     signinBinding: params.signinBinding,
     clientAuthMethod: params.clientAuthMethod,
+    clientName: params.clientName,
   };
 }
 
