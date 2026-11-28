@@ -27,15 +27,17 @@ const BUDGETS: Array<{ entry: string; label: string; maxBytes: number }> = [
   // MCP stream (#1484, +151 / +151), the closest declared key at any depth (#1486, -13 / -13) and the review fixes on
   // the stack (+99 / +98). Then +102 and +102: the read-only DirectMcpServer.scope getter (#1492). Then +3,945 and
   // +3,952: the redis option's cluster, cluster-seed-node and client forms and the client check they parse with (#1503),
-  // then +665 and +668: the check names the FrontMcpRedisClient methods a client of your own lacks
-  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_352_995 },
-  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_360_230 },
+  // then +665 and +668: the check names the FrontMcpRedisClient methods a client of your own lacks. Then -5,734 and
+  // -5,707: the MCP SDK v2 (#1475), whose browser build validates with @cfworker/json-schema, not Ajv
+  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_347_261 },
+  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_354_523 },
 ];
 
 // +413 bytes, the 1.13.2 batch: producer-backed resource keys (#1354, +241), the client metadata a transparent server
 // publishes (#1360, +166) and the people session store option (#1355, +6). Then +3,991: the redis option's cluster,
-// cluster-seed-node and client forms (#1503), then +1,008: the client check names a custom client's missing methods
-const VITE_INITIAL_CHUNK_MAX_BYTES = 791_117;
+// cluster-seed-node and client forms (#1503), then +1,008: the client check names a custom client's missing methods.
+// Then -5,302: the MCP SDK v2 (#1475)
+const VITE_INITIAL_CHUNK_MAX_BYTES = 785_815;
 
 // What create() never needs: the parser behind @enclave-vm/ast (#885), the MCP client (#886) and server-only code
 const NEVER_BUNDLED: Record<string, RegExp> = {
