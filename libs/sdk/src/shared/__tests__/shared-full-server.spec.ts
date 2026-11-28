@@ -349,6 +349,35 @@ posixOnly('a shared local server that hosts more than MCP', () => {
       await session.attached.catch(() => undefined);
       expect(counts).toEqual({ boots: 1, starts: 0, closes: 1 });
     });
+
+    it('stops only once a spare still booting when the session stopped has shut down', async () => {
+      let finishBoot: () => void = () => undefined;
+      const bootGate = new Promise<void>((resolve) => (finishBoot = resolve));
+      let spareClosed = false;
+      const bootEmbedded = async (): Promise<BootedEmbeddedServer> => {
+        await bootGate;
+        const booted = await bootEmbeddedServer(plainConfig, options('unix'), create);
+        return {
+          start: () => booted.start(),
+          close: async () => {
+            await booted.close();
+            spareClosed = true;
+          },
+        };
+      };
+      const { session } = attach('unix', {
+        spare: true,
+        bootEmbedded,
+        attachBudgetMs: 2_000,
+        spawnServer: () => ({ exitReason: undefined }),
+      });
+
+      const stopped = session.stop();
+      finishBoot();
+      await stopped;
+      expect(spareClosed).toBe(true);
+      await session.attached.catch(() => undefined);
+    });
   });
 });
 
