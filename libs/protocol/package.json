@@ -1,7 +1,7 @@
 {
   "name": "@frontmcp/protocol",
   "version": "1.13.2",
-  "description": "Internal FrontMCP package: the single re-export point for @modelcontextprotocol/sdk types, server, client and transports",
+  "description": "Internal FrontMCP package: the single re-export point for the MCP SDK's types, server, client and transports (@modelcontextprotocol/core, server, client and node)",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
   "keywords": [

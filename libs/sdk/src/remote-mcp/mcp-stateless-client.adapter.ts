@@ -2,8 +2,8 @@
  * Adapter presenting an {@link McpStatelessClient} through the subset of the upstream
  * `Client` API that {@link McpClientService} uses.
  *
- * The remote-proxy is built around `@modelcontextprotocol/sdk`'s `Client`, which
- * cannot speak 2026-07-28 — it opens with `initialize` and assumes a session.
+ * The remote-proxy is built around the MCP SDK's `Client` in its 2025 mode, which
+ * opens with `initialize` and assumes a session.
  * Rather than fork the proxy, this adapter satisfies the nine methods the
  * service actually calls, so a remote server on either revision looks the same
  * to everything downstream.

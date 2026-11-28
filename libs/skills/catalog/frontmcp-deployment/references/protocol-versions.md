@@ -261,7 +261,7 @@ allowed task in a single `MGET`.
 
 ## Connecting as a client
 
-The upstream `@modelcontextprotocol/sdk` client cannot speak this revision:
+FrontMCP's `McpStatelessClient` speaks this revision, including FrontMCP's tasks and events extensions:
 
 ```ts
 import { McpStatelessClient } from '@frontmcp/sdk';

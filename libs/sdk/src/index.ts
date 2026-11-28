@@ -901,9 +901,9 @@ export type {
 
 // MCP protocol 2026-07-28 — client + protocol helpers.
 //
-// Exported because the upstream `@modelcontextprotocol/sdk` client cannot speak
-// this revision, so consumers building a 2026 client (remote proxies, tests,
-// tooling) need FrontMCP's implementation.
+// Exported for consumers building a 2026 client (remote proxies, tests, tooling):
+// FrontMCP's implementation, which also speaks FrontMCP's tasks and events
+// extensions.
 export { McpStatelessClient, McpStatelessError, TASKS_CLIENT_CAPABILITY } from './transport/mcp-20260728';
 export type { McpStatelessClientOptions, McpStatelessInputHandlers } from './transport/mcp-20260728';
 export { validateHeaderParams, buildParamHeaders } from './transport/mcp-20260728';

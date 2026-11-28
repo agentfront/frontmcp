@@ -474,4 +474,4 @@ when a server has been configured to host this skill.
 - [Your First Tool](https://frontmcp.dev/learn/your-first-tool)
 - Domain routers: `frontmcp-development`, `frontmcp-deployment`, `frontmcp-testing`, `frontmcp-config`
 - Core references: `setup-project`, `create-tool`, `create-resource`, `create-provider`, `create-agent`, `configure-auth`, `setup-testing` (each lives under its parent router's `references/` directory, e.g. `frontmcp-development/references/create-tool.md`)
-- Mandatory boundaries: import MCP protocol types and `McpError` from `@frontmcp/protocol` (never directly from `@modelcontextprotocol/sdk`); use `@frontmcp/utils` for crypto and file-system operations.
+- Mandatory boundaries: import MCP protocol types and `McpError` from `@frontmcp/protocol` (never directly from the MCP SDK packages, `@modelcontextprotocol/*`); use `@frontmcp/utils` for crypto and file-system operations.

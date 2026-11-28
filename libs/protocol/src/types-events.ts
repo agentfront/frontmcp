@@ -1,4 +1,4 @@
-/** MCP Events extension (SEP-3415, Draft), which `@modelcontextprotocol/sdk` does not ship yet. */
+/** MCP Events extension (SEP-3415, Draft), which the MCP SDK does not ship yet. */
 import { internalZ as z } from '@frontmcp/lazy-zod';
 
 export const EVENTS_EXTENSION_ID = 'io.modelcontextprotocol/events' as const;

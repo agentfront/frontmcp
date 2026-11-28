@@ -1,8 +1,8 @@
 /**
  * MCP client for protocol revision 2026-07-28.
  *
- * The upstream `@modelcontextprotocol/sdk` client speaks at most `2025-11-25`,
- * so talking to a 2026 server needs its own implementation. It is small on
+ * FrontMCP's own client for 2026 servers. It predates the MCP SDK's support
+ * for the revision, and it speaks FrontMCP's tasks and events extensions. It is small on
  * purpose — the revision is stateless, so there is no session, no handshake and
  * no reconnect logic to manage. What it DOES own is the three behaviours a
  * conforming client must implement:

@@ -1,8 +1,7 @@
 /**
  * Minimal raw client for MCP protocol revision 2026-07-28.
  *
- * The upstream `@modelcontextprotocol/sdk` client tops out at `2025-11-25`, so
- * the conformance suite drives the wire format directly with `fetch`. Keeping
+ * The conformance suite drives the wire format directly with `fetch`. Keeping
  * it raw is deliberate: these tests assert on the exact bytes the server emits
  * (headers, `resultType`, `_meta` keys, SSE framing), which a typed client
  * would normalize away.

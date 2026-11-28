@@ -20,7 +20,7 @@ export function parseByteLimit(limit: number | string | undefined): number {
 
 /**
  * The `maxRequestBodySize` for a `WebStandardStreamableHTTPServerTransport` that reads the request
- * body itself. Since `@modelcontextprotocol/sdk` 1.30.1 that transport refuses a body over 4 MiB
+ * body itself. The MCP SDK's transport refuses a body over 4 MiB (since v1 1.30.1, and in v2)
  * unless told otherwise, so it gets the configured `http.bodyLimit` instead: a limit above 4 MiB
  * keeps working on the web-fetch path, as it does on Express. The transport needs a positive
  * bound, so a limit of 0 becomes 1 byte (the web-fetch handler has refused any body by then).

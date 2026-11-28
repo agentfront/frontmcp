@@ -31,7 +31,7 @@ export type FormattedToolResult =
   | { text?: string[]; images?: Array<{ data: string; mimeType: string }> };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MCP tool shape (matches Tool from @modelcontextprotocol/sdk — avoid direct dep)
+// MCP tool shape (matches the MCP SDK's Tool — avoid direct dep)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface McpToolInfo {

@@ -1,11 +1,11 @@
 /**
  * MCP protocol revision **2026-07-28**.
  *
- * The upstream `@modelcontextprotocol/sdk` (1.30.0 at time of writing) only
- * ships schemas up to `2025-11-25`, so this revision is defined here — inside
- * the single boundary module that owns protocol types — rather than reached for
- * from every call site. When upstream catches up, this file is the only place
- * that has to change.
+ * The MCP SDK v1 shipped schemas only up to `2025-11-25`, so this revision is
+ * defined here — inside the single boundary module that owns protocol types —
+ * rather than reached for from every call site. The SDK v2 has its own types for
+ * it; FrontMCP's 2026-07-28 dispatcher and client use these, so switching to the
+ * SDK's touches only this file.
  *
  * Everything here is ADDITIVE. The 2025-and-earlier types re-exported from
  * `./types` are untouched, because a server must keep serving both eras.

@@ -3,10 +3,11 @@ import { Client } from '@frontmcp/protocol/client';
 
 import { createMcpServer } from '../mcp-server.factory';
 
-type AjvConstructor = new (...args: unknown[]) => unknown;
-
-// The Ajv module the MCP SDK's default JSON Schema validator builds its instance from.
-const ajv: { default: AjvConstructor } = require('ajv');
+// The module the MCP SDK's Ajv validator comes from. The SDK bundles Ajv into it, so the spec counts the
+// validators built rather than the Ajv instances.
+const ajvModule: {
+  AjvJsonSchemaValidator: new (...args: never[]) => object;
+} = require('@modelcontextprotocol/server/validators/ajv');
 
 const info = { name: 'factory-test', version: '1.0.0' };
 const requestedSchema = {
@@ -24,30 +25,25 @@ async function connectElicitingClient(server: McpServer, content: Record<string,
 }
 
 describe('createMcpServer', () => {
-  let ajvConstructed: jest.SpyInstance;
+  let validatorsBuilt: jest.SpyInstance;
 
   beforeEach(() => {
-    const OriginalAjv = ajv.default;
-    ajvConstructed = jest.spyOn(ajv, 'default').mockImplementation(function (...args: unknown[]) {
-      return new OriginalAjv(...args);
+    const Original = ajvModule.AjvJsonSchemaValidator;
+    validatorsBuilt = jest.spyOn(ajvModule, 'AjvJsonSchemaValidator').mockImplementation(function (...args: never[]) {
+      return new Original(...args);
     });
   });
 
-  afterEach(() => ajvConstructed.mockRestore());
+  afterEach(() => validatorsBuilt.mockRestore());
 
-  it('builds no Ajv instance until it validates an elicitation result', async () => {
-    new McpServer(info, { capabilities: {} });
-    expect(ajvConstructed).toHaveBeenCalledTimes(1);
-    ajvConstructed.mockClear();
-
+  it('builds no Ajv validator until it validates an elicitation result, then reuses it', async () => {
     const server = createMcpServer(info, { capabilities: {} });
-    expect(ajvConstructed).not.toHaveBeenCalled();
     const client = await connectElicitingClient(server, { age: 30 });
-    ajvConstructed.mockClear();
+    expect(validatorsBuilt).not.toHaveBeenCalled();
 
     await server.elicitInput({ message: 'Age?', requestedSchema });
     await server.elicitInput({ message: 'Age?', requestedSchema });
-    expect(ajvConstructed).toHaveBeenCalledTimes(1);
+    expect(validatorsBuilt).toHaveBeenCalledTimes(1);
     await client.close();
   });
 
