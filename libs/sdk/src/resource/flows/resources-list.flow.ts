@@ -21,7 +21,7 @@ import { callSurfaceOf, isOfferedOnSurface } from '../../common/availability';
 import { InvalidInputError, InvalidMethodError } from '../../errors';
 import { SEP_2640_META_NAMESPACE } from '../../skill/sep-2640/sep-2640.constants';
 import { filterServableSkills } from '../../skill/skill-filter.helper';
-import { enabledItems, SURFACE_META_KEY, surfaceHash } from '../../surface';
+import { enabledItems, SURFACE_META_KEY, surfaceHash, switchesOf } from '../../surface';
 import { isListedByAuthorities } from '../../surface/entry-authorized';
 
 const inputSchema = z.object({
@@ -202,13 +202,18 @@ export default class ResourcesListFlow extends FlowBase<typeof name> {
     }
   }
 
-  /** Leave out the resources whose `enabled` is off for this request. */
+  /** Leave out the resources whose `enabled` (their own, or the server's for them) is off for this request. */
   @Stage('filterByEnabled')
   async filterByEnabled() {
     const { resources } = this.state.required;
     this.state.set(
       'resources',
-      await enabledItems(resources, ({ resource }) => resource.metadata.enabled, this.tryGetContext(), this.logger),
+      await enabledItems(
+        resources,
+        ({ resource }) => switchesOf(this.scope, 'resources', resource),
+        this.tryGetContext(),
+        this.logger,
+      ),
     );
   }
 

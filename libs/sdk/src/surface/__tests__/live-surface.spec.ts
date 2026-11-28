@@ -1,4 +1,4 @@
-import type { EnabledOption, EnabledSource } from '../../common/metadata/enabled.metadata';
+import type { EnabledOption, EnabledResolver, EnabledSource } from '../../common/metadata/enabled.metadata';
 import { STATELESS_SESSION_ID } from '../../transport/transport.types';
 import { LiveSurface, surfaceHash, type LiveSurfaceScope } from '../live-surface';
 
@@ -22,7 +22,7 @@ class TestSource implements EnabledSource {
 }
 
 class TestRegistry {
-  entries: Array<{ metadata: { enabled?: EnabledOption } }> = [];
+  entries: Array<{ name?: string; isTemplate?: boolean; metadata: { enabled?: EnabledOption } }> = [];
   readonly notifyListChanged = jest.fn(() => this.emit());
   private readonly listeners = new Set<() => void>();
 
@@ -40,8 +40,9 @@ class TestRegistry {
   }
 }
 
-function testScope(connected: (sessionId: string) => boolean = () => true) {
+function testScope(connected: (sessionId: string) => boolean = () => true, enabled?: EnabledResolver) {
   return {
+    metadata: { enabled },
     tools: new TestRegistry(),
     resources: new TestRegistry(),
     prompts: new TestRegistry(),
@@ -193,6 +194,72 @@ describe('LiveSurface', () => {
     });
   });
 
+  describe("the server's enabled", () => {
+    it("gives an entry its own switch and the server's, and asks the server once per entry", () => {
+      const mapped = new TestSource();
+      const resolver = jest.fn<EnabledOption | undefined, Parameters<EnabledResolver>>((entry) =>
+        entry.name === 'mapped' ? mapped : undefined,
+      );
+      const scope = testScope(undefined, resolver);
+      const entry = { name: 'mapped', metadata: { enabled: true } };
+      const other = { name: 'other', metadata: {} };
+      const surface = surfaceOf(scope);
+
+      expect(surface.enabledOf('tools', entry)).toEqual([true, mapped]);
+      expect(surface.enabledOf('tools', entry)).toEqual([true, mapped]);
+      expect(surface.enabledOf('tools', other)).toBeUndefined();
+      expect(resolver).toHaveBeenCalledTimes(2);
+      expect(resolver).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: 'tool', name: 'mapped', fullName: 'mapped' }),
+      );
+    });
+
+    it('tells the server a resource from a resource template, and a prompt', () => {
+      const kinds: string[] = [];
+      const surface = surfaceOf(
+        testScope(undefined, (entry) => {
+          kinds.push(entry.kind);
+          return undefined;
+        }),
+      );
+
+      surface.enabledOf('resources', { name: 'r', metadata: {} });
+      surface.enabledOf('resources', { name: 't', isTemplate: true, metadata: {} });
+      surface.enabledOf('prompts', { name: 'p', metadata: {} });
+
+      expect(kinds).toEqual(['resource', 'resourceTemplate', 'prompt']);
+    });
+
+    it('turns off, and logs, an entry the server fails for or answers with something enabled does not take', () => {
+      const scope = testScope(undefined, (entry) => {
+        if (entry.name === 'throws') throw new Error('no card');
+        return 7 as unknown as boolean;
+      });
+      const surface = surfaceOf(scope);
+
+      expect(surface.enabledOf('tools', { name: 'throws', metadata: {} })).toEqual([undefined, false]);
+      expect(surface.enabledOf('tools', { name: 'seven', metadata: {} })).toEqual([undefined, false]);
+      expect(scope.logger.warn).toHaveBeenCalledWith(expect.stringContaining('no card'));
+      expect(scope.logger.warn).toHaveBeenCalledWith(expect.stringContaining('tool "seven"'));
+    });
+
+    it('announces a change of a source the server maps an entry to', () => {
+      const mapped = new TestSource();
+      const scope = testScope(undefined, () => mapped);
+      scope.prompts.entries = [{ name: 'p', metadata: {} }];
+      const surface = surfaceOf(scope, { windowMs: 50 });
+      surface.start();
+
+      expect(mapped.listeners.size).toBe(1);
+      mapped.flip();
+      jest.advanceTimersByTime(50);
+
+      expect(scope.prompts.notifyListChanged).toHaveBeenCalledTimes(1);
+      surface.stop();
+      expect(mapped.listeners.size).toBe(0);
+    });
+  });
+
   describe('the surface hash and stale lists', () => {
     it('hashes the names a session was shown, in any order', () => {
       expect(surfaceHash(['b', 'a'])).toBe(surfaceHash(['a', 'b']));
@@ -243,6 +310,16 @@ describe('LiveSurface', () => {
       );
       expect(surface.isStale('session-1')).toBe(false);
       surface.stop();
+    });
+
+    it('sends nothing to a session that is not connected here', () => {
+      const scope = testScope((sessionId) => sessionId !== 'on-another-process');
+      const surface = surfaceOf(scope);
+
+      surface.refreshSession('on-another-process');
+      surface.refreshSession(STATELESS_SESSION_ID);
+
+      expect(scope.notifications.sendNotificationToSession).not.toHaveBeenCalled();
     });
 
     it('remembers a bounded number of sessions, dropping the one that listed least recently', () => {

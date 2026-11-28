@@ -35,7 +35,7 @@ import { ResolvedEntries } from '../../flows/resolved-entries';
 import { entryClassHooksJoin } from '../../hooks/entry-class-hooks';
 import { hooksBoundTo } from '../../hooks/hooks.utils';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
-import { assertEntryEnabled } from '../../surface';
+import { assertEntryEnabled, switchesOf } from '../../surface';
 import { appOwnerIdOf } from '../../utils/lineage.utils';
 
 const inputSchema = z.object({
@@ -133,7 +133,8 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
       await loadRemoteAppCapabilities(scope);
       prompt = findPromptForGet(scope.prompts, promptName);
     }
-    if (prompt && (await loadAppOfPlaceholder(scope, prompt))) prompt = findPromptForGet(scope.prompts, promptName);
+    if (prompt && (await loadAppOfPlaceholder(scope, prompt, 'prompts')))
+      prompt = findPromptForGet(scope.prompts, promptName);
     if (!prompt) return undefined;
     resolvedPrompts.remember(rawInput, promptName, prompt);
     return appOwnerIdOf(scope.prompts.lineageOf(prompt) ?? [], prompt.owner);
@@ -284,7 +285,13 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
   @Stage('checkEnabled')
   async checkEnabled() {
     const { prompt } = this.state.required;
-    await assertEntryEnabled('Prompt', prompt.name, prompt.metadata.enabled, this.tryGetContext(), this.logger);
+    await assertEntryEnabled(
+      'Prompt',
+      prompt.name,
+      switchesOf(this.scope, 'prompts', prompt),
+      this.tryGetContext(),
+      this.logger,
+    );
   }
 
   /** A lazy app's prompt that is on and still a placeholder is answered `LAZY_APP_LOAD_FAILED`: its app did not load. */

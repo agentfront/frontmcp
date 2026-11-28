@@ -18,7 +18,7 @@ import { ListPromptsRequestSchema, ListPromptsResultSchema, type Prompt } from '
 import { isPubliclyListed, publicAccessFor } from '../../auth/public-access.utils';
 import { callSurfaceOf, isOfferedOnSurface } from '../../common/availability';
 import { InvalidInputError, InvalidMethodError } from '../../errors';
-import { enabledItems, SURFACE_META_KEY, surfaceHash } from '../../surface';
+import { enabledItems, SURFACE_META_KEY, surfaceHash, switchesOf } from '../../surface';
 import { isListedByAuthorities } from '../../surface/entry-authorized';
 
 const inputSchema = z.object({
@@ -210,13 +210,18 @@ export default class PromptsListFlow extends FlowBase<typeof name> {
     }
   }
 
-  /** Leave out the prompts whose `enabled` is off for this request. */
+  /** Leave out the prompts whose `enabled` (their own, or the server's for them) is off for this request. */
   @Stage('filterByEnabled')
   async filterByEnabled() {
     const { prompts } = this.state.required;
     this.state.set(
       'prompts',
-      await enabledItems(prompts, ({ prompt }) => prompt.metadata.enabled, this.tryGetContext(), this.logger),
+      await enabledItems(
+        prompts,
+        ({ prompt }) => switchesOf(this.scope, 'prompts', prompt),
+        this.tryGetContext(),
+        this.logger,
+      ),
     );
   }
 

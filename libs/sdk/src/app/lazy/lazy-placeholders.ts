@@ -1,9 +1,9 @@
 import type { ScopeEntry } from '../../common/entries/scope.entry';
-import type { EnabledOption } from '../../common/metadata/enabled.metadata';
+import type { ListChangedKind } from '../../common/interfaces/flow.interface';
 import type { FrontMcpContext } from '../../context/frontmcp-context';
 import { FrontMcpContextStorage } from '../../context/frontmcp-context-storage';
 import { LazyAppLoadError } from '../../errors/lazy-app.errors';
-import { isEntryEnabled } from '../../surface/entry-enabled';
+import { isEntryEnabled, switchesOf, type SwitchedEntry } from '../../surface/entry-enabled';
 
 /** What a request needs from the lazy app a placeholder entry stands for. */
 export interface LazyAppLoader {
@@ -27,16 +27,17 @@ export function lazyAppOf(entry: object): LazyAppLoader | undefined {
 }
 
 /**
- * Before a request's flow collects its hooks: import the lazy app `entry` stands for, when the entry is on, so the
- * request runs the app's own entry and the hooks the app adds. Returns whether the app was loaded for it; a failure
- * is answered by the flow's `checkAppLoaded` stage.
+ * Before a request's flow collects its hooks: import the lazy app `entry` (of the `kind` list) stands for, when the
+ * entry is on, so the request runs the app's own entry and the hooks the app adds. Returns whether the app was loaded
+ * for it; a failure is answered by the flow's `checkAppLoaded` stage.
  */
 export async function loadAppOfPlaceholder(
   scope: ScopeEntry,
-  entry: { readonly metadata: { readonly enabled?: EnabledOption } },
+  entry: SwitchedEntry,
+  kind: ListChangedKind,
 ): Promise<boolean> {
   const app = lazyAppOf(entry);
-  if (!app || !(await isEntryEnabled(entry.metadata.enabled, requestContextOf(scope)))) return false;
+  if (!app || !(await isEntryEnabled(switchesOf(scope, kind, entry), requestContextOf(scope)))) return false;
   return app.load().then(
     () => true,
     () => false,

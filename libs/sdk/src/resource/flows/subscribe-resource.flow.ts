@@ -9,7 +9,7 @@ import { AUTHORITIES_NOT_CONFIGURED } from '../../builtin/authorities/authoritie
 import { Flow, FlowBase, FlowHooksOf, type FlowPlan, type FlowRunOptions, type ResourceEntry } from '../../common';
 import { availabilityForCall, callSurfaceOf, entryUnavailableError } from '../../common/availability';
 import { InvalidInputError, InvalidMethodError, ResourceNotFoundError } from '../../errors';
-import { assertEntryEnabled } from '../../surface';
+import { assertEntryEnabled, switchesOf } from '../../surface';
 import { isUIResourceUri } from '../../tool/ui/ui-shared';
 import { mcpRequestSessionId } from '../../transport/mcp-handlers/mcp-surface';
 
@@ -116,7 +116,13 @@ export default class SubscribeResourceFlow extends FlowBase<typeof name> {
     if (availability === 'not-offered') throw new ResourceNotFoundError(uri);
     const entryType = match.instance.isTemplate ? 'ResourceTemplate' : 'Resource';
     if (availability === 'unavailable') throw entryUnavailableError(entryType, uri, availableWhen, surface);
-    await assertEntryEnabled(entryType, uri, match.instance.metadata.enabled, this.tryGetContext(), this.logger);
+    await assertEntryEnabled(
+      entryType,
+      uri,
+      switchesOf(this.scope, 'resources', match.instance),
+      this.tryGetContext(),
+      this.logger,
+    );
     this.state.set('resource', match.instance);
 
     this.logger.verbose('validateResource:done');
