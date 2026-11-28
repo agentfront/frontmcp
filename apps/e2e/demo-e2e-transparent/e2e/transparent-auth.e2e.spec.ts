@@ -225,6 +225,62 @@ describe('Transparent Auth Mode E2E', () => {
     });
   });
 
+  describe('The principal a token speaks for (#1363)', () => {
+    /** What whoami answers for a token with these claims. */
+    async function whoami(sub: string, claims: Record<string, unknown>) {
+      const token = await tokenFactory.createTestToken({ sub, scopes: ['read'], claims });
+      const client = await McpTestClient.create({
+        baseUrl: server.info.baseUrl,
+        transport: 'streamable-http',
+        auth: { token },
+      }).buildAndConnect();
+      try {
+        const result = await client.tools.call('whoami', {});
+        expect(result).toBeSuccessful();
+        return result.json<{ principal: Record<string, unknown>; claims: Record<string, unknown> }>();
+      } finally {
+        await client.disconnect();
+      }
+    }
+
+    it('names a person, with the typed auth_time, azp and client_id', async () => {
+      const answer = await whoami('user-person', {
+        azp: 'demo-e2e-transparent-cli',
+        client_id: 'demo-e2e-transparent-cli',
+        auth_time: 1_800_000_000,
+      });
+
+      expect(answer.principal).toEqual({
+        kind: 'person',
+        sub: 'user-person',
+        clientId: 'demo-e2e-transparent-cli',
+        authTime: 1_800_000_000,
+      });
+      expect(answer.claims).toEqual({
+        auth_time: 1_800_000_000,
+        azp: 'demo-e2e-transparent-cli',
+        client_id: 'demo-e2e-transparent-cli',
+      });
+    });
+
+    it('names a machine for a client-credentials token, and for one whose subject is its client', async () => {
+      const auth0 = await whoami('reports@clients', { gty: 'client-credentials', azp: 'reports' });
+      const rfc9068 = await whoami('billing-service', { client_id: 'billing-service' });
+
+      expect(auth0.principal).toMatchObject({ kind: 'machine', grantType: 'client_credentials', clientId: 'reports' });
+      expect(rfc9068.principal).toMatchObject({ kind: 'machine', sub: 'billing-service', clientId: 'billing-service' });
+    });
+
+    it("follows the server's principal resolver for a service account the claims alone call a person", async () => {
+      const answer = await whoami('f81d4fae-7dec', {
+        azp: 'sync-service',
+        preferred_username: 'service-account-sync-service',
+      });
+
+      expect(answer.principal).toMatchObject({ kind: 'machine', sub: 'f81d4fae-7dec', clientId: 'sync-service' });
+    });
+  });
+
   describe('Tool Execution with Auth', () => {
     it('should execute tools with authenticated requests', async () => {
       const token = await tokenFactory.createTestToken({

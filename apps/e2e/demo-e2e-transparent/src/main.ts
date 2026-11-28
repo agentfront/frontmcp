@@ -27,6 +27,9 @@ const expectedAudience = process.env['IDP_EXPECTED_AUDIENCE'] || idpProviderUrl;
     resourceMetadata: { clientId: true, audience: true },
     requiredScopes: [],
     allowAnonymous: false,
+    // A Keycloak-style service account is a machine, though its sub is not its client
+    principal: (claims) =>
+      String(claims['preferred_username'] ?? '').startsWith('service-account-') ? { kind: 'machine' } : undefined,
   },
   transport: {
     protocol: { json: true, legacy: true },
