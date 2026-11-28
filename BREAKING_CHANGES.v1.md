@@ -1314,3 +1314,25 @@ npm install @frontmcp/storage-sqlite better-sqlite3 # the stores run on better-s
 ```
 
 **Codemod available:** no
+
+## BC-061: 1.14: DirectMcpServer.scope is required on the type
+
+**Package:** `@frontmcp/sdk` | **Category:** change | **Severity:** low
+
+`DirectMcpServer.scope`, the read-only `ScopeEntry` a server from `create()` serves, is required on the type; 1.13.2 declared it optional so that test doubles implementing `DirectMcpServer` kept compiling. An object typed as `DirectMcpServer` without one no longer compiles (TS2741). Give a test double a `scope` (a stub such as `{} as unknown as DirectMcpServer['scope']` when the test never reads it), and have a wrapper return its base server's (`get scope() { return base.scope; }`). A double built with a cast (`as unknown as DirectMcpServer`) is unaffected, and `server.scope?.` can become `server.scope.`. `createWrappedServer()` in `@frontmcp/react` now forwards the base server's `scope`; up to 1.13 a wrapped server had none. Every server `create()` returns already had a scope, so nothing changes at runtime for it.
+
+**Before:**
+
+```typescript
+const double: DirectMcpServer = { ready, listTools, callTool, /* ... */ dispose }; // compiled: scope was optional
+server.scope?.events?.listSubscriptions();
+```
+
+**After:**
+
+```typescript
+const double: DirectMcpServer = { ready, listTools, callTool, /* ... */ dispose, scope };
+server.scope.events?.listSubscriptions();
+```
+
+**Codemod available:** no

@@ -79,9 +79,11 @@ connection when the event offers it, else poll, and yields the occurrences a too
 "Subscribing From a Client").
 
 To check what the server holds, read `server.scope`, the read-only `ScopeEntry` the server serves (no cast needed):
-`server.scope?.events?.listSubscriptions()` lists its subscriptions (see `create-event`, "Listing subscriptions"),
-and `server.scope?.events?.outbox` its pending webhook deliveries. It is set on every server `create()` returns, and
-optional on the `DirectMcpServer` type so a test double that implements it keeps compiling.
+`server.scope.events?.listSubscriptions()` lists its subscriptions (see `create-event`, "Listing subscriptions"),
+and `server.scope.events?.outbox` its pending webhook deliveries. It is set on every server `create()` returns, and
+required on the `DirectMcpServer` type, so a test double or wrapper that implements the interface provides one: a
+wrapper returns its base server's (`get scope() { return base.scope; }`), and a double that never reads it can pass a
+stub (`scope: {} as unknown as DirectMcpServer['scope']`). Up to 1.13 it was optional on the type.
 
 ```typescript
 // reportReady is offered by poll and has an onSubscribe, so the server keeps a lease for each poll subscription
@@ -89,10 +91,19 @@ const server = await create({ info: { name: 'reports', version: '1.0.0' }, event
 const client = await server.connect({ session: { id: 'spec', user: { sub: 'ada' } } });
 const subscription = await client.events.subscribe('report.ready', { team: 'ops' });
 
-const listed = (await server.scope?.events?.listSubscriptions('report.ready')) ?? [];
+const listed = (await server.scope.events?.listSubscriptions('report.ready')) ?? [];
 expect(listed).toEqual([expect.objectContaining({ mode: 'poll', arguments: { team: 'ops' } })]);
 await subscription.cancel();
 ```
+
+## Upgrading to 1.14
+
+- **`DirectMcpServer.scope` is required on the type.** 1.13.2 added the read-only getter as optional, so test doubles
+  that implement `DirectMcpServer` kept compiling; in 1.14 an object typed as `DirectMcpServer` without a `scope` is a
+  compile error (`Property 'scope' is missing`). Give a test double a `scope` (a stub when the test never reads it),
+  and have a wrapper return its base server's. A double built with a cast (`{ callTool } as unknown as
+  DirectMcpServer`) still compiles. Code that read `server.scope?.` can drop the `?`. `createWrappedServer()` in
+  `@frontmcp/react` now forwards the base server's `scope`; up to 1.13 the wrapped server had none.
 
 ## Examples
 

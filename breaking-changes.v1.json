@@ -636,5 +636,16 @@
     "new": "npm install @frontmcp/storage-sqlite # no native build; the stores run on node:sqlite\nnpm install @frontmcp/storage-sqlite better-sqlite3 # the stores run on better-sqlite3",
     "migration": "`better-sqlite3` moved from the `optionalDependencies` of `@frontmcp/storage-sqlite` to its `peerDependencies`, marked optional in `peerDependenciesMeta`. Installing the package no longer builds the native module, and the stores open their files with Node's built-in `node:sqlite` by default. An installed `better-sqlite3` is still selected, and `FRONTMCP_SQLITE_DRIVER` (`node:sqlite` or `better-sqlite3`) still chooses; with `better-sqlite3` asked for but missing, opening a store fails with an error that says to install it. Both libraries write the same file, so no data moves. To keep `better-sqlite3`, add it to your own dependencies; code that calls `better-sqlite3`-only methods (`pluck()`, `iterate()`, `backup()`) on `getDatabase()` or `openDatabase()` needs it. `frontmcp install` installs it next to an installed app when the project lists it in `dependencies` or `optionalDependencies` (as optional there), or the build lists it in `build.dependencies.nativeAddons`, so such an app keeps running on it; otherwise the installed app runs on `node:sqlite`.",
     "codemod": "no"
+  },
+  {
+    "id": "BC-061",
+    "title": "1.14: DirectMcpServer.scope is required on the type",
+    "package": "@frontmcp/sdk",
+    "category": "change",
+    "severity": "low",
+    "old": "const double: DirectMcpServer = { ready, listTools, callTool, /* ... */ dispose }; // compiled: scope was optional\nserver.scope?.events?.listSubscriptions();",
+    "new": "const double: DirectMcpServer = { ready, listTools, callTool, /* ... */ dispose, scope };\nserver.scope.events?.listSubscriptions();",
+    "migration": "`DirectMcpServer.scope`, the read-only `ScopeEntry` a server from `create()` serves, is required on the type; 1.13.2 declared it optional so that test doubles implementing `DirectMcpServer` kept compiling. An object typed as `DirectMcpServer` without one no longer compiles (TS2741). Give a test double a `scope` (a stub such as `{} as unknown as DirectMcpServer['scope']` when the test never reads it), and have a wrapper return its base server's (`get scope() { return base.scope; }`). A double built with a cast (`as unknown as DirectMcpServer`) is unaffected, and `server.scope?.` can become `server.scope.`. `createWrappedServer()` in `@frontmcp/react` now forwards the base server's `scope`; up to 1.13 a wrapped server had none. Every server `create()` returns already had a scope, so nothing changes at runtime for it.",
+    "codemod": "no"
   }
 ]
