@@ -188,6 +188,22 @@ describe('cacheScope of anonymous 2026-07-28 results', () => {
     },
   );
 
+  it.each([...RESULTS.slice(0, 4), ['resources/read', { uri: 'status://desk' }] as const])(
+    "%s is private when the server's enabled maps one of its entries to a source",
+    async (method, params) => {
+      const perCaller: EnabledSource = { get: () => true, subscribe: () => () => undefined };
+      const server = await createTestFetchServer(config({}, { enabled: () => perCaller }));
+
+      expect(await cacheScopeOf(server, method, params)).toBe('private');
+    },
+  );
+
+  it.each(RESULTS)("%s stays public when the server's enabled answers only booleans", async (method) => {
+    const server = await createTestFetchServer(config({}, { enabled: (entry) => entry.name !== 'summary' }));
+
+    expect(await cacheScopeOf(server, method)).toBe('public');
+  });
+
   it.each(RESULTS)('%s is private on a server with clients profiles', async (method) => {
     const server = await createTestFetchServer(config({}, { clients: { 'text-agent*': { structured: 'text' } } }));
 

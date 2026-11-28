@@ -22,7 +22,7 @@ import {
 import { annotationsForClient, callerClientProfile, type ClientNameSources } from '../../answer';
 import { callSurfaceOf, isOfferedOnSurface } from '../../common/availability';
 import { InvalidInputError, InvalidMethodError } from '../../errors';
-import { enabledItems, SURFACE_META_KEY, surfaceHash } from '../../surface';
+import { enabledItems, SURFACE_META_KEY, surfaceHash, switchesOf } from '../../surface';
 import { isListedByAuthorities } from '../../surface/entry-authorized';
 
 const inputSchema = z.object({
@@ -193,13 +193,18 @@ export default class ResourceTemplatesListFlow extends FlowBase<typeof name> {
     }
   }
 
-  /** Leave out the resource templates whose `enabled` is off for this request. */
+  /** Leave out the resource templates whose `enabled` (their own, or the server's for them) is off for this request. */
   @Stage('filterByEnabled')
   async filterByEnabled() {
     const { templates } = this.state.required;
     this.state.set(
       'templates',
-      await enabledItems(templates, ({ template }) => template.metadata.enabled, this.tryGetContext(), this.logger),
+      await enabledItems(
+        templates,
+        ({ template }) => switchesOf(this.scope, 'resources', template),
+        this.tryGetContext(),
+        this.logger,
+      ),
     );
   }
 

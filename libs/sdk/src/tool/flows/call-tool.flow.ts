@@ -91,7 +91,7 @@ import { hooksBoundTo } from '../../hooks/hooks.utils';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
 import { type Scope } from '../../scope';
 import { isSkillsOnlyRequest } from '../../skill/skill-mode.utils';
-import { assertEntryEnabled, isEntryEnabled } from '../../surface';
+import { assertEntryEnabled, isEntryEnabled, SURFACE_META_KEY, switchesOf } from '../../surface';
 import { generateTaskId } from '../../task/helpers/task-id';
 import { TaskNotifier } from '../../task/helpers/task-notifier';
 import { TASK_DEFAULTS, toWireShape, type TaskRecord } from '../../task/task.types';
@@ -159,6 +159,13 @@ function isWidgetCall(requestMeta: unknown): boolean {
   return (
     typeof requestMeta === 'object' && requestMeta !== null && Reflect.get(requestMeta, WIDGET_CALL_META_KEY) === true
   );
+}
+
+/** The surface hash a call says it was made from (`_meta['frontmcp/surface']`), when it sends one. */
+function listedSurfaceOf(requestMeta: unknown): string | undefined {
+  if (typeof requestMeta !== 'object' || requestMeta === null) return undefined;
+  const listed = Reflect.get(requestMeta, SURFACE_META_KEY);
+  return typeof listed === 'string' && /^[0-9a-f]{16}$/.test(listed) ? listed : undefined;
 }
 
 const inputSchema = z.object({
@@ -309,7 +316,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       await loadRemoteAppCapabilities(scope);
       tool = lookupTool(scope, toolName);
     }
-    if (tool && (await loadAppOfPlaceholder(scope, tool))) tool = lookupTool(scope, toolName);
+    if (tool && (await loadAppOfPlaceholder(scope, tool, 'tools'))) tool = lookupTool(scope, toolName);
     if (!tool) return undefined;
     resolvedTools.remember(rawInput, toolName, tool);
     return hookOwnerIdOf(scope.tools.lineageOf(tool) ?? [], tool.owner);
@@ -410,16 +417,22 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   }
 
   /**
-   * A client call from a session whose tool list changed since it last listed, to a tool that is not in the current
-   * list (unknown, or `enabled` off): answered `STALE_TOOL_LIST`, and the session is sent `tools/list_changed`.
-   * The task runner's run of a task-augmented call is not checked: the call that created the task was.
+   * A client call to a tool that is not in the current list (unknown, or `enabled` off), made from an older list:
+   * answered `STALE_TOOL_LIST`, and the session is sent `tools/list_changed`. The call is from an older list when it
+   * carries the surface hash of the list it was made from (`_meta['frontmcp/surface']`) and the caller's list now
+   * has another, which any server process can tell; without one, when this process remembers that the session's
+   * tool list changed since it last listed. The task runner's run of a task-augmented call is not checked: the call
+   * that created the task was.
    */
   @Stage('checkSurface')
   async checkSurface() {
     const sessionId = this.state.authInfo?.sessionId;
     const surface = this.scope.surface;
     const callerCtx = this.input.ctx as { taskId?: string } | undefined;
-    if (!surface || !sessionId || callerCtx?.taskId || !this.isClientCall() || !surface.isStale(sessionId)) return;
+    if (callerCtx?.taskId || !this.isClientCall()) return;
+    const listedSurface = listedSurfaceOf(this.input.request.params._meta);
+    const staleHere = Boolean(surface && sessionId && surface.isStale(sessionId));
+    if (listedSurface === undefined && !staleHere) return;
     const { name } = this.state.required.input;
     const tool = resolvedTools.peek(this.rawInput, name) ?? lookupTool(this.scope, name);
     // A tool the client could not call (internal, or not offered on its surface) is answered as one that does not exist
@@ -427,12 +440,31 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       tool !== undefined &&
       resolveToolVisibility(tool.metadata) !== 'internal' &&
       isOfferedOnSurface(tool.metadata.availableWhen, callSurfaceOf(this.input.ctx));
-    if (callable && (await isEntryEnabled(tool.metadata.enabled, this.tryGetContext(), this.logger))) return;
+    if (callable && (await isEntryEnabled(switchesOf(this.scope, 'tools', tool), this.tryGetContext(), this.logger))) {
+      return;
+    }
+    const currentSurface = listedSurface === undefined ? undefined : await this.currentToolSurface();
+    if (currentSurface !== undefined ? currentSurface === listedSurface : !staleHere) return;
     this.logger.verbose(
-      `checkSurface: "${escapeControlCharacters(name)}" is not in the tool list that replaced this session's`,
+      `checkSurface: "${escapeControlCharacters(name)}" is not in the tool list that replaced the caller's`,
     );
-    surface.refreshSession(sessionId);
+    if (sessionId) surface?.refreshSession(sessionId);
     throw new StaleToolListError(name);
+  }
+
+  /** The surface hash of the tool list `tools/list` gives this caller now; undefined when listing fails. */
+  private async currentToolSurface(): Promise<string | undefined> {
+    try {
+      const listing = await this.scope.runFlowForOutput('tools:list-tools', {
+        request: { method: 'tools/list', params: {} },
+        ctx: { ...(this.input.ctx as object), internalCall: true },
+      });
+      const current = listing._meta?.[SURFACE_META_KEY];
+      return typeof current === 'string' ? current : undefined;
+    } catch (error) {
+      this.logger.verbose(`checkSurface: the tool list could not be read to compare surfaces: ${String(error)}`);
+      return undefined;
+    }
   }
 
   @Stage('findTool')
@@ -535,7 +567,13 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   @Stage('checkEnabled')
   async checkEnabled() {
     const { tool } = this.state.required;
-    await assertEntryEnabled('Tool', tool.name, tool.metadata.enabled, this.tryGetContext(), this.logger);
+    await assertEntryEnabled(
+      'Tool',
+      tool.name,
+      switchesOf(this.scope, 'tools', tool),
+      this.tryGetContext(),
+      this.logger,
+    );
   }
 
   /** A lazy app's tool that is on and still a placeholder is answered `LAZY_APP_LOAD_FAILED`: its app did not load. */

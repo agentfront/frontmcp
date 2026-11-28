@@ -10,6 +10,8 @@ export const FrontMcpTokens: RawMetadataShape<FrontMcpMetadata> = {
   instructions: tokenFactory.meta('instructions'),
   instructionsBudget: tokenFactory.meta('instructionsBudget'),
   manifest: tokenFactory.meta('manifest'),
+  // the server's map of entries to their `enabled` switch
+  enabled: tokenFactory.meta('enabled'),
   apps: tokenFactory.meta('apps'),
   http: tokenFactory.meta('http'),
   redis: tokenFactory.meta('redis'),

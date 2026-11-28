@@ -12,6 +12,8 @@ import {
   SURFACE_META_KEY,
   Tool,
   ToolContext,
+  type EnabledEntryRef,
+  type EnabledResolver,
   type EnabledSource,
   type GetPromptResult,
   type ReadResourceResult,
@@ -24,6 +26,20 @@ const reviews = fileSignal('./features.json', 'reviews', {
 });
 
 const always: EnabledSource = { get: async () => true, subscribe: () => () => undefined };
+
+const failsOpen: EnabledSource = { get: () => true, subscribe: () => () => undefined, onError: 'on' };
+
+// @ts-expect-error onError is 'off' or 'on'
+const failsSideways: EnabledSource = { get: () => true, subscribe: () => () => undefined, onError: 'maybe' };
+
+/** One feature map for the server, by kind, name, URI or tags. */
+const features: EnabledResolver = (entry: EnabledEntryRef) => {
+  if (entry.kind === 'tool' && entry.name.startsWith('review_')) return reviews;
+  if (entry.uri?.startsWith('reviews://') || entry.uriTemplate?.startsWith('reviews://')) return failsOpen;
+  return entry.kind === 'prompt' ? true : undefined;
+};
+
+export const unusedSources = [failsSideways];
 
 @Tool({ name: 'review_list', inputSchema: {}, enabled: reviews })
 export class ReviewListTool extends ToolContext {
@@ -78,5 +94,9 @@ export const surfaceKey: 'frontmcp/surface' = SURFACE_META_KEY;
 })
 export class ReviewsApp {}
 
-@FrontMcp({ info: { name: 'reviews', version: '1.0.0' }, apps: [ReviewsApp] })
+@FrontMcp({ info: { name: 'reviews', version: '1.0.0' }, apps: [ReviewsApp], enabled: features })
 export class ReviewsServer {}
+
+// @ts-expect-error the server's enabled is a function of the entry
+@FrontMcp({ info: { name: 'reviews-off', version: '1.0.0' }, apps: [ReviewsApp], enabled: false })
+export class ReviewsOffServer {}

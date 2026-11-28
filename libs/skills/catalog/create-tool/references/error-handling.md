@@ -64,7 +64,7 @@ All from `@frontmcp/sdk`. The two roots: `PublicMcpError` (message reaches the c
 | `UnauthorizedError`     | `'UNAUTHORIZED'` (-32001 JSON-RPC)       | 401  | Missing credentials                                               |
 | `EntryUnavailableError` | `'ENTRY_UNAVAILABLE'` (-32003 JSON-RPC)  | 403  | `availableWhen` mismatch at call time                             |
 | `FeatureOffError`       | `'FEATURE_OFF'` (-32003 JSON-RPC)        | 403  | The tool, resource or prompt's `enabled` is off                   |
-| `StaleToolListError`    | `'STALE_TOOL_LIST'`                      | 409  | A call from a session whose tool list changed since it listed     |
+| `StaleToolListError`    | `'STALE_TOOL_LIST'`                      | 409  | A call to a tool not in the current list, made from an older list |
 | `RateLimitError`        | `'RATE_LIMIT_EXCEEDED'`                  | 429  | Rate-limit fired                                                  |
 | `QuotaExceededError`    | `'QUOTA_EXCEEDED'`                       | 429  | Quota-style limit fired                                           |
 | `PayloadTooLargeError`  | `'PAYLOAD_TOO_LARGE'`                    | 413  | Body limit exceeded                                               |

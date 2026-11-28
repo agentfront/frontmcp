@@ -253,7 +253,8 @@ startup. ...` once; production does not start: `App "billing" is lazy, and no fr
 - **What a lazy app cannot have**: skills, agents, jobs, workflows, channels, events, duties and workers (`@Duty`
   and `@Worker` providers start with the server), its own `auth`, `standalone`, app `ui` defaults, widget tools,
   entries with `authorities`, entries with an
-  `enabled` source of their own (give the lazy app the switch instead), and entries with `featureFlag` or `codecall`
+  `enabled` source of their own (give the lazy app the switch instead, or map them by name with the server's
+  `@FrontMcp({ enabled })`, which needs no import), and entries with `featureFlag` or `codecall`
   metadata (the feature-flag and CodeCall plugins read them from the lists and CodeCall's policy, where a placeholder
   carries only the manifest's fields). Nor hooks that run for more than its own calls: a plugin with
   `scope: 'server'`, a hook with `appliesTo: 'all-apps'`, or a hook on any flow but `tools:call-tool`,

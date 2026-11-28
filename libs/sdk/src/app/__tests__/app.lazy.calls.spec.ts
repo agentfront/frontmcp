@@ -233,6 +233,27 @@ describe('calls to a lazy app', () => {
     expect(textOf(await client.callTool('charge', { customer: 'acme', cents: 1 }))).toContain('FEATURE_OFF');
   });
 
+  it("follows the server's enabled for a lazy app's entries, by name, without importing the app while it is off", async () => {
+    const lazy = billingImport();
+    const feature = switchSource(false);
+    const client = await open(lazy, { enabled: (entry) => (entry.name === 'charge' ? feature : undefined) });
+
+    expect(textOf(await client.listTools())).not.toContain('"charge"');
+    expect(textOf(await client.callTool('charge', { customer: 'acme', cents: 1 }))).toContain(
+      'Turn on billing in the settings.',
+    );
+    expect(lazy).not.toHaveBeenCalled();
+
+    feature.set(true);
+    expect(textOf(await client.listTools())).toContain('"charge"');
+    expect(textOf(await client.callTool('charge', { customer: 'acme', cents: 1 }))).toContain('R-acme');
+    expect(lazy).toHaveBeenCalledTimes(1);
+
+    feature.set(false);
+    expect(textOf(await client.listTools())).not.toContain('"charge"');
+    expect(textOf(await client.callTool('charge', { customer: 'acme', cents: 1 }))).toContain('FEATURE_OFF');
+  });
+
   it('answers a failed import with a typed error and a remedy, and imports again on the next call', async () => {
     const lazy = jest
       .fn<Promise<unknown>, []>()

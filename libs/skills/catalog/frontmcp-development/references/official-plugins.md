@@ -1240,8 +1240,9 @@ Each flag is an `EnabledSource` (`FeatureFlagSource`): the gates ask it, with th
 an entry's `enabled` with `featureFlagSource(adapter, ref, options?)` and give the plugin the same adapter. However
 many entries use an adapter's flags, its SDK client gets one change listener for them. Such an
 entry is filtered and refused by the SDK itself: `FEATURE_OFF` with the remedy `Turn on the feature flag "beta".`
-(where `featureFlag` answers `FEATURE_FLAG_DISABLED`), and a call from a session whose tool list changed since it
-listed answers `STALE_TOOL_LIST` (see `create-tool` → `availability.md`).
+(where `featureFlag` answers `FEATURE_FLAG_DISABLED`), and a call made from an older tool list answers
+`STALE_TOOL_LIST` (see `create-tool` → `availability.md`). To map many entries to flags in one place, return the
+sources from the server's `@FrontMcp({ enabled: (entry) => ... })` instead of setting `enabled` on each entry.
 
 ```typescript
 import FeatureFlagPlugin, { featureFlagSource, UnleashFeatureFlagAdapter } from '@frontmcp/plugin-feature-flags';

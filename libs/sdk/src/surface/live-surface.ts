@@ -1,8 +1,16 @@
 import { sha256Hex } from '@frontmcp/utils';
 
 import type { ListChangedKind } from '../common/interfaces/flow.interface';
-import { isEnabledSource, type EnabledOption, type EnabledSource } from '../common/metadata/enabled.metadata';
+import {
+  isEnabledSource,
+  type EnabledEntryKind,
+  type EnabledEntryRef,
+  type EnabledOption,
+  type EnabledResolver,
+  type EnabledSource,
+} from '../common/metadata/enabled.metadata';
 import { STATELESS_SESSION_ID } from '../transport/transport.types';
+import type { EntrySwitches, SwitchedEntry } from './entry-enabled';
 import { announcesListChangeNow } from './list-change-batch';
 
 /** The `_meta` key of a list result that carries the hash of what the list shows. */
@@ -10,8 +18,18 @@ export const SURFACE_META_KEY = 'frontmcp/surface';
 
 const LIST_KINDS: readonly ListChangedKind[] = ['tools', 'resources', 'prompts'];
 
+/** An entry of a list, as the server's `enabled` resolver is told of it. */
+export interface SurfaceEntry extends SwitchedEntry {
+  readonly name?: string;
+  readonly fullName?: string;
+  readonly uri?: string;
+  readonly uriTemplate?: string;
+  readonly isTemplate?: boolean;
+  readonly owner?: { readonly kind: string; readonly id: string };
+}
+
 interface SurfaceRegistry {
-  listAllInstances(): readonly { readonly metadata: { readonly enabled?: EnabledOption } }[];
+  listAllInstances(): readonly SurfaceEntry[];
   subscribe(options: { immediate?: boolean }, listener: () => void): () => void;
   notifyListChanged(): void;
 }
@@ -26,6 +44,8 @@ export interface LiveSurfaceScope {
     getRegisteredServer(sessionId: string): unknown;
   };
   readonly logger: { warn(message: string): void };
+  /** The server's options; its `enabled` maps entries to their switch. */
+  readonly metadata?: { readonly enabled?: EnabledResolver };
 }
 
 export interface LiveSurfaceOptions {
@@ -37,6 +57,32 @@ export interface LiveSurfaceOptions {
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/** Whether `value` is something `enabled` takes: a boolean or an {@link EnabledSource}. */
+function isEnabledOption(value: unknown): value is EnabledOption {
+  return typeof value === 'boolean' || isEnabledSource(value);
+}
+
+/** The kind the server's `enabled` resolver is told for an entry of the `kind` list. */
+function entryKindOf(kind: ListChangedKind, entry: SurfaceEntry): EnabledEntryKind {
+  if (kind === 'tools') return 'tool';
+  if (kind === 'prompts') return 'prompt';
+  return entry.isTemplate ? 'resourceTemplate' : 'resource';
+}
+
+/** The entry as the server's `enabled` resolver sees it. */
+function entryRefOf(kind: ListChangedKind, entry: SurfaceEntry): EnabledEntryRef {
+  const name = entry.name ?? '';
+  return {
+    kind: entryKindOf(kind, entry),
+    name,
+    fullName: entry.fullName ?? name,
+    ...(entry.uri !== undefined ? { uri: entry.uri } : {}),
+    ...(entry.uriTemplate !== undefined ? { uriTemplate: entry.uriTemplate } : {}),
+    ...(entry.owner ? { owner: { kind: entry.owner.kind, id: entry.owner.id } } : {}),
+    metadata: entry.metadata as Readonly<Record<string, unknown>>,
+  };
 }
 
 /** A short hash of the names a list shows, in any order. */
@@ -60,6 +106,8 @@ export class LiveSurface {
   private toolsVersion = 0;
   /** The tool list version each session last listed, least recently listed first. */
   private readonly listedVersions = new Map<string, number>();
+  /** What the server's `enabled` answered for each entry, asked once per entry. */
+  private readonly serverSwitches = new WeakMap<object, EnabledOption | undefined>();
   private running = false;
 
   constructor(
@@ -108,6 +156,21 @@ export class LiveSurface {
     this.pending.set(kind, timer);
   }
 
+  /**
+   * The switches of an entry of the `kind` list: its own `enabled`, then the one the server's `enabled` maps it to.
+   * The server's is asked once per entry; one that throws or answers something `enabled` does not take is off.
+   */
+  enabledOf(kind: ListChangedKind, entry: SurfaceEntry): EntrySwitches {
+    const own = entry.metadata.enabled;
+    const resolver = this.scope.metadata?.enabled;
+    if (!resolver) return own;
+    if (!this.serverSwitches.has(entry)) {
+      this.serverSwitches.set(entry, this.resolveServerSwitch(resolver, kind, entry));
+    }
+    const server = this.serverSwitches.get(entry);
+    return server === undefined ? own : [own, server];
+  }
+
   /** Remember that `sessionId`, when connected here, was just listed the tools `names`; returns their surface hash. */
   recordToolList(sessionId: string | undefined, names: readonly string[]): string {
     if (this.isConnectedSession(sessionId)) {
@@ -127,9 +190,13 @@ export class LiveSurface {
     return listed !== undefined && listed < this.toolsVersion;
   }
 
-  /** Send `sessionId` a `tools/list_changed`, and answer it as current until the list changes again. */
+  /**
+   * Send `sessionId` a `tools/list_changed` when it is connected here, and answer it as current until the list
+   * changes again. A 2026-07-28 or stateless request, or a session connected to another process, is sent nothing.
+   */
   refreshSession(sessionId: string): void {
     if (this.listedVersions.has(sessionId)) this.listedVersions.set(sessionId, this.toolsVersion);
+    if (!this.isConnectedSession(sessionId)) return;
     this.scope.notifications.sendNotificationToSession(sessionId, 'notifications/tools/list_changed');
   }
 
@@ -143,12 +210,35 @@ export class LiveSurface {
     return this.scope[kind];
   }
 
+  /** What the server's `enabled` maps `entry` to; off, and logged, when it throws or answers something else. */
+  private resolveServerSwitch(
+    resolver: EnabledResolver,
+    kind: ListChangedKind,
+    entry: SurfaceEntry,
+  ): EnabledOption | undefined {
+    const ref = entryRefOf(kind, entry);
+    const label = `${ref.kind} "${ref.uri ?? ref.uriTemplate ?? ref.fullName}"`;
+    try {
+      const answer = resolver(ref);
+      if (answer === undefined || isEnabledOption(answer)) return answer;
+      this.scope.logger.warn(
+        `The server's enabled answered ${label} with something that is neither a boolean nor an EnabledSource, so it is off`,
+      );
+    } catch (error) {
+      this.scope.logger.warn(`The server's enabled failed for ${label}, so it is off: ${messageOf(error)}`);
+    }
+    return false;
+  }
+
   /** Subscribe to the sources the `kind` entries use now, and let go of those no entry uses any more. */
   private followSources(kind: ListChangedKind): void {
     const used = new Set(
       this.registryOf(kind)
         .listAllInstances()
-        .map((entry) => entry.metadata.enabled)
+        .flatMap((entry) => {
+          const switches = this.enabledOf(kind, entry);
+          return Array.isArray(switches) ? switches : [switches];
+        })
         .filter(isEnabledSource),
     );
     const watched = this.sources.get(kind) ?? new Map<EnabledSource, () => void>();

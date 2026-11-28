@@ -38,7 +38,7 @@ import { ResolvedEntries } from '../../flows/resolved-entries';
 import { entryClassHooksJoin } from '../../hooks/entry-class-hooks';
 import { hooksBoundTo } from '../../hooks/hooks.utils';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
-import { assertEntryEnabled } from '../../surface';
+import { assertEntryEnabled, switchesOf } from '../../surface';
 import { isUIResourceUri } from '../../tool/ui/ui-shared';
 import { appOwnerIdOf } from '../../utils/lineage.utils';
 
@@ -132,7 +132,8 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
       await loadRemoteAppCapabilities(scope);
       match = scope.resources.findResourceForUri(uri);
     }
-    if (match && (await loadAppOfPlaceholder(scope, match.instance))) match = scope.resources.findResourceForUri(uri);
+    if (match && (await loadAppOfPlaceholder(scope, match.instance, 'resources')))
+      match = scope.resources.findResourceForUri(uri);
     if (!match) return undefined;
     resolvedResources.remember(rawInput, uri, match);
     return appOwnerIdOf(scope.resources.lineageOf(match.instance) ?? [], match.instance.owner);
@@ -344,7 +345,13 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
     if (!resource) return;
     const entryType = resource.isTemplate ? 'ResourceTemplate' : 'Resource';
     const { uri } = this.state.required.input;
-    await assertEntryEnabled(entryType, uri, resource.metadata.enabled, this.tryGetContext(), this.logger);
+    await assertEntryEnabled(
+      entryType,
+      uri,
+      switchesOf(this.scope, 'resources', resource),
+      this.tryGetContext(),
+      this.logger,
+    );
   }
 
   /** A lazy app's resource that is on and still a placeholder is answered `LAZY_APP_LOAD_FAILED`: its app did not load. */
