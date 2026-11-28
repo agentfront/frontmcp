@@ -2,17 +2,7 @@ import 'reflect-metadata';
 
 import { createGuardManager, type GuardConfig, type GuardManager } from '@frontmcp/guard';
 import { type EventStore } from '@frontmcp/protocol';
-import {
-  createRedisConnection,
-  getEnvFlag,
-  getMachineId,
-  getRuntimeContext,
-  isEdgeRuntime,
-  isRedisConnection,
-  mkdir,
-  redisConnectionOf,
-  type FrontMcpRedisClient,
-} from '@frontmcp/utils';
+import { getEnvFlag, getMachineId, getRuntimeContext, isEdgeRuntime, mkdir } from '@frontmcp/utils';
 
 import AdapterRegistry from '../adapter/adapter.registry';
 import AgentRegistry from '../agent/agent.registry';
@@ -373,9 +363,9 @@ export class Scope extends ScopeEntry {
     if (isDistributed && this.metadata.redis && !this.cliMode && !this.directOnly) {
       const ha = await import('../ha/index.js');
       try {
-        const haRedis = this.createHaRedisClient();
+        const haRedis = this.createHaRedisClient(ha);
         // The relay channel needs its own connection: a subscribed ioredis client runs no other commands.
-        const haSubscriber = this.createHaRedisClient('ha-subscriber');
+        const haSubscriber = this.createHaRedisClient(ha, 'ha-subscriber');
         this.haManager = ha.HaManager.create({
           redis: haRedis as never,
           pubsubPublisher: haRedis as never,
@@ -2274,26 +2264,14 @@ export class Scope extends ScopeEntry {
   }
 
   /**
-   * Build the Redis client shared by the HA manager and the transport bus from `metadata.redis`: a
-   * single node, a cluster, or the app's own client. A client FrontMCP opens reconnects on its own
-   * and has a permanent, rate-limited 'error' listener.
-   *
-   * The subscriber is a connection of its own (a subscribed connection runs no other commands): a
-   * second one from the config, or a `duplicate()` of the app's client, which FrontMCP then owns.
+   * Build the Redis client shared by the HA manager and the transport bus from `metadata.redis` (a
+   * single node, a cluster, or the app's own client), or its subscriber; see `createHaRedisClient`.
    */
-  private createHaRedisClient(label: 'ha' | 'ha-subscriber' = 'ha'): FrontMcpRedisClient {
-    const redis = this.metadata.redis;
-    if (!redis || !isRedisConnection(redis)) {
-      throw new Error('Distributed HA requires a TCP Redis (ioredis); Vercel KV over REST has no Lua/pub-sub support');
-    }
-    const connection = redisConnectionOf(redis);
-    let client: FrontMcpRedisClient;
-    if (connection.client !== undefined && label === 'ha-subscriber') {
-      // The app's client is the app's; its copy is ours, to subscribe on and to close
-      client = createRedisConnection({ client: connection.client }).client.duplicate();
-    } else {
-      client = createRedisConnection({ ...connection, label, logger: this.logger }).client;
-    }
+  private createHaRedisClient(
+    ha: Pick<typeof import('../ha/index.js'), 'createHaRedisClient'>,
+    label: 'ha' | 'ha-subscriber' = 'ha',
+  ): NonNullable<typeof this.haRedisClient> {
+    const client = ha.createHaRedisClient(this.metadata.redis, label, this.logger);
     if (label === 'ha-subscriber') this.haSubscriberClient = client;
     else this.haRedisClient = client;
     return client;
