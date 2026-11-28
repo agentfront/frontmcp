@@ -28,9 +28,10 @@ const BUDGETS: Array<{ entry: string; label: string; maxBytes: number }> = [
   // the stack (+99 / +98). Then +102 and +102: the read-only DirectMcpServer.scope getter (#1492). Then +3,945 and
   // +3,952: the redis option's cluster, cluster-seed-node and client forms and the client check they parse with (#1503),
   // then +665 and +668: the check names the FrontMcpRedisClient methods a client of your own lacks. Then +2,358 and
-  // +2,357: the server's enabled map, onError and the surface hash a tools/call sends back (#1352)
-  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_355_353 },
-  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_362_587 },
+  // +2,357: the server's enabled map, onError and the surface hash a tools/call sends back (#1352), then +104 and +104:
+  // no widget tool name completes for a ui://widget/ resource that is off
+  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_355_457 },
+  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_362_691 },
 ];
 
 // +413 bytes, the 1.13.2 batch: producer-backed resource keys (#1354, +241), the client metadata a transparent server
