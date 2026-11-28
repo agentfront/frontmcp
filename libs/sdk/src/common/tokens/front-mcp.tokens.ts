@@ -29,6 +29,7 @@ export const FrontMcpTokens: RawMetadataShape<FrontMcpMetadata> = {
   authProvidersVault: tokenFactory.meta('authProvidersVault'),
   // provider lifecycle hooks (onShutdown timeout)
   lifecycle: tokenFactory.meta('lifecycle'),
+  container: tokenFactory.meta('container'),
   offload: tokenFactory.meta('offload'),
   // development aids (hook trace)
   devtools: tokenFactory.meta('devtools'),

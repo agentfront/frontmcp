@@ -61,6 +61,16 @@ export class ProviderConstructionError extends InternalMcpError {
   }
 }
 
+/** A server was given a container (`@FrontMcp({ container })`) whose `dispose()` was called. */
+export class ContainerDisposedError extends InternalMcpError {
+  constructor() {
+    super(
+      "The container was disposed, so a server can't start on it: create the container again, or start the server without it",
+      'CONTAINER_DISPOSED',
+    );
+  }
+}
+
 /**
  * Thrown when a provider's `onBootstrap()` fails; the server, or `createContainer()`, does not start.
  */

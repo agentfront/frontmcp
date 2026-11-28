@@ -6,6 +6,7 @@ import { AppEntry, FrontMcpLogger, type AppRecord, type LocalAppMetadata } from 
 import { normalizeHooksFromProviders } from '../../hooks/hooks.utils';
 import PluginRegistry, { type PluginScopeInfo } from '../../plugin/plugin.registry';
 import PromptRegistry from '../../prompt/prompt.registry';
+import { borrowProviders } from '../../provider/borrow-providers';
 import ProviderRegistry from '../../provider/provider.registry';
 import ResourceRegistry from '../../resource/resource.registry';
 import SkillRegistry from '../../skill/skill.registry';
@@ -40,7 +41,12 @@ export class AppLocalInstance extends AppEntry<LocalAppMetadata> {
   protected async initialize() {
     this.logger?.verbose(`Initializing app: ${this.metadata.name} (id: ${this.id})`);
 
-    this.appProviders = new ProviderRegistry(this.metadata.providers ?? [], this.scopeProviders);
+    // On a container, the app's own providers it built are used as they are
+    const built = this.scopeProviders.container?.apps.get(this.token);
+    this.appProviders = new ProviderRegistry(
+      borrowProviders(this.metadata.providers ?? [], built, false),
+      this.scopeProviders,
+    );
     await this.appProviders.ready; // wait for providers to be ready
 
     const appOwner = {

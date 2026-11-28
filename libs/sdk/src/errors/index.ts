@@ -206,6 +206,7 @@ export {
   DependencyCycleError,
   ProviderConstructionError,
   ProviderBootstrapError,
+  ContainerDisposedError,
   ProviderDependencyError,
   ProviderScopedAccessError,
   ProviderNotAvailableError,
