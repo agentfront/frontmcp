@@ -180,7 +180,8 @@ describe('borrowRedisClient', () => {
   });
 
   it('leaves a closing method the client lacks undefined', () => {
-    const borrowed = borrowRedisClient({ get() {} }) as { quit?: unknown };
+    const client = { get() {} };
+    const borrowed = borrowRedisClient(client) as { quit?: unknown };
     expect(borrowed.quit).toBeUndefined();
   });
 });
