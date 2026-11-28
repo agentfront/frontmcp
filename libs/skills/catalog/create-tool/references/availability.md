@@ -1,6 +1,6 @@
 ---
 name: availability
-description: availableWhen axes (os / runtime / deployment / provider / target / surface / env), missingAxes, isPlatform, and enabled (fileSignal, FEATURE_OFF, list_changed, the surface hash, STALE_TOOL_LIST).
+description: availableWhen axes (os / runtime / deployment / provider / target / surface / env), missingAxes, isPlatform, and enabled (fileSignal, the server's enabled map, onError, FEATURE_OFF, list_changed, the surface hash, STALE_TOOL_LIST).
 ---
 
 # `availableWhen` — registry-level availability constraints
@@ -126,7 +126,8 @@ class ReviewListTool extends ToolContext {
 ```
 
 - `@Resource`, `@ResourceTemplate` and `@Prompt` take the same `enabled`. Any other value fails at the decorator: `` `enabled` must be a boolean or an EnabledSource ``.
-- An entry that is off is left out of its list (`tools/list`, `resources/list`, `resources/templates/list`, `prompts/list`), and its completers complete nothing. `tools/call` (including `this.callTool()` and a call by an alias), `resources/read`, `resources/subscribe` and `prompts/get` refuse it with `FeatureOffError`: `FEATURE_OFF`, JSON-RPC -32003, `data.status` 403, and the source's remedy (without one, `Ask the server's operator to turn on tool "review_list".`). A source whose `get` throws counts as off.
+- An entry that is off is left out of its list (`tools/list`, `resources/list`, `resources/templates/list`, `prompts/list`), and its completers complete nothing. `tools/call` (including `this.callTool()` and a call by an alias), `resources/read`, `resources/subscribe` and `prompts/get` refuse it with `FeatureOffError`: `FEATURE_OFF`, JSON-RPC -32003, `data.status` 403, and the source's remedy (without one, `Ask the server's operator to turn on tool "review_list".`).
+- A source whose `get` throws counts as off (fail closed), and the failure is logged. Set `onError: 'on'` on the source to keep its entries listed and callable while it fails (fail open); `'off'` is the default.
 - The lists are filtered in each list flow's `filterByEnabled` stage and the refusal is the `checkEnabled` stage, so hooks can wrap both.
 - When a source's listener fires, every connected session gets `notifications/tools/list_changed` (or the resources or prompts one): one per list per 100 ms, however many entries or changes.
 - `fileSignal(path, key, { defaultValue?, pollIntervalMs?, remedy?, logger? })` watches the file's directory and reads the file again every `pollIntervalMs` (default 2000), which is the only check where watching fails. A missing file, or no boolean under `key`, means `defaultValue` (default `false`); content that is not JSON, as a write in progress leaves it, keeps the last value read (`defaultValue` before one was read). Each problem is logged once. A relative `path` is read against the process's working directory. Its default remedy is `Turn on the "reviews" feature, then try again.` Node only.
@@ -146,11 +147,55 @@ A lazy app (`apps: [{ name, lazy: () => import('./billing.app'), enabled }]`) ta
 
 With `@frontmcp/plugin-feature-flags`, `featureFlagSource(adapter, 'beta')` is the `EnabledSource` of a flag. Code that changes what a list shows some other way announces it the same coalesced way with `scope.surface?.listChanged('tools')`.
 
+### One map for the server: `@FrontMcp({ enabled })`
+
+A server whose features are kept in config maps its entries to their switch in one place, instead of on each decorator. The server's `enabled` is a function of the entry that returns its switch (a boolean or an `EnabledSource`), or `undefined` to leave the entry to its own `enabled`:
+
+```typescript
+import { fileSignal, FrontMcp, type EnabledEntryRef } from '@frontmcp/sdk';
+
+const cards = { billing: fileSignal('./features.json', 'billing'), reports: fileSignal('./features.json', 'reports') };
+
+@FrontMcp({
+  info: { name: 'desk', version: '1.0.0' },
+  apps: [BillingApp, ReportsApp],
+  enabled: (entry: EnabledEntryRef) => {
+    if (entry.kind === 'tool' && entry.name.startsWith('invoice_')) return cards.billing;
+    if (entry.uri?.startsWith('reports://') || entry.uriTemplate?.startsWith('reports://')) return cards.reports;
+    return undefined;
+  },
+})
+class Server {}
+```
+
+- The entry it is given (`EnabledEntryRef`): `kind` (`'tool'`, `'resource'`, `'resourceTemplate'` or `'prompt'`), `name`, `fullName` (its app's id first), `uri` (a resource), `uriTemplate` (a template), `owner` (`{ kind, id }` of its app, plugin, adapter or agent) and its `metadata` (`tags`, `annotations`, ...).
+- It is asked once per entry, when the server starts or the entry is added, so it should only pick a switch: what the switch answers can change, the mapping cannot.
+- An entry is on only when its own `enabled` and the server's answer are both on. A refusal carries the remedy of the first switch that is off, the entry's own first. Each source it returns is followed like an entry's own: a change sends `list_changed`.
+- An answer that throws, or that is neither a boolean, an `EnabledSource` nor `undefined`, turns the entry off and is logged with the entry's kind and name. A value that is not a function fails at `@FrontMcp`: ``The server's `enabled` must be a function``.
+- With `splitByApp`, each app's server uses it. A lazy app's entries are mapped by name from the manifest, so the server keeps the app unimported while their switch is off, as with the lazy app's own `enabled`.
+- Under 2026-07-28, a list or read that holds an entry the server maps to a source is shaped per caller, so it is answered with `cacheScope: 'private'`, as for an entry's own source.
+
 ### The surface hash and stale tool lists
 
 `tools/list`, `resources/list`, `resources/templates/list` and `prompts/list` carry `_meta['frontmcp/surface']` (`SURFACE_META_KEY`): a 16-character hash of the names (URIs for resources, URI templates for templates) the list shows, the same on every page of a paginated list.
 
-FrontMCP also remembers, for each connected session that listed tools (the last 10 000), whether the tool list changed since. A 2026-07-28 or stateless request has no session to remember. A `tools/call` from such a session to a tool that is not in the current list, unknown or off, is answered with `StaleToolListError` (`STALE_TOOL_LIST`, 409, `To fix: Call tools/list again, then call a tool from the new list.`), and the session is sent `notifications/tools/list_changed`. Its next call gets the usual answer (`FEATURE_OFF`, `TOOL_NOT_FOUND`), so a client that never lists again is not stuck. A session that never listed, the task runner's run of a task-augmented call, and in-process `this.callTool()` are never answered `STALE_TOOL_LIST`.
+A `tools/call` to a tool that is not in the caller's current list, unknown or off, is answered with `StaleToolListError` (`STALE_TOOL_LIST`, 409, `To fix: Call tools/list again, then call a tool from the new list.`) when it was made from an older list, and a session connected to the process is sent `notifications/tools/list_changed`. The task runner's run of a task-augmented call and in-process `this.callTool()` are never answered `STALE_TOOL_LIST`. A call is from an older list in either of two ways:
+
+- **It sends the list's hash back.** A call whose `params._meta['frontmcp/surface']` is the surface hash of the `tools/list` it was made from is from an older list when the caller's list has another hash now. Any server process can tell, so this works behind a load balancer, for a session that listed on another process, and for 2026-07-28 and stateless requests, which have no session. A call that sends the current hash gets the usual answer (`FEATURE_OFF`, `TOOL_NOT_FOUND`), and a value that is not a 16-character hex hash is ignored. A client sending the hash back gets `STALE_TOOL_LIST` until it calls from the new list.
+- **The process remembers the session.** Without a hash, FrontMCP remembers, for each session connected to this process that listed tools there (the last 10 000), whether the tool list changed since. Such a session's next call gets the usual answer, so a client that never lists again is not stuck. A session that never listed on this process, and a 2026-07-28 or stateless request, are never found stale this way.
+
+```json
+{
+  "method": "tools/call",
+  "params": { "name": "review_list", "arguments": {}, "_meta": { "frontmcp/surface": "3fa9c2d41b07e5a1" } }
+}
+```
+
+### New in 1.14
+
+- `@FrontMcp({ enabled })` maps the server's entries to their switch in one place (see above). An entry's own `enabled` works as before.
+- `onError: 'on'` on an `EnabledSource` keeps its entries on while its `get` throws. Without it a failing source counts as off, as before.
+- A `tools/call` that sends back `_meta['frontmcp/surface']` is checked for a stale list on any process. A call without it is checked as before.
 
 ## See also
 
