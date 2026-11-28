@@ -37,19 +37,23 @@ describe('@frontmcp/testing outside Jest', () => {
   it('runs the mock OAuth server code exchange without --experimental-vm-modules', () => {
     const result = runNode(`
       const { MockOAuthServer, TestTokenFactory } = require(${JSON.stringify(join(dist, 'index.js'))});
+      const { generatePkcePair } = require('@frontmcp/utils');
       (async () => {
         const server = new MockOAuthServer(new TestTokenFactory(), {
           autoApprove: true, testUser: { sub: 'u', email: 'u@example.com', name: 'U' }, clientId: 'c', validRedirectUris: ['http://localhost:1/cb'], accessTokenTtlSeconds: 60,
         });
         const info = await server.start();
+        // The mock requires S256 PKCE by default.
+        const { codeVerifier, codeChallenge } = generatePkcePair();
         const u = new URL(info.baseUrl + '/oauth/authorize');
         u.searchParams.set('client_id', 'c'); u.searchParams.set('redirect_uri', 'http://localhost:1/cb');
         u.searchParams.set('response_type', 'code'); u.searchParams.set('scope', 'a b');
+        u.searchParams.set('code_challenge', codeChallenge); u.searchParams.set('code_challenge_method', 'S256');
         const r = await fetch(u, { redirect: 'manual' });
         const code = new URL(r.headers.get('location')).searchParams.get('code');
         const t = await fetch(info.baseUrl + '/oauth/token', { method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: 'http://localhost:1/cb', client_id: 'c' }) });
+          body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: 'http://localhost:1/cb', client_id: 'c', code_verifier: codeVerifier }) });
         const body = await t.json();
         const payload = JSON.parse(Buffer.from(body.access_token.split('.')[1], 'base64url').toString());
         await server.stop();
@@ -79,14 +83,14 @@ describe('@frontmcp/testing outside Jest', () => {
   });
 
   // #1365: the mock provider from @frontmcp/auth, without @frontmcp/testing, the SDK, SWC or Jest
-  it('runs the mock OAuth server from @frontmcp/auth/testing alone, with strict PKCE', () => {
+  it('runs the mock OAuth server from @frontmcp/auth/testing alone, with strict PKCE by default', () => {
     const authTesting = join(root, 'libs/auth/dist/testing/index.js');
     const result = runNode(`
       const { MockOAuthServer, TestTokenFactory } = require(${JSON.stringify(authTesting)});
       const { generatePkcePair } = require('@frontmcp/utils');
       (async () => {
         const server = new MockOAuthServer(new TestTokenFactory(), {
-          autoApprove: true, testUser: { sub: 'u' }, clientId: 'c', validRedirectUris: ['http://127.0.0.1:1/cb'], pkce: 'strict',
+          autoApprove: true, testUser: { sub: 'u' }, clientId: 'c', validRedirectUris: ['http://127.0.0.1:1/cb'],
         });
         const info = await server.start();
         const authorize = async (extra) => {
