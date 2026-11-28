@@ -21,14 +21,15 @@ describe("the MCP server's JSON Schema validator under ESM", () => {
   it('loads from the same build as the MCP server', () => {
     const loaded = modulesLoadedBy(
       resolve(workspaceRoot, 'libs/sdk/dist/esm/index.mjs'),
-      /\/@modelcontextprotocol\/sdk\/dist\/(esm|cjs)\/(server\/index|validation\/ajv-provider)\.js$/,
+      /\/@modelcontextprotocol\/server\/dist\/(index|validators\/ajv)\.(mjs|cjs)$/,
     );
 
+    // A build is the file extension: `.mjs` for ESM, `.cjs` for CommonJS
     const buildsOf = (module: string) =>
       loaded
-        .filter((url) => url.endsWith(`/${module}`))
-        .map((url) => url.split('/@modelcontextprotocol/sdk/dist/')[1].split('/')[0]);
-    expect(buildsOf('server/index.js')).toHaveLength(1);
-    expect(buildsOf('validation/ajv-provider.js')).toEqual(buildsOf('server/index.js'));
+        .filter((url) => url.includes(`/@modelcontextprotocol/server/dist/${module}.`))
+        .map((url) => url.split('.').pop());
+    expect(buildsOf('index')).toHaveLength(1);
+    expect(buildsOf('validators/ajv')).toEqual(buildsOf('index'));
   });
 });

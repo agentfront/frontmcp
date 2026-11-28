@@ -1,7 +1,8 @@
+// v2 moved the Node.js transport (`IncomingMessage`/`ServerResponse` on top of the web-standard one) to `@modelcontextprotocol/node`
+export { NodeStreamableHTTPServerTransport as StreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 export {
-  StreamableHTTPServerTransport,
+  WebStandardStreamableHTTPServerTransport,
   type EventStore,
   type EventId,
   type StreamId,
-} from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-export { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
+} from '@modelcontextprotocol/server';

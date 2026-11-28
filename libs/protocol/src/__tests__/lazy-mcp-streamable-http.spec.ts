@@ -1,4 +1,4 @@
-const NODE_TRANSPORT_MODULE = '@modelcontextprotocol/sdk/server/streamableHttp.js';
+const NODE_TRANSPORT_MODULE = '@modelcontextprotocol/node';
 
 describe('lazy-mcp-streamable-http', () => {
   afterEach(() => {
@@ -8,7 +8,7 @@ describe('lazy-mcp-streamable-http', () => {
 
   it('loads the Node HTTP transport the first time it is read', () => {
     const loadTransportModule = jest.fn(() => ({
-      StreamableHTTPServerTransport: class StreamableHTTPServerTransport {},
+      NodeStreamableHTTPServerTransport: class StreamableHTTPServerTransport {},
     }));
     jest.doMock(NODE_TRANSPORT_MODULE, loadTransportModule);
 

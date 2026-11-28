@@ -1,7 +1,7 @@
 /**
  * Post-build fix for @frontmcp/protocol ESM output.
  *
- * esbuild converts `export * from '@modelcontextprotocol/sdk/types.js'`
+ * esbuild converts `export * from '@modelcontextprotocol/core'` (the MCP schemas)
  * into a runtime __reExport() helper, but that doesn't create static ESM
  * named exports. ESM consumers (e.g. `import { AudioContentSchema }`)
  * fail because the names aren't in the static export list.
@@ -19,10 +19,11 @@ if (!fs.existsSync(esmIndex)) {
   process.exit(1);
 }
 
-const reexport = '\nexport * from "@modelcontextprotocol/sdk/types.js";\n';
+const statement = 'export * from "@modelcontextprotocol/core";';
+const reexport = `\n${statement}\n`;
 const content = fs.readFileSync(esmIndex, 'utf8');
 
-if (content.includes('export * from "@modelcontextprotocol/sdk/types.js"')) {
+if (content.includes(statement)) {
   console.log('✅ ESM re-export already present, skipping.');
   process.exit(0);
 }

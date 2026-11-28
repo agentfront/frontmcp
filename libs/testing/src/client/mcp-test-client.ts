@@ -111,7 +111,8 @@ function initializeResultFrom(discovered: DiscoverResult): InitializeResult {
   const serverInfo = discovered._meta?.[MCP_20260728_META.serverInfo] ?? { name: '', version: '' };
   return {
     protocolVersion: PROTOCOL_2026_07_28,
-    capabilities: discovered.capabilities,
+    // MCP SDK v2 types capability values as JSON objects; FrontMCP's 2026-07-28 capabilities use plain records
+    capabilities: discovered.capabilities as InitializeResult['capabilities'],
     serverInfo,
     ...(discovered.instructions !== undefined && { instructions: discovered.instructions }),
   };

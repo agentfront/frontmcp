@@ -26,7 +26,7 @@ describe('the MCP client of the SDK under ESM', () => {
 
     expect(beforeConnect).toEqual([]);
     expect(afterConnect).toEqual(
-      expect.arrayContaining([expect.stringMatching(/@modelcontextprotocol\/sdk\/dist\/esm\/client\/index\.js$/)]),
+      expect.arrayContaining([expect.stringMatching(/@modelcontextprotocol\/client\/dist\/index\.mjs$/)]),
     );
     expect(result).toMatchObject({ structuredContent: { value: 'Hello, FrontMCP' } });
   });

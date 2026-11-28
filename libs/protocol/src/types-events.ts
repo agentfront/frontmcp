@@ -47,9 +47,10 @@ export const MCP_SUBSCRIPTION_ID_HEADER = 'X-MCP-Subscription-Id' as const;
 export const MCP_WEBHOOK_RECEIVER_WELL_KNOWN_PATH = '/.well-known/mcp-webhook-receiver.json' as const;
 
 /** The settings object of the extension in server capabilities. */
-export interface EventsExtensionSettings {
+// A type, not an interface: v2 types `capabilities.extensions` values as JSON objects, which needs an implicit index signature
+export type EventsExtensionSettings = {
   listChanged?: boolean;
-}
+};
 
 export const EVENT_DELIVERY_MODES = ['poll', 'push', 'webhook'] as const;
 export const EventDeliveryModeSchema = z.enum(EVENT_DELIVERY_MODES);

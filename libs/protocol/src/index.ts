@@ -10,10 +10,18 @@
 // MCP protocol types (environment-agnostic)
 export * from './types';
 
-// MCP protocol revision 2026-07-28 (not yet shipped by @modelcontextprotocol/sdk)
+// MCP protocol revision 2026-07-28: FrontMCP's own types, which keep their names over the v2 SDK's
 export * from './types-20260728';
+export type {
+  DiscoverResult,
+  InputRequest,
+  InputRequests,
+  InputRequiredResult,
+  InputResponses,
+  SubscriptionFilter,
+} from './types-20260728';
 
-// MCP Events extension, SEP-3415 (not yet shipped by @modelcontextprotocol/sdk)
+// MCP Events extension, SEP-3415 (not yet shipped by the MCP SDK)
 export * from './types-events';
 
 // Auth types

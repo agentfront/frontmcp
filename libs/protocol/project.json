@@ -42,7 +42,10 @@
           },
           "external": [
             "@frontmcp/lazy-zod",
-            "@modelcontextprotocol/sdk",
+            "@modelcontextprotocol/client",
+            "@modelcontextprotocol/core",
+            "@modelcontextprotocol/node",
+            "@modelcontextprotocol/server",
             "#mcp-streamable-http",
             "#mcp-server",
             "#server-types",
@@ -90,7 +93,10 @@
           },
           "external": [
             "@frontmcp/lazy-zod",
-            "@modelcontextprotocol/sdk",
+            "@modelcontextprotocol/client",
+            "@modelcontextprotocol/core",
+            "@modelcontextprotocol/node",
+            "@modelcontextprotocol/server",
             "#mcp-streamable-http",
             "#mcp-server",
             "#server-types",

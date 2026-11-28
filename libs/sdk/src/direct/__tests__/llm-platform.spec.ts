@@ -181,7 +181,8 @@ describe('llm-platform', () => {
             inputSchema: {
               type: 'object',
               properties: {
-                simple: 'not-an-object' as unknown as Record<string, unknown>,
+                // MCP SDK v2 types a property schema as a JSON value, so a malformed one needs a cast
+                simple: 'not-an-object' as never,
               },
             },
           },
