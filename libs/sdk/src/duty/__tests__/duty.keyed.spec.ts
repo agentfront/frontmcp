@@ -5,9 +5,10 @@
  */
 import 'reflect-metadata';
 
-import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+
+import { mkdtemp, rm } from '@frontmcp/utils';
 
 import { Duty, LogLevel } from '../../common';
 import { DutyLeaseKeyError } from '../../errors';
@@ -63,8 +64,8 @@ describe('duties with a lease the app names, and a preferred process', () => {
   let previousHome: string | undefined;
   let open: FrontMcpContainer[];
 
-  beforeEach(() => {
-    home = fs.mkdtempSync(path.join(os.tmpdir(), 'sdk-duty-keys-'));
+  beforeEach(async () => {
+    home = await mkdtemp(path.join(os.tmpdir(), 'sdk-duty-keys-'));
     previousHome = process.env['FRONTMCP_HOME'];
     process.env['FRONTMCP_HOME'] = home;
     ran.length = 0;
@@ -78,7 +79,7 @@ describe('duties with a lease the app names, and a preferred process', () => {
     await Promise.all(open.map((opened) => opened.dispose()));
     if (previousHome === undefined) delete process.env['FRONTMCP_HOME'];
     else process.env['FRONTMCP_HOME'] = previousHome;
-    fs.rmSync(home, { recursive: true, force: true });
+    await rm(home, { recursive: true, force: true });
   });
 
   async function processWith(provider: typeof KeepFileDuty | typeof DashboardDuty): Promise<object> {
