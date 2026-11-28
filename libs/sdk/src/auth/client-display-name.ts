@@ -19,6 +19,9 @@ import type { LocalPrimaryAuth } from './instances/instance.local-primary-auth';
 /** The longest client name the pages show, in characters. A longer one ends with `…`. */
 export const CLIENT_NAME_DISPLAY_MAX = 64;
 
+/** What the pages show for a client whose name and `client_id` have nothing visible left. */
+export const UNNAMED_CLIENT = 'Unnamed client';
+
 /** Control characters and line or paragraph separators: shown as a space. */
 const BREAKING_CHARACTERS = /[\p{Cc}\p{Zl}\p{Zp}]/gu;
 
@@ -40,7 +43,8 @@ function forDisplay(name: string): string {
 }
 
 /**
- * The first of `names` with something to show, as the pages show it, else `clientId` as they show it.
+ * The first of `names` with something to show, as the pages show it, else `clientId` as they show it, else
+ * {@link UNNAMED_CLIENT}: an unregistered client's id is whatever the request sent, and is never shown unformatted.
  *
  * @param clientId - the client's `client_id`, the last fallback
  * @param names - candidate names, most trusted first (CIMD `client_name`, then the registered `client_name`)
@@ -50,7 +54,7 @@ export function clientDisplayName(clientId: string, ...names: Array<string | und
     const shown = typeof name === 'string' ? forDisplay(name) : '';
     if (shown) return shown;
   }
-  return forDisplay(clientId) || clientId;
+  return forDisplay(clientId) || UNNAMED_CLIENT;
 }
 
 /**
