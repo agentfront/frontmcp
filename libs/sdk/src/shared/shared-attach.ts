@@ -159,6 +159,8 @@ export function attachSharedSession(options: AttachSharedSessionOptions): Shared
   let embedded: EmbeddedSharedServer | undefined;
   /** The server booting in this process while the session first attaches, with `spare`. */
   let spare: Promise<BootedEmbeddedServer> | undefined;
+  /** The dropped spare's shutdown, which the session's stop waits for. */
+  let spareClosed: Promise<void> | undefined;
   let stopping: Promise<void> | undefined;
   let clientInitialize: JsonRpcFrame | undefined;
   let clientInitialized = false;
@@ -281,8 +283,9 @@ export function attachSharedSession(options: AttachSharedSessionOptions): Shared
   /** Shut the spare down: the session reached the key's server, or stops. A spare that failed to boot is let go. */
   function dropSpare(): void {
     const booting = spare;
+    if (!booting) return;
     spare = undefined;
-    void booting?.then(
+    spareClosed = booting.then(
       (booted) =>
         booted
           .close()
@@ -344,6 +347,7 @@ export function attachSharedSession(options: AttachSharedSessionOptions): Shared
     await upstream?.endSession();
     await upstream?.close();
     await embedded?.close();
+    await spareClosed;
     framer.stop();
   }
 
