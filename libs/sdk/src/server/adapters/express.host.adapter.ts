@@ -4,95 +4,25 @@ import * as http from 'node:http';
 import cors from 'cors';
 import express from 'express';
 
-import {
-  type CorsOptions,
-  type HttpMethod,
-  type ServerRequest,
-  type ServerRequestHandler,
-  type ServerResponse,
-} from '../../common';
-import type { SecurityHeadersOptions, SecurityOptions } from '../../common/types/options/http/interfaces';
+import { type HttpMethod, type ServerRequest, type ServerRequestHandler, type ServerResponse } from '../../common';
 import { PayloadTooLargeError } from '../../errors/mcp.error';
 import { applyMachineIdHeader } from '../../ha/ha-headers';
 import { resolveSecurityHeaders } from '../middleware/csp.middleware';
-import { createHostValidationMiddleware } from '../middleware/host-validation.middleware';
-import {
-  allowedHostsFromEnv,
-  corsAllowedOrigins,
-  deriveAllowedHosts,
-  deriveAllowedOrigins,
-  isLoopbackAddress,
-  shouldEnforceDerivedHosts,
-} from '../security/resolve-allowed-hosts';
-import {
-  assertSafeSocketDirectory,
-  clearStaleSocket,
-  enforceOwnerOnly,
-  hasSocketFileMode,
-  listenOwnerOnly,
-} from '../security/unix-socket-guard';
 import { HostServerAdapter } from './base.host.adapter';
+import {
+  closeHttpServer,
+  DEFAULT_EXPRESS_BODY_LIMIT,
+  isJson,
+  isUrlencoded,
+  listenHttpServer,
+  planHostValidation,
+  SERVER_DRAIN_MS,
+  type ExpressHostAdapterOptions,
+  type HostValidation,
+} from './host-adapter.shared';
 import { keepBodyBytes, utf8JsonParser } from './utf8-json.parser';
 
-const SERVER_DRAIN_MS = 5_000;
-
-/**
- * Default request body size for the Express host. Lifts body-parser's silent
- * 100KB default, which routinely rejected base64-encoded PDFs, DOCXes, and
- * large HTML inputs before they reached MCP tool handlers (issue #410).
- */
-export const DEFAULT_EXPRESS_BODY_LIMIT = '4mb';
-
-/**
- * Options for ExpressHostAdapter.
- */
-export interface ExpressHostAdapterOptions {
-  /**
-   * CORS configuration.
-   * The middleware is installed only when `origin` is set to something other than `false`, so
-   * omitting `cors` — or passing `{}` / `{ origin: false }` — sends no CORS headers at all.
-   */
-  cors?: CorsOptions;
-
-  /** Paths `cors` leaves alone because their flows send public CORS, preflight included (the server card). */
-  publicCorsPaths?: string[];
-
-  /**
-   * Security options for transport hardening.
-   * Includes bind address and DNS rebinding protection.
-   */
-  security?: SecurityOptions;
-
-  /**
-   * Response security headers. `nosniff` and `X-Frame-Options: DENY` are sent by
-   * default; `FRONTMCP_*` env vars fill the rest. See {@link SecurityHeadersOptions}.
-   */
-  securityHeaders?: SecurityHeadersOptions;
-
-  /**
-   * Maximum body size for `express.json()`. Accepts a number of bytes or a
-   * body-parser-compatible string ('4mb', '500kb', etc.). Defaults to '4mb'.
-   */
-  bodyLimit?: number | string;
-
-  /**
-   * Maximum body size for `express.urlencoded()`. Falls back to `bodyLimit`
-   * when omitted.
-   */
-  urlencodedLimit?: number | string;
-
-  /**
-   * Supplemental listener metadata for the default DNS-rebinding allow-list.
-   *
-   * The address and port are NOT read from here — they come from the arguments
-   * `start()` is actually called with, so the allow-list always describes the
-   * listener this process opened. `issuer` names the public host a proxy
-   * presents, which `start()` cannot know.
-   */
-  listen?: {
-    issuer?: string;
-  };
-}
+export { DEFAULT_EXPRESS_BODY_LIMIT, type ExpressHostAdapterOptions } from './host-adapter.shared';
 
 export class ExpressHostAdapter extends HostServerAdapter {
   private app = express();
@@ -100,12 +30,12 @@ export class ExpressHostAdapter extends HostServerAdapter {
   private prepared = false;
   private httpServer?: http.Server;
   /** Active host-validation middleware, or undefined while nothing is enforced. */
-  private hostValidation?: ReturnType<typeof createHostValidationMiddleware>;
+  private hostValidation?: HostValidation;
   /** Builds the derived allow-list, once this process commits to listening. */
   private deriveHostValidation?: (
     portOrSocketPath: number | string,
     bindAddress?: string,
-  ) => ReturnType<typeof createHostValidationMiddleware> | undefined;
+  ) => HostValidation | undefined;
 
   constructor(options?: ExpressHostAdapterOptions) {
     super();
@@ -152,23 +82,6 @@ export class ExpressHostAdapter extends HostServerAdapter {
 
     const jsonLimit = options?.bodyLimit ?? DEFAULT_EXPRESS_BODY_LIMIT;
     const formLimit = options?.urlencodedLimit ?? jsonLimit;
-    // Tolerant Content-Type matching (#473). Some OAuth clients (e.g. the MCP
-    // Inspector token refresh) send a hybrid header such as
-    // `application/json, application/x-www-form-urlencoded`. body-parser's
-    // default `type` matcher can't parse a comma-list, so NEITHER stock parser
-    // fired and `req.body` arrived empty — surfacing as an opaque
-    // "Invalid request body" at /oauth/token. We widen the matchers so:
-    //   - a header that CONTAINS `x-www-form-urlencoded` parses as urlencoded
-    //     (form wins; an actual form body would fail JSON.parse), and
-    //   - a header that CONTAINS `application/json` (and NOT the form type)
-    //     parses as JSON.
-    // Clean single-type headers keep their existing behavior.
-    const headerContains = (req: http.IncomingMessage, needle: string): boolean =>
-      (req.headers['content-type'] ?? '').toLowerCase().includes(needle);
-    const isUrlencoded = (req: http.IncomingMessage): boolean =>
-      headerContains(req, 'application/x-www-form-urlencoded');
-    const isJson = (req: http.IncomingMessage): boolean =>
-      headerContains(req, 'application/json') && !isUrlencoded(req);
     this.app.use(express.urlencoded({ extended: true, limit: formLimit, type: isUrlencoded, verify: keepBodyBytes }));
     this.app.use(utf8JsonParser(jsonLimit));
     this.app.use(express.json({ limit: jsonLimit, type: isJson, verify: keepBodyBytes }));
@@ -218,82 +131,10 @@ export class ExpressHostAdapter extends HostServerAdapter {
    * `FRONTMCP_ALLOWED_HOSTS` env var, or `enabled: false` to turn it off.
    */
   private installHostValidation(options?: ExpressHostAdapterOptions): void {
-    const protection = options?.security?.dnsRebindingProtection;
-    if (protection?.enabled === false) return;
-
-    const allowedOrigins = protection?.allowedOrigins;
-    const explicitHosts = protection?.allowedHosts ?? allowedHostsFromEnv();
-
-    // An EXPLICIT allow-list applies to every deployment shape — this process
-    // did not have to guess it.
-    if (explicitHosts?.length) {
-      this.hostValidation = createHostValidationMiddleware({
-        enabled: true,
-        allowedHosts: explicitHosts,
-        allowedOrigins,
-      });
-    } else {
-      // Configured origins apply before `start()`, which a serverless handler never calls; the derived hosts join them.
-      if (allowedOrigins !== undefined) {
-        this.hostValidation = createHostValidationMiddleware({ enabled: true, allowedOrigins });
-      }
-      // Otherwise the allow-list can only be DERIVED, and that is sound only
-      // when this process owns the listener and therefore knows the address and
-      // port clients reach it on. `start()` says so; a serverless handler
-      // (`getHandler()`) never calls it, and its public hostname is unknowable
-      // here — deriving one there would 403 every real request.
-      this.deriveHostValidation = (portOrSocketPath, bindAddress) => {
-        // A Unix socket has no TCP host at all — the socket's filesystem
-        // permissions are the boundary and clients send an arbitrary
-        // placeholder Host. There is nothing to check and nothing to warn
-        // about: acting on the routable-bind warning below would enforce a TCP
-        // allow-list against that placeholder and reject every request.
-        if (typeof portOrSocketPath === 'string') return undefined;
-
-        // Describe the listener `start()` actually opened. Reading a predicted
-        // address out of the options instead would leave a direct caller —
-        // `new ExpressHostAdapter().start(3000, '127.0.0.1')` — with no port to
-        // derive from, and therefore no protection on exactly the loopback
-        // listener DNS rebinding targets.
-        const derivation = {
-          // `start()` binds `bindAddress ?? '127.0.0.1'`; mirror that exactly.
-          bindAddress: bindAddress ?? '127.0.0.1',
-          port: portOrSocketPath,
-          issuer: options?.listen?.issuer,
-        };
-        if (!shouldEnforceDerivedHosts(derivation)) {
-          // A routable bind with no public name to add: enforcing the derived
-          // list would 403 every request arriving under the deployment's real
-          // hostname. Warn instead — a server reachable from the network is not
-          // the DNS-rebinding target anyway (that attack exists to reach
-          // addresses the attacker otherwise cannot).
-          console.warn(
-            '[frontmcp] DNS-rebinding protection is not enforcing a Host allow-list: the server binds a routable ' +
-              `address (${derivation.bindAddress}) and no allowed hosts are configured. ` +
-              'Set security.dnsRebindingProtection.allowedHosts (or FRONTMCP_ALLOWED_HOSTS) to your public hostname(s).',
-          );
-          return undefined;
-        }
-
-        const allowedHosts = deriveAllowedHosts(derivation);
-        // Nothing to check against means validating would reject everything, so
-        // skip it rather than fail closed on a valid config.
-        if (!allowedHosts.length) return undefined;
-
-        // A page on another site reaches a loopback server under a loopback Host; only its Origin differs.
-        const corsOrigins = corsAllowedOrigins(options?.cors);
-        const derivedOrigins =
-          isLoopbackAddress(derivation.bindAddress) && corsOrigins
-            ? deriveAllowedOrigins({ port: derivation.port, issuer: derivation.issuer, extraOrigins: corsOrigins })
-            : undefined;
-
-        return createHostValidationMiddleware({
-          enabled: true,
-          allowedHosts,
-          allowedOrigins: allowedOrigins ?? derivedOrigins,
-        });
-      };
-    }
+    const plan = planHostValidation(options);
+    if (!plan) return;
+    this.hostValidation = plan.initial;
+    this.deriveHostValidation = plan.derive;
 
     // Installed unconditionally so it keeps its place ahead of the body parsers;
     // it is inert until a rule set exists.
@@ -311,6 +152,15 @@ export class ExpressHostAdapter extends HostServerAdapter {
   private enableDerivedHostValidation(portOrSocketPath: number | string, bindAddress?: string): void {
     if (!this.deriveHostValidation) return;
     this.hostValidation = this.deriveHostValidation(portOrSocketPath, bindAddress) ?? this.hostValidation;
+    this.deriveHostValidation = undefined;
+  }
+
+  /**
+   * @internal Enforce the allow-list the node:http host derived for its listener, which serves the requests it
+   * hands to this app (`NodeHttpHostAdapter`), instead of deriving (and warning) a second time.
+   */
+  adoptHostValidation(validate: HostValidation | undefined): void {
+    this.hostValidation = validate;
     this.deriveHostValidation = undefined;
   }
 
@@ -355,50 +205,14 @@ export class ExpressHostAdapter extends HostServerAdapter {
     this.prepare();
     const server = http.createServer(this.app);
     this.httpServer = server;
-    server.requestTimeout = 0;
-    server.headersTimeout = 0;
-    server.keepAliveTimeout = 75_000;
-
-    if (typeof portOrSocketPath === 'string') {
-      const ownerOnly = hasSocketFileMode();
-      if (ownerOnly) {
-        await assertSafeSocketDirectory(portOrSocketPath);
-        await clearStaleSocket(portOrSocketPath);
-      }
-      this.enableDerivedHostValidation(portOrSocketPath);
-      await new Promise<void>((resolve, reject) => {
-        server.on('error', reject);
-        if (ownerOnly) listenOwnerOnly(server, portOrSocketPath, resolve);
-        else server.listen(portOrSocketPath, resolve);
-      });
-      if (ownerOnly) {
-        try {
-          await enforceOwnerOnly(portOrSocketPath);
-        } catch (error) {
-          await this.stop(0);
-          throw error;
-        }
-      }
-      console.log(`MCP HTTP (Express) on unix://${portOrSocketPath}`);
-    } else {
-      const host = bindAddress ?? '127.0.0.1';
-      await new Promise<void>((resolve, reject) => {
-        server.on('error', reject);
-        server.listen(portOrSocketPath, host, () => {
-          // Derive AFTER binding: `port: 0` means "let the OS choose", and the
-          // allow-list has to name the port clients actually dial. Deriving
-          // from the literal 0 yields port-less loopback names and 403s every
-          // request. The assignment is synchronous inside the `listening`
-          // callback, so it lands before any request is dispatched.
-          const bound = server.address();
-          const boundPort = typeof bound === 'object' && bound ? bound.port : portOrSocketPath;
-          const boundAddress = typeof bound === 'object' && bound ? bound.address : host;
-          this.enableDerivedHostValidation(boundPort, boundAddress);
-          console.log(`MCP HTTP (Express) on ${host}:${boundPort}`);
-          resolve();
-        });
-      });
-    }
+    await listenHttpServer(
+      server,
+      portOrSocketPath,
+      bindAddress,
+      'Express',
+      (boundPortOrSocketPath, boundAddress) => this.enableDerivedHostValidation(boundPortOrSocketPath, boundAddress),
+      () => this.stop(0),
+    );
   }
 
   /**
@@ -409,13 +223,6 @@ export class ExpressHostAdapter extends HostServerAdapter {
     const server = this.httpServer;
     if (!server) return;
     this.httpServer = undefined;
-    const closed = new Promise<void>((resolve) => server.close(() => resolve()));
-    server.closeIdleConnections();
-    const forceClose = setTimeout(() => server.closeAllConnections(), drainMs);
-    try {
-      await closed;
-    } finally {
-      clearTimeout(forceClose);
-    }
+    await closeHttpServer(server, drainMs);
   }
 }

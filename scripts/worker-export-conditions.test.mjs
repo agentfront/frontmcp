@@ -56,6 +56,7 @@ const EXPECT = {
   'libs/sdk': {
     '#sse-transport': 'stub',
     '#express-host': 'stub',
+    '#node-http-host': 'stub',
     '#shared-server': 'stub',
     '#enclave-core': 'stub',
   },

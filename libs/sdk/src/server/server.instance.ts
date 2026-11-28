@@ -16,6 +16,7 @@ import { registerMetricsRoutes, type MetricsService } from '../metrics';
 import { type HostServerAdapter } from './adapters/base.host.adapter';
 import { type UserContentListener } from './adapters/user-content.listener';
 import { resolveHttpCors } from './middleware/cors-env';
+import { sdkHttpHandler } from './sdk-http-handler';
 import { auditSecurityDefaults, logSecurityFindings, resolveBindAddress } from './security/security-audit';
 
 /**
@@ -60,21 +61,31 @@ export class FrontMcpServerInstance extends FrontMcpServer {
       // `server.http.cors` from frontmcp.config reaches the server as FRONTMCP_CORS_* defaults
       const cors = resolveHttpCors(this.config.cors);
       const corsConfig = cors === false ? undefined : (cors ?? DEFAULT_CORS);
-      // Lazy-`require` (not a top-level import) so express — and its module-eval
-      // `require('fs')` — is only loaded when an express host is actually
-      // constructed (a Node server). On a V8 isolate `FrontMcpServerInstance` is
-      // never built (the edge uses `createWebFetchHandler`), so this never runs
-      // and express stays out of the worker's executed code. The `#express-host`
-      // conditional still yields the browser stub under a worker-conditioned build.
-      const { ExpressHostAdapter } = require('#express-host') as typeof import('#express-host');
-      this.host = new ExpressHostAdapter({
+      const hostOptions = {
         ...(corsConfig ? { cors: corsConfig } : {}),
         publicCorsPaths: [serverCardPath({ entryPath: resolveEntryPath(this.config.entryPath), routeBase: '' })],
         ...(this.config.security ? { security: this.config.security } : {}),
         ...(this.config.securityHeaders ? { securityHeaders: this.config.securityHeaders } : {}),
         ...(this.config.bodyLimit !== undefined ? { bodyLimit: this.config.bodyLimit } : {}),
         ...(this.config.urlencodedLimit !== undefined ? { urlencodedLimit: this.config.urlencodedLimit } : {}),
-      });
+      };
+      // The node:http host serves a server whose routes are all FrontMCP's own without loading Express, and
+      // hands everything else to the same Express app as below (#948). It stands in only for an installed
+      // Express it can read, so a server without Express (or cors) fails here, as it always has.
+      const { createNodeHttpHost } = require('#node-http-host') as typeof import('#node-http-host');
+      const nodeHttpHost = createNodeHttpHost(hostOptions);
+      if (nodeHttpHost) {
+        this.host = nodeHttpHost;
+      } else {
+        // Lazy-`require` (not a top-level import) so express — and its module-eval
+        // `require('fs')` — is only loaded when an express host is actually
+        // constructed (a Node server). On a V8 isolate `FrontMcpServerInstance` is
+        // never built (the edge uses `createWebFetchHandler`), so this never runs
+        // and express stays out of the worker's executed code. The `#express-host`
+        // conditional still yields the browser stub under a worker-conditioned build.
+        const { ExpressHostAdapter } = require('#express-host') as typeof import('#express-host');
+        this.host = new ExpressHostAdapter(hostOptions);
+      }
     }
   }
 
@@ -131,9 +142,13 @@ export class FrontMcpServerInstance extends FrontMcpServer {
         // Health explicitly disabled — no routes registered
       } else {
         // Legacy fallback: bare-bones /health endpoint (no health config wired)
-        this.registerRoute('GET', '/health', async (req, res) => {
-          res.status(200).json({ status: 'ok' });
-        });
+        this.registerRoute(
+          'GET',
+          '/health',
+          sdkHttpHandler(async (req, res) => {
+            res.status(200).json({ status: 'ok' });
+          }),
+        );
       }
     }
     if (!this.metricsRouteRegistered) {

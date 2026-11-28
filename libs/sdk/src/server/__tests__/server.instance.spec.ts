@@ -44,6 +44,11 @@ jest.mock('../adapters/express.host.adapter', () => {
   };
 });
 
+// The node:http host stands in for the Express host when it can read the installed Express (#948); these specs
+// cover the Express host, and the last describe the choice between the two.
+const mockCreateNodeHttpHost = jest.fn((_options: unknown): unknown => undefined);
+jest.mock('#node-http-host', () => ({ createNodeHttpHost: (options: unknown) => mockCreateNodeHttpHost(options) }));
+
 let events: string[] = [];
 let hostStopFailure: Error | undefined;
 let userContentStartFailure: Error | undefined;
@@ -376,6 +381,34 @@ describe('FrontMcpServerInstance', () => {
       instance.prepare();
 
       expect(registerSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('the host it runs on (#948)', () => {
+    afterEach(() => {
+      mockCreateNodeHttpHost.mockReset();
+      mockCreateNodeHttpHost.mockImplementation(() => undefined);
+    });
+
+    it('runs on the node:http host when there is one, with the options the Express host would get', () => {
+      const nodeHttpHost = { registerRoute: jest.fn(), registerMiddleware: jest.fn() };
+      mockCreateNodeHttpHost.mockImplementation(() => nodeHttpHost);
+
+      const instance = new FrontMcpServerInstance({ port: 3001, entryPath: '/mcp', bodyLimit: '8mb' } as never);
+
+      expect(instance.host).toBe(nodeHttpHost);
+      expect(capturedAdapterArgs).toEqual([]);
+      expect(mockCreateNodeHttpHost).toHaveBeenCalledWith({
+        publicCorsPaths: ['/mcp/server-card'],
+        bodyLimit: '8mb',
+      });
+    });
+
+    it('runs on the Express host when the node:http host cannot stand in for the installed Express', () => {
+      const instance = new FrontMcpServerInstance({ port: 3001 } as never);
+
+      expect(instance.host.constructor.name).toBe('MockExpressHostAdapter');
+      expect(capturedAdapterArgs).toEqual([mockCreateNodeHttpHost.mock.calls[0][0]]);
     });
   });
 });

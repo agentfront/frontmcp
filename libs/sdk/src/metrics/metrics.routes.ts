@@ -4,6 +4,7 @@
  */
 
 import type { MetricsOptionsInterface } from '../common';
+import { sdkHttpHandler } from '../server/sdk-http-handler';
 import type { MetricsService } from './metrics.service';
 
 /**
@@ -111,25 +112,29 @@ export function registerMetricsRoutes(
 ): void {
   if (config.enabled !== true) return;
 
-  server.registerRoute('GET', metricsPath(config), async (req, res) => {
-    const result = renderMetricsScrape(service, config, readAuthorizationHeader(req.headers));
-    for (const [name, value] of Object.entries(result.headers)) res.setHeader?.(name, value);
+  server.registerRoute(
+    'GET',
+    metricsPath(config),
+    sdkHttpHandler(async (req, res) => {
+      const result = renderMetricsScrape(service, config, readAuthorizationHeader(req.headers));
+      for (const [name, value] of Object.entries(result.headers)) res.setHeader?.(name, value);
 
-    if (result.kind === 'json') {
-      res.status(result.status).json(result.body);
-      return;
-    }
-    if (typeof res.send === 'function') {
-      res.status(result.status);
-      res.send(result.body);
-      return;
-    }
-    // Prometheus scrape format is `text/plain` — wrapping it in JSON
-    // would silently break every scraper. Surface a 500 instead so the
-    // adapter mismatch is visible.
-    res.status(500).json({
-      error: 'internal_error',
-      message: 'Server adapter does not support Prometheus text format. Use `format: "json"` or upgrade the adapter.',
-    });
-  });
+      if (result.kind === 'json') {
+        res.status(result.status).json(result.body);
+        return;
+      }
+      if (typeof res.send === 'function') {
+        res.status(result.status);
+        res.send(result.body);
+        return;
+      }
+      // Prometheus scrape format is `text/plain` — wrapping it in JSON
+      // would silently break every scraper. Surface a 500 instead so the
+      // adapter mismatch is visible.
+      res.status(500).json({
+        error: 'internal_error',
+        message: 'Server adapter does not support Prometheus text format. Use `format: "json"` or upgrade the adapter.',
+      });
+    }),
+  );
 }

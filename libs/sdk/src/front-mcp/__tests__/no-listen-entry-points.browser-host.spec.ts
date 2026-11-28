@@ -4,8 +4,10 @@ import { App, Tool, ToolContext } from '../../common';
 import { connect } from '../../direct';
 import { FrontMcpInstance } from '../front-mcp';
 
-// The browser and worker builds resolve `#express-host` to this stub, whose constructor throws (#747).
+// The browser and worker builds resolve `#express-host` to this stub, whose constructor throws (#747), and
+// `#node-http-host` to one that has no host (#948).
 jest.mock('#express-host', () => jest.requireActual('../../server/adapters/polyfills/browser-express-host'));
+jest.mock('#node-http-host', () => jest.requireActual('../../server/adapters/polyfills/browser-node-http-host'));
 
 @Tool({ name: 'ping', inputSchema: {} })
 class PingTool extends ToolContext {

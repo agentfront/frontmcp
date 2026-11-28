@@ -36,6 +36,11 @@
       "browser": "./src/server/adapters/polyfills/browser-express-host.ts",
       "default": "./src/server/adapters/polyfills/node-express-host.ts"
     },
+    "#node-http-host": {
+      "worker": "./src/server/adapters/polyfills/browser-node-http-host.ts",
+      "browser": "./src/server/adapters/polyfills/browser-node-http-host.ts",
+      "default": "./src/server/adapters/polyfills/node-http-host.ts"
+    },
     "#shared-server": {
       "worker": "./src/shared/browser-shared-server.ts",
       "browser": "./src/shared/browser-shared-server.ts",
