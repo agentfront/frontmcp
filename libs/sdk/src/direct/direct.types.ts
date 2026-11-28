@@ -388,11 +388,11 @@ export interface DirectMcpServer {
   readonly events: EventPublisher;
 
   /**
-   * The scope this server serves, to read its state in a spec without casts: `server.scope?.events?.listSubscriptions()`
-   * lists the event subscriptions it holds. Read-only. Always set on a server `create()` returns; optional so a test
-   * double that implements `DirectMcpServer` keeps compiling.
+   * The scope this server serves, to read its state in a spec without casts: `server.scope.events?.listSubscriptions()`
+   * lists the event subscriptions it holds. Read-only. Required since 1.14 (optional in 1.13.2), so an object that
+   * implements `DirectMcpServer` (a test double, a wrapper) provides one: a wrapper returns its base server's.
    */
-  readonly scope?: ScopeEntry;
+  readonly scope: ScopeEntry;
 
   // ─────────────────────────────────────────────────────────────────
   // Lifecycle

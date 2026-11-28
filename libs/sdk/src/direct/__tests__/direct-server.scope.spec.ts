@@ -37,16 +37,24 @@ describe('DirectMcpServer.scope', () => {
 
   it('is the scope the server serves, with its events', () => {
     expect(server.scope).toBeInstanceOf(ScopeEntry);
-    expect(server.scope?.events?.findByName('report.ready')?.name).toBe('report.ready');
+    expect(server.scope.events?.findByName('report.ready')?.name).toBe('report.ready');
   });
 
   it('shows what the server holds for a subscription a client made, without a cast', async () => {
     const subscription = await client.events.subscribe('report.ready', { team: 'ops' });
 
-    const listed = (await server.scope?.events?.listSubscriptions('report.ready')) ?? [];
+    const listed = (await server.scope.events?.listSubscriptions('report.ready')) ?? [];
     await subscription.cancel();
 
     expect(listed).toEqual([expect.objectContaining({ mode: 'poll', arguments: { team: 'ops' } })]);
+  });
+
+  it('is required on the type, so an object that implements DirectMcpServer provides one (#1513)', () => {
+    type ScopeIsRequired =
+      Partial<Pick<DirectMcpServer, 'scope'>> extends Pick<DirectMcpServer, 'scope'> ? false : true;
+    const required: ScopeIsRequired = true;
+
+    expect(required).toBe(true);
   });
 
   it('is read-only', () => {
