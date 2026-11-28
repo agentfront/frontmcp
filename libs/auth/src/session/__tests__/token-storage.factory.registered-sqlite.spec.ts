@@ -2,13 +2,11 @@ import { registerOptionalModule } from '@frontmcp/utils';
 
 import { createTokenStorageAdapter } from '../token-storage.factory';
 
-jest.mock(
-  '@frontmcp/storage-sqlite',
-  () => {
-    throw new Error('@frontmcp/storage-sqlite was required');
-  },
-  { virtual: true },
-);
+// Mocked by its resolved path, not as a virtual module: a jest worker keeps the module id it resolved for a spec that
+// ran before this one and loaded the real package, and a virtual mock would then not apply here.
+jest.mock('@frontmcp/storage-sqlite', () => {
+  throw new Error('@frontmcp/storage-sqlite was required');
+});
 
 const SQLITE_STORAGE = '@frontmcp/storage-sqlite';
 const REGISTRY = Symbol.for('frontmcp.bundledOptionalModules');
