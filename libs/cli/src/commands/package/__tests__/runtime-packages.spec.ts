@@ -86,6 +86,52 @@ describe('resolveRuntimePackageSpecs', () => {
     expect([...required, ...optional].some((spec) => spec.endsWith('@1.8.0'))).toBe(false);
   });
 
+  it('adds better-sqlite3 when the project depends on it, so the app keeps the native SQLite driver', () => {
+    fs.writeFileSync(
+      path.join(dir, 'package.json'),
+      JSON.stringify({ dependencies: { '@frontmcp/storage-sqlite': '1.14.0', 'better-sqlite3': '^12.10.0' } }),
+    );
+    const { required, optional } = resolveRuntimePackageSpecs(dir);
+    expect(required).toEqual(expect.arrayContaining(['@frontmcp/storage-sqlite@1.14.0', 'better-sqlite3@^12.10.0']));
+    expect(optional).toEqual([]);
+  });
+
+  it('keeps better-sqlite3 declared in optionalDependencies optional', () => {
+    fs.writeFileSync(
+      path.join(dir, 'package.json'),
+      JSON.stringify({ optionalDependencies: { 'better-sqlite3': '^12.10.0' } }),
+    );
+    const { required, optional } = resolveRuntimePackageSpecs(dir);
+    expect(optional).toEqual(['better-sqlite3@^12.10.0']);
+    expect(required.some((spec) => spec.startsWith('better-sqlite3@'))).toBe(false);
+  });
+
+  it('leaves better-sqlite3 out when the project does not depend on it, so the stores run on node:sqlite', () => {
+    fs.writeFileSync(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        dependencies: { '@frontmcp/storage-sqlite': '1.14.0' },
+        devDependencies: { 'better-sqlite3': '^12.10.0' },
+        peerDependencies: { 'better-sqlite3': '^12.10.0' },
+      }),
+    );
+    const { required, optional } = resolveRuntimePackageSpecs(dir);
+    expect([...required, ...optional].some((spec) => spec.startsWith('better-sqlite3@'))).toBe(false);
+  });
+
+  it("leaves a declared better-sqlite3 to the build's nativeAddons, which install it as listed", () => {
+    fs.writeFileSync(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        dependencies: { 'better-sqlite3': '^12.10.0' },
+        optionalDependencies: { '@frontmcp/storage-sqlite': '1.14.0' },
+      }),
+    );
+    const { required, optional } = resolveRuntimePackageSpecs(dir, ['better-sqlite3']);
+    expect([...required, ...optional].some((spec) => spec.startsWith('better-sqlite3@'))).toBe(false);
+    expect(optional).toEqual(['@frontmcp/storage-sqlite@1.14.0']);
+  });
+
   it('lists every optional peer of @frontmcp/sdk and @frontmcp/utils', () => {
     const optionalPeersOf = (packageJsonPath: string): string[] => {
       const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8')) as {

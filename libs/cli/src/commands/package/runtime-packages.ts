@@ -13,6 +13,11 @@
  * installed there too (#679): any optional SDK peer the project declares
  * (`@frontmcp/storage-sqlite`, `@frontmcp/observability`, ...) is installed with
  * the declared range.
+ *
+ * `better-sqlite3`, a native addon, is never bundled. Since 1.14 it is an optional
+ * peer of `@frontmcp/storage-sqlite`, so installing that package no longer brings it:
+ * it is installed when the project depends on it, and the SQLite stores keep running
+ * on it; otherwise they run on `node:sqlite`.
  */
 
 import * as fs from 'fs';
@@ -42,6 +47,12 @@ export const OPTIONAL_RUNTIME_PEERS = [
   'openai',
 ] as const;
 
+/**
+ * Native addons installed when the project lists them in `dependencies` or `optionalDependencies`
+ * (optional in the latter), unless the build's `nativeAddons` already installs them.
+ */
+export const DECLARED_NATIVE_ADDONS = ['better-sqlite3'] as const;
+
 const FALLBACK_RANGES: Record<string, string> = {
   'reflect-metadata': '^0.2.2',
 };
@@ -49,6 +60,8 @@ const FALLBACK_RANGES: Record<string, string> = {
 interface DeclaredRanges {
   ranges: Record<string, string>;
   optional: Set<string>;
+  /** The names in `dependencies` or `optionalDependencies`: what the project needs at runtime. */
+  runtime: Set<string>;
 }
 
 /** Declared ranges by name, with npm's precedence: optionalDependencies > dependencies > dev/peer. */
@@ -59,17 +72,19 @@ function readDeclaredRanges(packageDir: string): DeclaredRanges {
       Record<string, string> | undefined
     >;
     const optionalDependencies = pkg['optionalDependencies'] ?? {};
+    const dependencies = pkg['dependencies'] ?? {};
     return {
       ranges: {
         ...pkg['peerDependencies'],
         ...pkg['devDependencies'],
-        ...pkg['dependencies'],
+        ...dependencies,
         ...optionalDependencies,
       },
       optional: new Set(Object.keys(optionalDependencies)),
+      runtime: new Set([...Object.keys(dependencies), ...Object.keys(optionalDependencies)]),
     };
   } catch {
-    return { ranges: {}, optional: new Set() };
+    return { ranges: {}, optional: new Set(), runtime: new Set() };
   }
 }
 
@@ -100,17 +115,28 @@ export interface RuntimePackageSpecs {
   optional: string[];
 }
 
-/** `name@range` specs for the runtime packages, preferring the versions the project declares. */
-export function resolveRuntimePackageSpecs(packageDir: string): RuntimePackageSpecs {
-  const { ranges, optional } = readDeclaredRanges(packageDir);
+/**
+ * `name@range` specs for the runtime packages, preferring the versions the project declares.
+ *
+ * @param packageDir - The project, whose package.json declares the ranges
+ * @param nativeAddons - The build's `nativeAddons`, which the install adds as listed: a declared native addon among
+ *   them is left out here, so it is installed once
+ */
+export function resolveRuntimePackageSpecs(
+  packageDir: string,
+  nativeAddons: readonly string[] = [],
+): RuntimePackageSpecs {
+  const { ranges, optional, runtime } = readDeclaredRanges(packageDir);
   const required = REQUIRED_PACKAGES.map((name) => {
     const range = ranges[name];
     return `${name}@${range ? normalizeRange(name, range, packageDir) : defaultRange(name)}`;
   });
   const declaredPeers = OPTIONAL_RUNTIME_PEERS.filter((name) => ranges[name]);
+  const declaredAddons = DECLARED_NATIVE_ADDONS.filter((name) => runtime.has(name) && !nativeAddons.includes(name));
+  const declared = [...declaredPeers, ...declaredAddons];
   const specOf = (name: string): string => `${name}@${normalizeRange(name, ranges[name], packageDir)}`;
   return {
-    required: [...required, ...declaredPeers.filter((name) => !optional.has(name)).map(specOf)],
-    optional: declaredPeers.filter((name) => optional.has(name)).map(specOf),
+    required: [...required, ...declared.filter((name) => !optional.has(name)).map(specOf)],
+    optional: declared.filter((name) => optional.has(name)).map(specOf),
   };
 }

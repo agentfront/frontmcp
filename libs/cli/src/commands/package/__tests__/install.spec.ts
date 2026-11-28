@@ -344,6 +344,64 @@ describe('runInstall', () => {
       });
     });
 
+    it('installs better-sqlite3 next to the bundle when the project depends on it', async () => {
+      writePackage({ name: 'demo-app', bundle: 'bundle.js' }, { 'bundle.js': '1;' });
+      fs.writeFileSync(
+        path.join(packageDir, 'package.json'),
+        JSON.stringify({ dependencies: { '@frontmcp/storage-sqlite': '1.14.0', 'better-sqlite3': '^12.10.0' } }),
+        'utf-8',
+      );
+
+      await install();
+
+      const installDir = path.join(appsDir, 'demo-app');
+      expect(runCmd).toHaveBeenCalledWith(
+        'npm',
+        expect.arrayContaining(['@frontmcp/storage-sqlite@1.14.0', 'better-sqlite3@^12.10.0', '--save', '--silent']),
+        { cwd: installDir },
+      );
+    });
+
+    it('installs no better-sqlite3 when neither the project nor the build declares it', async () => {
+      writePackage({ name: 'demo-app', bundle: 'bundle.js' }, { 'bundle.js': '1;' });
+      fs.writeFileSync(
+        path.join(packageDir, 'package.json'),
+        JSON.stringify({ dependencies: { '@frontmcp/storage-sqlite': '1.14.0' } }),
+        'utf-8',
+      );
+
+      await install();
+
+      const installArgs = (runCmd as jest.Mock).mock.calls
+        .filter(([cmd, args]) => cmd === 'npm' && args[0] === 'install')
+        .flatMap(([, args]) => args as string[]);
+      expect(installArgs).toContain('@frontmcp/storage-sqlite@1.14.0');
+      expect(installArgs.some((arg) => arg.startsWith('better-sqlite3'))).toBe(false);
+    });
+
+    it('installs a native addon the build declares as listed, once, when the project depends on it too', async () => {
+      writePackage(
+        {
+          name: 'demo-app',
+          bundle: 'bundle.js',
+          dependencies: { system: [], nativeAddons: ['better-sqlite3'] },
+        },
+        { 'bundle.js': '1;' },
+      );
+      fs.writeFileSync(
+        path.join(packageDir, 'package.json'),
+        JSON.stringify({ dependencies: { 'better-sqlite3': '^12.10.0' } }),
+        'utf-8',
+      );
+
+      await install();
+
+      const installArgs = (runCmd as jest.Mock).mock.calls
+        .filter(([cmd, args]) => cmd === 'npm' && args[0] === 'install')
+        .flatMap(([, args]) => args as string[]);
+      expect(installArgs.filter((arg) => arg.startsWith('better-sqlite3'))).toEqual(['better-sqlite3']);
+    });
+
     it('installs the externalized runtime packages next to the bundle', async () => {
       writePackage({ name: 'demo-app', bundle: 'bundle.js' }, { 'bundle.js': '1;' });
 
