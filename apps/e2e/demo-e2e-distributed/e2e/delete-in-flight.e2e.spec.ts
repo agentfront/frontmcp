@@ -204,17 +204,18 @@ describeIf.each(backends)('A DELETE through another instance, on %s', (_backend,
     it('answers 503 with Retry-After while the holder does not confirm, and 204 once it stopped the call', async () => {
       const [holder, other] = nodes;
       const { sessionId, cookie, settled, question } = await sessionWithWaitingCall(holder, '3.0.0');
-      const pid = holder.info.pid as number;
+      // The process group the spawn shell leads holds the server, whichever process lsof found listening
+      const group = -(holder.info.shellPid as number);
 
       // The holder stops answering, and stays connected to Redis
-      process.kill(pid, 'SIGSTOP');
+      process.kill(group, 'SIGSTOP');
       let unconfirmed: Response;
       try {
         // Distributed: its heartbeat lapsed too, so the DELETE is not relayed to it but sent over the bus
         if (distributed) await redis.client.del(`${HA_KEY_PREFIX}heartbeat:${holder.machineId}`);
         unconfirmed = await deleteSession(other, sessionId);
       } finally {
-        process.kill(pid, 'SIGCONT');
+        process.kill(group, 'SIGCONT');
       }
 
       expect(unconfirmed.status).toBe(503);
