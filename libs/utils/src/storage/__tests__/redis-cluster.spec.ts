@@ -166,3 +166,56 @@ describeCluster('RedisStorageAdapter on a Redis Cluster', () => {
     });
   });
 });
+
+/**
+ * A TLS cluster that announces hostnames, as AWS ElastiCache does with in-transit encryption on:
+ * `REDIS_CLUSTER_TLS_DIR=<dir with ca.crt, redis.crt, redis.key for DNS:localhost>
+ *  REDIS_CLUSTER_ANNOUNCE=localhost REDIS_CLUSTER_PASSWORD=... REDIS_CLUSTER_PORT=7111 scripts/redis-cluster-docker.sh up`,
+ * then REDIS_CLUSTER_TLS_SEED=localhost:7111, REDIS_CLUSTER_TLS_CA=<ca.crt> and REDIS_CLUSTER_TLS_PASSWORD.
+ */
+const TLS_SEED = process.env['REDIS_CLUSTER_TLS_SEED'];
+const TLS_CA = process.env['REDIS_CLUSTER_TLS_CA'];
+const describeTls = TLS_SEED && TLS_CA ? describe : describe.skip;
+
+describeTls('RedisStorageAdapter on a TLS cluster that announces hostnames (ElastiCache)', () => {
+  const [host, port] = (TLS_SEED ?? 'localhost:7111').split(':');
+  const password = process.env['REDIS_CLUSTER_TLS_PASSWORD'];
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const ca = TLS_CA ? (require('node:fs') as typeof import('node:fs')).readFileSync(TLS_CA) : undefined;
+
+  it('connects with cluster: true, tls and the password, keeping the hostname for the certificate', async () => {
+    const adapter = new RedisStorageAdapter({
+      config: {
+        host,
+        port: Number(port),
+        password,
+        tls: true,
+        // The test CA is not in the system store; ElastiCache's certificate is, so tls: true alone does there.
+        cluster: { options: { redisOptions: { tls: { ca } } } },
+      },
+      keyPrefix: `tls-spec:${Date.now()}:`,
+    });
+    await adapter.connect();
+    try {
+      for (const key of SPREAD_KEYS) await adapter.set(key, key, { ttlSeconds: 30 });
+      expect(await adapter.mget(SPREAD_KEYS)).toEqual(SPREAD_KEYS);
+      expect((await adapter.keys('*')).sort()).toEqual([...SPREAD_KEYS].sort());
+      expect(await adapter.mdelete(SPREAD_KEYS)).toBe(SPREAD_KEYS.length);
+    } finally {
+      await adapter.disconnect();
+    }
+  });
+
+  it('fails without the hostname-keeping dnsLookup (why FrontMCP sets it)', async () => {
+    const cluster = new Cluster([{ host, port: Number(port) }], {
+      clusterRetryStrategy: (times: number) => (times > 2 ? null : 100),
+      redisOptions: { password, tls: { ca }, maxRetriesPerRequest: 1 },
+    });
+    cluster.on('error', () => undefined);
+    try {
+      await expect(cluster.set('tls-spec:no-dns-lookup', '1')).rejects.toThrow();
+    } finally {
+      cluster.disconnect();
+    }
+  });
+});
