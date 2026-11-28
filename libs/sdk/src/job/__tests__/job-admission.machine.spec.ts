@@ -8,13 +8,39 @@ import * as path from 'path';
 
 import { createStorage } from '@frontmcp/utils';
 
-import { JobAdmissionTimeoutError, JobStoreNotSupportedError } from '../../errors';
+import { JobAdmissionLostError, JobAdmissionTimeoutError, JobStoreNotSupportedError } from '../../errors';
 import { createJobAdmission, JobAdmission, MachineJobAdmission, type AdmissionLeaseStore } from '../job-admission';
 import { type JobStateStore } from '../store/job-state.interface';
 import { MemoryJobStateStore } from '../store/memory-job-state.store';
 import { StorageJobStateStore } from '../store/storage-job-state.store';
 
 const FAST = { recheckMs: 10, hostname: () => 'box-a' };
+/** The key of box-a's leases in the store. */
+const MACHINE = 'admission:box-a';
+
+/** `store`, with each swap of its leases waiting for `before()` first. */
+function delayedSwaps(store: AdmissionLeaseStore, before: () => Promise<unknown>): AdmissionLeaseStore {
+  return {
+    readLeases: (key) => store.readLeases(key),
+    swapLeases: async (key, expected, next, ttlSeconds) => {
+      await before();
+      return store.swapLeases(key, expected, next, ttlSeconds);
+    },
+  };
+}
+
+async function leasesOf(store: AdmissionLeaseStore): Promise<Array<{ job: string }>> {
+  const raw = await store.readLeases(MACHINE);
+  return raw ? (JSON.parse(raw) as Array<{ job: string }>) : [];
+}
+
+async function waitFor(check: () => Promise<boolean>, what: string, timeoutMs = 3_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!(await check())) {
+    if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
 
 async function admitted(acquiring: Promise<void>, withinMs: number): Promise<boolean> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -61,7 +87,8 @@ describe('MachineJobAdmission', () => {
   it('takes over the slot of a process that died once its lease ends', async () => {
     const store = new MemoryJobStateStore();
     // A process that took the only slot, then died: nothing renews its lease
-    await store.holdLease('admission:box-a:slot:dead', JSON.stringify({ memoryMb: 0, job: 'report', pid: 1 }), 1);
+    const dead = { id: 'dead', memoryMb: 0, job: 'report', pid: 1, expiresAt: Date.now() + 1_000 };
+    await store.swapLeases(MACHINE, '', JSON.stringify([dead]), 30);
     const admission = new MachineJobAdmission({ concurrency: 1, scope: 'machine' }, store, undefined, FAST);
 
     const slot = admission.slot();
@@ -82,6 +109,7 @@ describe('MachineJobAdmission', () => {
     const waiting = second.slot();
     const acquiring = waiting.acquire('report');
     expect(await admitted(acquiring, 2_500)).toBe(false);
+    expect(running.lost?.aborted).toBe(false);
     running.release();
     expect(await admitted(acquiring, 2_000)).toBe(true);
     waiting.release();
@@ -117,12 +145,113 @@ describe('MachineJobAdmission', () => {
     running.release();
   });
 
+  it('admits one attempt when a slow process writes its lease after another took the only slot', async () => {
+    const store = new MemoryJobStateStore();
+    let land: () => void = () => undefined;
+    const landed = new Promise<void>((resolve) => (land = resolve));
+    const slow = new MachineJobAdmission(
+      { concurrency: 1, scope: 'machine' },
+      delayedSwaps(store, () => landed),
+      undefined,
+      FAST,
+    );
+    const quick = new MachineJobAdmission({ concurrency: 1, scope: 'machine' }, store, undefined, FAST);
+    const slowSlot = slow.slot();
+    const slowAcquiring = slowSlot.acquire('slow');
+    // The slow process read the empty list, and its write is still on its way
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const quickSlot = quick.slot();
+    await quickSlot.acquire('quick');
+
+    land();
+    expect(await admitted(slowAcquiring, 300)).toBe(false);
+    expect((await leasesOf(store)).map((lease) => lease.job)).toEqual(['quick']);
+    quickSlot.release();
+    expect(await admitted(slowAcquiring, 2_000)).toBe(true);
+    slowSlot.release();
+  });
+
+  it('refuses at maxWaitMs while the job store does not answer, and frees a slot its late answer took', async () => {
+    const store = new MemoryJobStateStore();
+    let answer: () => void = () => undefined;
+    const answered = new Promise<void>((resolve) => (answer = resolve));
+    const lateStore: AdmissionLeaseStore = {
+      readLeases: (key) => store.readLeases(key),
+      swapLeases: async (key, expected, next, ttlSeconds) => {
+        const swapped = await store.swapLeases(key, expected, next, ttlSeconds);
+        await answered;
+        return swapped;
+      },
+    };
+    const admission = new MachineJobAdmission(
+      { concurrency: 1, maxWaitMs: 100, scope: 'machine' },
+      lateStore,
+      undefined,
+      FAST,
+    );
+    const startedAt = Date.now();
+
+    await expect(admission.slot().acquire('report')).rejects.toThrow('the job store did not answer in time');
+    expect(Date.now() - startedAt).toBeLessThan(1_000);
+    expect(await leasesOf(store)).toHaveLength(1);
+    answer();
+    await waitFor(async () => (await leasesOf(store)).length === 0, 'the late slot to be freed');
+  });
+
+  it('stops waiting on a job store that never answers when the attempt is aborted', async () => {
+    const hanging: AdmissionLeaseStore = {
+      readLeases: () => new Promise<string>(() => undefined),
+      swapLeases: () => Promise.resolve(false),
+    };
+    const admission = new MachineJobAdmission({ concurrency: 1, scope: 'machine' }, hanging, undefined, FAST);
+    const controller = new AbortController();
+
+    const waiting = admission.slot().acquire('report', controller.signal);
+    setTimeout(() => controller.abort(new Error('cancelled')), 50);
+
+    await expect(waiting).rejects.toThrow('cancelled');
+  });
+
+  it('tells the attempt it lost its slot once its lease is gone from the store', async () => {
+    const store = new MemoryJobStateStore();
+    const admission = new MachineJobAdmission({ concurrency: 1, scope: 'machine' }, store, undefined, {
+      ...FAST,
+      leaseSeconds: 1,
+    });
+    const slot = admission.slot();
+    await slot.acquire('report');
+    // Another process found the lease ended and took the list over
+    await store.swapLeases(MACHINE, await store.readLeases(MACHINE), '[]', 30);
+
+    await waitFor(async () => slot.lost?.aborted === true, 'the slot to be lost');
+    expect(slot.lost?.reason).toBeInstanceOf(JobAdmissionLostError);
+    expect(slot.lost?.reason).toMatchObject({ code: 'JOB_ADMISSION_LOST' });
+    slot.release();
+  });
+
+  it('tells the attempt it lost its slot while the renewals of its lease fail', async () => {
+    const store = new MemoryJobStateStore();
+    let failing = false;
+    const flaky = delayedSwaps(store, async () => {
+      if (failing) throw new Error('the store is gone');
+    });
+    const admission = new MachineJobAdmission({ concurrency: 1, scope: 'machine' }, flaky, undefined, {
+      ...FAST,
+      leaseSeconds: 1,
+    });
+    const slot = admission.slot();
+    await slot.acquire('report');
+    failing = true;
+
+    await waitFor(async () => slot.lost?.aborted === true, 'the slot to be lost');
+    expect(slot.lost?.reason).toMatchObject({ code: 'JOB_ADMISSION_LOST' });
+    slot.release();
+  });
+
   it('keeps waiting, and says why, while the job store fails', async () => {
     const failing: AdmissionLeaseStore = {
-      holdLease: () => Promise.reject(new Error('the store is gone')),
-      renewLease: () => Promise.resolve(false),
-      releaseLease: () => Promise.resolve(),
-      listLeases: () => Promise.resolve([]),
+      readLeases: () => Promise.reject(new Error('the store is gone')),
+      swapLeases: () => Promise.resolve(false),
     };
     const reported: string[] = [];
     const admission = new MachineJobAdmission(

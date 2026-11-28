@@ -100,23 +100,16 @@ export class StorageJobStateStore implements JobStateStore {
     return claimed;
   }
 
-  async holdLease(key: string, value: string, ttlSeconds: number): Promise<boolean> {
-    await this.storage.set(leaseKey(key), value, { ttlSeconds, ifNotExists: true });
-    return (await this.storage.get(leaseKey(key))) === value;
+  async readLeases(key: string): Promise<string> {
+    return (await this.storage.get(leaseKey(key))) ?? '';
   }
 
-  async renewLease(key: string, value: string, ttlSeconds: number): Promise<boolean> {
-    return this.storage.expireIfEquals(leaseKey(key), value, ttlSeconds);
-  }
-
-  async releaseLease(key: string, value: string): Promise<void> {
-    await this.storage.deleteIfEquals(leaseKey(key), value);
-  }
-
-  async listLeases(prefix: string): Promise<string[]> {
-    const keys = await this.storage.keys(`${leaseKey(prefix)}*`);
-    if (keys.length === 0) return [];
-    return (await this.storage.mget(keys)).filter((value): value is string => value !== null);
+  /** From none, through an empty value every process writes the same, so only one swap from it succeeds. */
+  async swapLeases(key: string, expected: string, next: string, ttlSeconds: number): Promise<boolean> {
+    if (expected === '') await this.storage.set(leaseKey(key), '', { ttlSeconds, ifNotExists: true });
+    if (!(await this.storage.setIfEquals(leaseKey(key), expected, next))) return false;
+    await this.storage.expireIfEquals(leaseKey(key), next, ttlSeconds);
+    return true;
   }
 
   async dispose(): Promise<void> {
