@@ -614,5 +614,16 @@
     "new": "baseLayout(html, { title }); // inline stylesheet, system fonts\nbuiltInAuthPageHeaders(); // INLINE_AUTH_PAGE_CSP\n// opt back in to the CDN:\nbaseLayout(html, { title, inlineStyles: false });\nbuiltInAuthPageHeaders({ csp: 'cdn' });",
     "migration": "A custom page built with `baseLayout` (or `createLayout`, `authLayout`, `centeredCardLayout`, `wideLayout`, `extraWideLayout`) inlines FrontMCP's stylesheet and a system font stack by default (`inlineStyles: true`), as the built-in sign-in and consent pages do since 1.13.2, and `builtInAuthPageHeaders()` sends `INLINE_AUTH_PAGE_CSP`, which allows no third-party host. Up to 1.13 the layout loaded the Tailwind CDN script from jsDelivr and Inter from Google Fonts, and the headers sent `BUILT_IN_AUTH_PAGE_CSP`, which allows them. The inline stylesheet covers only the Tailwind classes the built-in pages use, and `theme.customCss` is plain CSS there. A page that needs other classes or Inter sets `inlineStyles: false` on the layout and sends `builtInAuthPageHeaders({ csp: 'cdn' })`; `includeTailwind` and `includeFonts` apply only with `inlineStyles: false`. `{ csp: 'inline' }` and `{ csp: false }` work as before.",
     "codemod": "no"
+  },
+  {
+    "id": "BC-059",
+    "title": "1.14: MockOAuthServer requires S256 PKCE and honours resource indicators by default",
+    "package": "@frontmcp/auth",
+    "category": "change",
+    "severity": "medium",
+    "old": "new MockOAuthServer(factory, { autoApprove: true, testUser });\n// /oauth/authorize without code_challenge -> code; resource ignored, aud = factory audience",
+    "new": "new MockOAuthServer(factory, { autoApprove: true, testUser });\n// /oauth/authorize without code_challenge -> error=invalid_request; aud = the request's resource\n// keep 1.13's behaviour:\nnew MockOAuthServer(factory, { autoApprove: true, testUser, pkce: 'lenient', resourceIndicators: false });",
+    "migration": "`MockOAuthServer` (from `@frontmcp/auth/testing` and `@frontmcp/testing`) uses `pkce: 'strict'` and `resourceIndicators: true` by default, so tests exercise what a real authorization server requires. An authorization request (or the manual sign-in form) without an S256 `code_challenge`, or with `plain`, is redirected back with `error=invalid_request`, a code needs a valid `code_verifier`, and the metadata lists `code_challenge_methods_supported: ['S256']`. A `resource` or `audience` on the authorization or token request becomes the access token's `aud`, and a token request naming a value the authorization didn't grant gets `invalid_target`. Up to 1.13 the mock accepted such a request and ignored `resource` and `audience` (1.13.2 warned once for each). Send S256 PKCE (`generatePkcePair()` from `@frontmcp/utils`), or opt out with `pkce: 'lenient'` and `resourceIndicators: false`. Neither default warns any more.",
+    "codemod": "no"
   }
 ]

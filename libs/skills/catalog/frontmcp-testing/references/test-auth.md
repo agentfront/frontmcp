@@ -141,11 +141,11 @@ describe('Mock OAuth server', () => {
 });
 ```
 
-To run the full authorization-code-with-PKCE flow against the mock server, drive the standard OAuth endpoints (`/oauth/authorize`, `/oauth/token`) directly with `fetch` — the mock server auto-approves when `autoApprove: true` and `testUser` are set.
+To run the full authorization-code-with-PKCE flow against the mock server, drive the standard OAuth endpoints (`/oauth/authorize`, `/oauth/token`) directly with `fetch` — the mock server auto-approves when `autoApprove: true` and `testUser` are set. Send an S256 `code_challenge` and its `code_verifier` (`generatePkcePair()` from `@frontmcp/utils`): the mock requires them by default.
 
-- **PKCE:** `pkce: 'strict'` makes the mock check PKCE as an OAuth 2.1 server does. An authorization request (or the manual sign-in form) without a `code_challenge`, with `code_challenge_method=plain`, or with no method (which means plain) is redirected back with `error=invalid_request`. A `code_verifier` must be 43-128 unreserved characters. The metadata lists `code_challenge_methods_supported: ['S256']`. Unset, the mock accepts those requests as before, and warns once the first time it does; `pkce: 'lenient'` accepts them without the warning. Use strict to prove a client sends S256.
+- **PKCE:** the mock checks PKCE as an OAuth 2.1 server does (`pkce: 'strict'`, the default since 1.14). An authorization request (or the manual sign-in form) without a `code_challenge`, with `code_challenge_method=plain`, or with no method (which means plain) is redirected back with `error=invalid_request` and an `error_description` that starts `S256 PKCE is required`. A `code_verifier` must be 43-128 unreserved characters. The metadata lists `code_challenge_methods_supported: ['S256']`. `pkce: 'lenient'` accepts those requests, as the mock did by default up to 1.13, and still checks a challenge it was given.
 - **`auth_time`:** access and ID tokens from the code flow carry `auth_time`, the second the test user signed in. A refresh keeps it while `iat` moves on.
-- **Resource indicators:** `resourceIndicators: true` issues the access token with `aud` set to the `resource` (RFC 8707) and `audience` values of the authorization request: one value is a string, several are an array. A token request may name a subset of them to narrow the audience. Any other value is refused with `invalid_target`, and a refresh keeps the audience. A list (`resourceIndicators: ['https://mcp.example.com/mcp']`) also refuses every value outside it: the authorization request is redirected back with `error=invalid_target`. A request naming none gets the token factory's audience. Unset, `resource` and `audience` are ignored as before, with one warning naming the option.
+- **Resource indicators:** by default (`resourceIndicators: true`, since 1.14) the access token is issued with `aud` set to the `resource` (RFC 8707) and `audience` values of the authorization request: one value is a string, several are an array. A token request may name a subset of them to narrow the audience. Any other value is refused with `invalid_target`, and a refresh keeps the audience. A list (`resourceIndicators: ['https://mcp.example.com/mcp']`) also refuses every value outside it: the authorization request is redirected back with `error=invalid_target`. A request naming none gets the token factory's audience. `resourceIndicators: false` ignores `resource` and `audience`, so every token gets the token factory's audience, as up to 1.13.
 - **Several users:** `users: [{ sub, email, name, claims, scopes }, ...]` lists who can sign in. The authorization request's `login_hint` (a `sub` or `email`) picks one, and an unknown hint is redirected back with `access_denied`. Without a hint, `testUser` signs in (`setTestUser()` changes it per test), else the first user. The manual sign-in form signs in the listed user whose `sub` is typed, prefilled with the hinted one. A user's `scopes` limit the granted scopes to those requested that the user has. `/userinfo` answers with the user the token names. Without `users`, `login_hint` is ignored and `testUser` signs in, as before.
 - **Lighter import:** `MockOAuthServer` and `TestTokenFactory` are also exported by `@frontmcp/auth/testing`, the same classes, for a project that needs only a mock identity provider. That subpath depends on `jose` and `@frontmcp/utils` only, so it brings no SWC, Jest preset or SDK.
 
@@ -160,10 +160,9 @@ const idp = new MockOAuthServer(new TestTokenFactory(), {
   ],
   clientId: 'my-cli',
   validRedirectUris: ['http://127.0.0.1:*/callback'],
-  pkce: 'strict',
   resourceIndicators: ['https://notes.example.com/mcp'],
 });
-// /oauth/authorize?...&login_hint=bob&resource=https://notes.example.com/mcp
+// /oauth/authorize?...&code_challenge=<S256 challenge>&code_challenge_method=S256&login_hint=bob&resource=https://notes.example.com/mcp
 //   -> an access token with sub 'bob', aud 'https://notes.example.com/mcp', auth_time
 ```
 
@@ -215,6 +214,12 @@ const clientAssertion = await new SignJWT({ jti: crypto.randomUUID() })
   .setExpirationTime('2m')
   .sign(privateKey);
 ```
+
+## Upgrading to 1.14
+
+- **`MockOAuthServer` checks PKCE strictly by default.** An authorization request without an S256 `code_challenge` is redirected back with `error=invalid_request`, where up to 1.13 the mock accepted it (1.13.2 also warned once). Send one (`generatePkcePair()` from `@frontmcp/utils`) and its `code_verifier` at the token endpoint, or set `pkce: 'lenient'` on a mock whose test isn't about PKCE. FrontMCP's own federated and remote sign-ins, `signInNative` and `frontmcp login` already send S256.
+- **`MockOAuthServer` honours resource indicators by default.** The `resource` (RFC 8707) and `audience` values of the authorization request become the access token's `aud`, where up to 1.13 they were ignored (1.13.2 warned once) and every token got the token factory's audience. A token request can only narrow the values the authorization request named: one it didn't name is refused with `invalid_target`. When the authorization request named none, the token request may name them instead. A server that checks the audience then needs to expect that value; set `resourceIndicators: false` to keep the factory's audience. A sign-in that names none at either endpoint still gets the factory's audience.
+- `pkce: 'strict'` and `resourceIndicators: true` are now the defaults, so a mock that set them can drop them. Neither default warns any more.
 
 ## Examples
 

@@ -1,3 +1,5 @@
+import { generatePkcePair } from '@frontmcp/utils';
+
 import { MockOAuthServer } from '../mock-oauth-server';
 import { TestTokenFactory } from '../token-factory';
 
@@ -105,6 +107,8 @@ describe('MockOAuthServer', () => {
       email: 'test@example.com',
       name: 'Test User',
     };
+    // The mock requires S256 PKCE by default.
+    const { codeVerifier, codeChallenge } = generatePkcePair();
 
     beforeAll(async () => {
       server = new MockOAuthServer(tokenFactory, {
@@ -127,6 +131,8 @@ describe('MockOAuthServer', () => {
       authorizeUrl.searchParams.set('redirect_uri', 'http://localhost:3000/callback');
       authorizeUrl.searchParams.set('response_type', 'code');
       authorizeUrl.searchParams.set('state', 'test-state');
+      authorizeUrl.searchParams.set('code_challenge', codeChallenge);
+      authorizeUrl.searchParams.set('code_challenge_method', 'S256');
 
       const response = await fetch(authorizeUrl.toString(), { redirect: 'manual' });
 
@@ -138,7 +144,7 @@ describe('MockOAuthServer', () => {
       const redirectUrl = new URL(location as string);
       expect(redirectUrl.origin).toBe('http://localhost:3000');
       expect(redirectUrl.pathname).toBe('/callback');
-      expect(redirectUrl.searchParams.get('code')).toBeDefined();
+      expect(redirectUrl.searchParams.get('code')).toBeTruthy();
       expect(redirectUrl.searchParams.get('state')).toBe('test-state');
     });
 
@@ -176,12 +182,14 @@ describe('MockOAuthServer', () => {
       authorizeUrl.searchParams.set('client_id', 'test-client');
       authorizeUrl.searchParams.set('redirect_uri', 'http://localhost:3000/callback');
       authorizeUrl.searchParams.set('response_type', 'code');
+      authorizeUrl.searchParams.set('code_challenge', codeChallenge);
+      authorizeUrl.searchParams.set('code_challenge_method', 'S256');
 
       const authResponse = await fetch(authorizeUrl.toString(), { redirect: 'manual' });
       const location = authResponse.headers.get('location');
       expect(location).toBeDefined();
       const code = new URL(location as string).searchParams.get('code');
-      expect(code).toBeDefined();
+      expect(code).toBeTruthy();
 
       // Exchange code for tokens
       const tokenResponse = await fetch(`${server.info.baseUrl}/oauth/token`, {
@@ -192,6 +200,7 @@ describe('MockOAuthServer', () => {
           code: code as string,
           redirect_uri: 'http://localhost:3000/callback',
           client_id: 'test-client',
+          code_verifier: codeVerifier,
         }).toString(),
       });
 
@@ -210,12 +219,14 @@ describe('MockOAuthServer', () => {
       authorizeUrl.searchParams.set('client_id', 'test-client');
       authorizeUrl.searchParams.set('redirect_uri', 'http://localhost:3000/callback');
       authorizeUrl.searchParams.set('response_type', 'code');
+      authorizeUrl.searchParams.set('code_challenge', codeChallenge);
+      authorizeUrl.searchParams.set('code_challenge_method', 'S256');
 
       const authResponse = await fetch(authorizeUrl.toString(), { redirect: 'manual' });
       const location = authResponse.headers.get('location');
       expect(location).toBeDefined();
       const code = new URL(location as string).searchParams.get('code');
-      expect(code).toBeDefined();
+      expect(code).toBeTruthy();
 
       // First exchange should succeed
       const firstExchange = await fetch(`${server.info.baseUrl}/oauth/token`, {
@@ -226,6 +237,7 @@ describe('MockOAuthServer', () => {
           code: code as string,
           redirect_uri: 'http://localhost:3000/callback',
           client_id: 'test-client',
+          code_verifier: codeVerifier,
         }).toString(),
       });
       expect(firstExchange.ok).toBe(true);
@@ -239,6 +251,7 @@ describe('MockOAuthServer', () => {
           code: code as string,
           redirect_uri: 'http://localhost:3000/callback',
           client_id: 'test-client',
+          code_verifier: codeVerifier,
         }).toString(),
       });
 
@@ -371,8 +384,7 @@ describe('MockOAuthServer', () => {
       expect(error.error_description).toContain('code_verifier');
     });
 
-    it('should reject unsupported code_challenge_method', async () => {
-      const codeVerifier = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk';
+    it('should reject unsupported code_challenge_method at the authorization request', async () => {
       const codeChallenge = 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM';
 
       const authorizeUrl = new URL(`${server.info.baseUrl}/oauth/authorize`);
@@ -386,26 +398,12 @@ describe('MockOAuthServer', () => {
       const authResponse = await fetch(authorizeUrl.toString(), { redirect: 'manual' });
       const badMethodLocation = authResponse.headers.get('location');
       expect(badMethodLocation).toBeDefined();
-      const badMethodCode = new URL(badMethodLocation as string).searchParams.get('code');
-      expect(badMethodCode).toBeDefined();
+      const redirect = new URL(badMethodLocation as string).searchParams;
 
-      // Exchange should fail due to unsupported method
-      const tokenResponse = await fetch(`${server.info.baseUrl}/oauth/token`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          grant_type: 'authorization_code',
-          code: badMethodCode as string,
-          redirect_uri: 'http://localhost:3000/callback',
-          client_id: 'pkce-client',
-          code_verifier: codeVerifier,
-        }).toString(),
-      });
-
-      expect(tokenResponse.ok).toBe(false);
-      const error = await tokenResponse.json();
-      expect(error.error).toBe('invalid_grant');
-      expect(error.error_description).toContain('Unsupported code_challenge_method');
+      // Strict PKCE (the default) refuses the request before issuing a code
+      expect(redirect.get('code')).toBeNull();
+      expect(redirect.get('error')).toBe('invalid_request');
+      expect(redirect.get('error_description')).toBe('S256 PKCE is required: code_challenge_method SHA256 is not S256');
     });
   });
 
@@ -428,11 +426,14 @@ describe('MockOAuthServer', () => {
     });
 
     it('should refresh access token', async () => {
-      // Get authorization code
+      // Get authorization code, with the S256 PKCE the mock requires by default
+      const { codeVerifier, codeChallenge } = generatePkcePair();
       const authorizeUrl = new URL(`${server.info.baseUrl}/oauth/authorize`);
       authorizeUrl.searchParams.set('client_id', 'refresh-client');
       authorizeUrl.searchParams.set('redirect_uri', 'http://localhost:3000/callback');
       authorizeUrl.searchParams.set('response_type', 'code');
+      authorizeUrl.searchParams.set('code_challenge', codeChallenge);
+      authorizeUrl.searchParams.set('code_challenge_method', 'S256');
 
       const authResponse = await fetch(authorizeUrl.toString(), { redirect: 'manual' });
       const refreshLocation = authResponse.headers.get('location');
@@ -449,6 +450,7 @@ describe('MockOAuthServer', () => {
           code: refreshCode as string,
           redirect_uri: 'http://localhost:3000/callback',
           client_id: 'refresh-client',
+          code_verifier: codeVerifier,
         }).toString(),
       });
 
@@ -671,12 +673,15 @@ describe('MockOAuthServer', () => {
       authorizeUrl.searchParams.set('client_id', 'wildcard-client');
       authorizeUrl.searchParams.set('redirect_uri', 'http://localhost:8080/callback');
       authorizeUrl.searchParams.set('response_type', 'code');
+      authorizeUrl.searchParams.set('code_challenge', generatePkcePair().codeChallenge);
+      authorizeUrl.searchParams.set('code_challenge_method', 'S256');
 
       const response = await fetch(authorizeUrl.toString(), { redirect: 'manual' });
 
       expect(response.status).toBe(302);
       const location = response.headers.get('location');
       expect(location).toContain('localhost:8080/callback');
+      expect(new URL(location as string).searchParams.get('code')).toBeTruthy();
     });
 
     it.each([

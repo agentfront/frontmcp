@@ -462,6 +462,10 @@ test.describe('Mock OAuth Server Integration', () => {
     authorizeUrl.searchParams.set('redirect_uri', 'http://localhost:3000/oauth/provider/github/callback');
     authorizeUrl.searchParams.set('response_type', 'code');
     authorizeUrl.searchParams.set('state', 'test-state');
+    // The mock requires S256 PKCE by default.
+    const { generatePkcePair } = await import('@frontmcp/utils');
+    authorizeUrl.searchParams.set('code_challenge', generatePkcePair().codeChallenge);
+    authorizeUrl.searchParams.set('code_challenge_method', 'S256');
 
     const response = await browserFetch(authorizeUrl.toString(), { redirect: 'manual' });
 
@@ -476,6 +480,10 @@ test.describe('Mock OAuth Server Integration', () => {
     authorizeUrl.searchParams.set('redirect_uri', 'http://localhost:3000/oauth/provider/slack/callback');
     authorizeUrl.searchParams.set('response_type', 'code');
     authorizeUrl.searchParams.set('state', 'test-state');
+    // The mock requires S256 PKCE by default.
+    const { generatePkcePair } = await import('@frontmcp/utils');
+    authorizeUrl.searchParams.set('code_challenge', generatePkcePair().codeChallenge);
+    authorizeUrl.searchParams.set('code_challenge_method', 'S256');
 
     const response = await browserFetch(authorizeUrl.toString(), { redirect: 'manual' });
 
