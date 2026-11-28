@@ -36,6 +36,18 @@ describe('spawnSharedServer', () => {
     expect(spawned.exitReason).toBeUndefined();
   });
 
+  it("runs the entry the session names for a key it moves to, from that entry's folder and without arguments", () => {
+    spawnSharedServer('checkout-b', 'holder-2', '/srv/checkout-b/dist/shared.js');
+
+    expect(spawn).toHaveBeenCalledWith(
+      process.execPath,
+      [...process.execArgv, '/srv/checkout-b/dist/shared.js'],
+      expect.objectContaining({ cwd: '/srv/checkout-b/dist', detached: true, stdio: 'ignore' }),
+    );
+    const [, , options] = spawn.mock.calls[0] as [string, string[], { env: Record<string, string> }];
+    expect(options.env[SHARED_SERVE_ENV]).toBe('checkout-b');
+  });
+
   it('reports why the server can no longer come up', () => {
     const exited = spawnSharedServer('notes', 'holder-1');
     child.emit('exit', 1, null);

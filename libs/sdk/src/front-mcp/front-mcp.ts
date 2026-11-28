@@ -1102,6 +1102,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
    * `spare`, it boots that server while it attaches. The server exits when idle (`idleTimeoutMs`) or once its
    * `checkout` folder is removed. It serves the config's `http.routes`, people sign-in (`http.auth`) and `@HttpRoute`
    * pages beside MCP, and runs detached jobs: their runners run this entry again, which hands each one to its run.
+   * A function `key` is read again when `rereadKey.file` changes, and moves the session to the new key's server.
    *
    * @example
    * ```typescript

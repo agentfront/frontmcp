@@ -5,6 +5,8 @@
  *
  * `SHARED_SPARE` gives the session a spare. With `SHARED_PAGES` the server serves pages too: a plain route, people
  * sign-in and a page for signed-in people; with `SHARED_JOBS`, a detached job.
+ * With `SHARED_KEY_FILE` the key is that file's text, read again on each change; `e2e-two` starts with this entry,
+ * unless `SHARED_NO_ENTRIES` names none.
  */
 import 'reflect-metadata';
 
@@ -27,7 +29,7 @@ import {
   type FrontMcpConfigInput,
   type HttpOutput,
 } from '@frontmcp/sdk';
-import { appendFile } from '@frontmcp/utils';
+import { appendFile, readFile } from '@frontmcp/utils';
 
 const env = process.env;
 const bootDelayMs = Number(env['SHARED_BOOT_DELAY_MS'] ?? 0);
@@ -158,8 +160,17 @@ const config: FrontMcpConfigInput = {
     : {}),
 };
 
+const keyFile = env['SHARED_KEY_FILE'];
+const keyOptions = keyFile
+  ? {
+      key: async () => (await readFile(keyFile)).trim(),
+      rereadKey: { file: keyFile, intervalMs: 200 },
+      ...(env['SHARED_NO_ENTRIES'] === '1' ? {} : { entries: { 'e2e-two': String(process.argv[1]) } }),
+    }
+  : { key: 'e2e' };
+
 FrontMcpInstance.runShared(config, {
-  key: 'e2e',
+  ...keyOptions,
   transport: env['SHARED_TRANSPORT'] === 'http' ? 'http' : 'unix',
   attachBudgetMs: Number(env['SHARED_ATTACH_BUDGET_MS'] ?? 60_000),
   replaceOlder: env['SHARED_REPLACE_OLDER'] !== '0',

@@ -1,6 +1,6 @@
 ---
 name: shared-local-server
-description: Serve every stdio session of a server on one machine from one shared local process with FrontMCP's FrontMcpInstance.runShared - one start per key, an owner-only Unix socket or loopback HTTP with a token, a server identity and version proof before the token is sent, a newer session replacing an older server under live sessions, the config's HTTP routes and people sign-in pages, detached jobs, a fallback to running in the session's own process with a spare booted while it attaches, and exit when idle or when the checkout is removed
+description: Serve every stdio session of a server on one machine from one shared local process with FrontMCP's FrontMcpInstance.runShared - one start per key, an owner-only Unix socket or loopback HTTP with a token, a server identity and version proof before the token is sent, a newer session replacing an older server under live sessions, the config's HTTP routes and people sign-in pages, detached jobs, a fallback to running in the session's own process with a spare booted while it attaches, a session that moves to another checkout's key, and exit when idle or when the checkout is removed
 ---
 
 # Shared Local Server
@@ -65,15 +65,17 @@ npm needs no native build (see `setup-sqlite`, "The SQLite library").
 
 ## Options
 
-| Option           | Type                | Default                        | Meaning                                                                                                           |
-| ---------------- | ------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| `key`            | `string`            | required                       | Names the server: sessions with the same key and `info.name` on this machine share one process                    |
-| `transport`      | `'unix'` / `'http'` | `'unix'` (`'http'` on Windows) | An owner-only Unix socket, or loopback HTTP on `127.0.0.1` with a token                                           |
-| `attachBudgetMs` | `number`            | `15000`                        | How long a session tries to reach, start or replace the server before it runs the server in its own process       |
-| `replaceOlder`   | `boolean`           | `true`                         | A session that finds a server older than its `info.version` replaces it; `false` runs the server in its process   |
-| `idleTimeoutMs`  | `number` / `false`  | `600000`                       | The server exits after this long without a request or an attached session; `false` keeps it running               |
-| `checkout`       | `string` / `false`  | the entry file's folder        | The server exits once this folder is removed (a deleted checkout or worktree); `false` never; relative to the cwd |
-| `spare`          | `boolean`           | `false`                        | Boot the server in the session's process while it attaches, so a session that falls back serves at once           |
+| Option           | Type                    | Default                        | Meaning                                                                                                                                                                                                                   |
+| ---------------- | ----------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `key`            | `string` / function     | required                       | Names the server: sessions with the same key and `info.name` on this machine share one process. A function is read at the start, and again on `rereadKey` (see [Moving to another checkout](#moving-to-another-checkout)) |
+| `transport`      | `'unix'` / `'http'`     | `'unix'` (`'http'` on Windows) | An owner-only Unix socket, or loopback HTTP on `127.0.0.1` with a token                                                                                                                                                   |
+| `attachBudgetMs` | `number`                | `15000`                        | How long a session tries to reach, start or replace the server before it runs the server in its own process                                                                                                               |
+| `replaceOlder`   | `boolean`               | `true`                         | A session that finds a server older than its `info.version` replaces it; `false` runs the server in its process                                                                                                           |
+| `idleTimeoutMs`  | `number` / `false`      | `600000`                       | The server exits after this long without a request or an attached session; `false` keeps it running                                                                                                                       |
+| `checkout`       | `string` / `false`      | the entry file's folder        | The server exits once this folder is removed (a deleted checkout or worktree); `false` never; relative to the cwd                                                                                                         |
+| `spare`          | `boolean`               | `false`                        | Boot the server in the session's process while it attaches, so a session that falls back serves at once                                                                                                                   |
+| `rereadKey`      | `{ file, intervalMs? }` | none                           | With a function `key`: read it again each time `file` changes, checked every `intervalMs` (`1000`)                                                                                                                        |
+| `entries`        | `Record<key, path>`     | `{}`                           | With a function `key`: the entry file that starts the server of each key the session may move to                                                                                                                          |
 
 The default `checkout` is the folder of the file the process runs, as the client started it (`process.argv[1]`): for
 a package bin that is the folder of the bin link (`node_modules/.bin`, or the global bin folder), so removing an `npx`
@@ -98,6 +100,10 @@ starts, for example
 `runShared() options are invalid: idleTimeoutMs: idleTimeoutMs must be a whole number of milliseconds from 1 to 604800000, or false`,
 `runShared() options are invalid: checkout: checkout must be the path of a folder, or false`,
 `runShared() options are invalid: spare: spare must be true or false`,
+`runShared() options are invalid: rereadKey: rereadKey needs a function key, which the session reads again` (and the
+same for `entries`),
+`runShared() options are invalid: key: the key function failed (<message>)` or
+`runShared() options are invalid: key: the key function answered <value>, and key must be ...` (when the session starts),
 `runShared() options are invalid: checkout: <path> is not a folder` (it must exist when the session starts),
 `runShared() options are invalid: info.version: a shared server states its version, which must be 1 to 256 printable ASCII characters`
 (the config's `info.version` is the version sessions compare), or, on Windows,
@@ -238,6 +244,59 @@ its run instead of starting a session. Give the jobs a store other processes sha
 `sqlite`, or Redis). The run outlives the shared server, which may exit idle while it runs; any server on the store
 reads and cancels it.
 
+## Moving to another checkout
+
+A session can follow the checkout its user works in (since 1.14). Give `runShared()` a function `key`, and a file whose
+change makes the session read it again: when the key it answers differs, the session moves to that key's server.
+
+```typescript
+import { readFile } from 'node:fs/promises';
+import * as path from 'node:path';
+
+FrontMcpInstance.runShared(serverConfig, {
+  // The checkout the dashboard marks active, as a key: 'lens-main', 'lens-feature-a', ...
+  key: async () => (await readFile(ACTIVE_CHECKOUT_FILE, 'utf8')).trim(),
+  rereadKey: { file: ACTIVE_CHECKOUT_FILE, intervalMs: 1_000 },
+  entries: {
+    'lens-main': path.join(MAIN_CHECKOUT, 'dist/shared.js'),
+    'lens-feature-a': path.join(WORKTREES, 'feature-a/dist/shared.js'),
+  },
+});
+```
+
+- **Only the session decides.** The session reads its own `key` function when `rereadKey.file` changes (it appears,
+  goes, or its size or modification time changes), checked every `intervalMs`. A server never tells a session to move.
+- **The move.** The session attaches to the new key's server as it attaches at the start: the record, the identity
+  challenge and its proof, the `info.name` and version checks, the token. It replays the client's `initialize` there,
+  sends the client `notifications/tools/list_changed` (and the resources and prompts ones the server advertises),
+  and sends every request from then on to the new server, whose notification stream, channel events included, it
+  relays. The requests in flight finish on the old server, which then gets the session's `DELETE`. The client keeps
+  its stdio connection, and stderr says `[frontmcp shared] warn moved to the shared server "<key>"`.
+- **What it starts.** For its first key the session starts its own entry, as before. For another key it starts only
+  the entry `entries` names for that key: that file, with the session's Node flags and no arguments, from the file's
+  folder. It never starts a path or a command it read from a file or got from a server: the key a function answers is
+  only a name, which must be a valid `key`. When the new key's server doesn't run and `entries` names no entry for it,
+  the session waits up to `attachBudgetMs` for one to prove itself, starts none, and stays where it is. Nor does it replace an older server of such a key. It doesn't run that key's server in its own process either.
+  A session drains an older server only for its first key, whose replacement is its own entry and runs its own
+  version: an older server of a key it moves to is left running, since the entry `entries` names may run an older
+  version too, and the session stays where it is (`... and the entry that would replace it may run an older one, so it
+is left running`).
+- **When it stays.** A key function that throws, or answers something that is not a key, keeps the current key:
+  `[frontmcp shared] warn keeping the shared server key "<key>": the key function failed (<message>)`. A new server
+  that can't be reached, or doesn't prove itself, keeps the current server:
+  `[frontmcp shared] warn staying on the shared server "<key>": the server of key "<new key>" can't be reached (<reason>)`.
+  The next change of the file tries again.
+- **When the session starts**, it reads the function once; one that fails rejects `runShared()` with
+  `InvalidSharedServerOptionsError`. The server process a session starts serves the key the session named, without
+  reading the function.
+- A session whose server goes away after a move reaches the next server of its current key by the same rules. When
+  none can be reached or started (from `entries`), it moves back to its first key, logging
+  `[frontmcp shared] warn moving back to the shared server "<first key>": the server of key "<key>" can't be reached (<reason>)`:
+  to that key's server, or, as at the start, the server it runs in its own process (see Fallback). Only the first key
+  runs in the session's own process, since that is the key its config is.
+- Server-side state of the session (subscriptions, session memory) stays on the old server, as when a server is
+  replaced.
+
 ## Files and security
 
 | Path (under `~/.frontmcp/shared/<key>/`) | Mode   | Holds                                                       |
@@ -311,8 +370,8 @@ next server.
 - A session that runs the server in its own process (see Fallback) gets a notification stream since 1.14. Only one
   whose socket path of its own would be longer than a socket address holds is served per request, and its client then
   gets the answers to its requests, and no `list_changed`, log line or channel event the server sends on its own.
-- A session stays on its key: it can't move to the server of another key (another checkout of the project, under a
-  key of its own) without its client starting it again.
+- A session with a string `key` stays on its key. One with a function `key` moves only when `rereadKey.file` changes
+  (see [Moving to another checkout](#moving-to-another-checkout)).
 - The version compared is `info.version`: a code change that doesn't bump it is not an upgrade. A session that runs the
   server in its own process stays that way until its client restarts it.
 - The server runs with the environment, working folder and Node flags of the session that started it (an inspector
@@ -335,6 +394,8 @@ next server.
 - A session that runs the server in its own process listens on a socket or port of its own and gets a notification
   stream; up to 1.13 it was served per request, with none.
 - `spare: true` boots that server while the session attaches.
+- A function `key`, read again when `rereadKey.file` changes, moves a live session to another key's server, which it
+  starts only from the entry `entries` names (see [Moving to another checkout](#moving-to-another-checkout)).
 
 ## Troubleshooting
 
