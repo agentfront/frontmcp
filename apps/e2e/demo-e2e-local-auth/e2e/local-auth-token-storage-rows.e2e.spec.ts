@@ -130,17 +130,24 @@ describeCluster('auth.tokenStorage row names on a Redis Cluster shared by two in
   const keyPrefix = `token-storage-rows-e2e:${Date.now()}:`;
   const env = { TOKEN_STORAGE_REDIS_CLUSTER: CLUSTER_NODES.join(','), TOKEN_STORAGE_REDIS_PREFIX: keyPrefix };
   let cluster: Cluster;
-  // Each server is kept as soon as it starts, so one that started before another failed to is still stopped.
   const servers: TestServer[] = [];
+  // Every start is kept as it begins, so teardown also stops a server whose start was still pending when beforeAll
+  // failed or timed out, and one that started before another failed to.
+  const starts: Array<Promise<TestServer>> = [];
 
   beforeAll(async () => {
     const [host, port] = CLUSTER_NODES[0].split(':');
     cluster = new Cluster([{ host, port: Number(port) }]);
-    for (let i = 0; i < 2; i += 1) servers.push(await startServer(env));
+    for (let i = 0; i < 2; i += 1) {
+      const start = startServer(env);
+      starts.push(start);
+      servers.push(await start);
+    }
   }, 180000);
 
   afterAll(async () => {
-    await Promise.all(servers.map((server) => server.stop()));
+    const started = await Promise.allSettled(starts);
+    await Promise.all(started.map((result) => (result.status === 'fulfilled' ? result.value.stop() : undefined)));
     for (const key of await keysOnCluster()) await cluster.del(key);
     cluster.disconnect();
   });
