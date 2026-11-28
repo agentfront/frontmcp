@@ -4,6 +4,8 @@ import {
   FrontMcpLogger,
   type DutyCron,
   type DutyInterface,
+  type DutyKeyedScope,
+  type DutyPreference,
   type DutyRunContext,
   type DutyScope,
   type HealthProbeResult,
@@ -12,7 +14,12 @@ import {
   type OnShutdown,
   type ResolvedDutyMetadata,
 } from '../common';
-import { ClusterScopeNeedsRedisError, DutyNameConflictError, InvalidDutyCronError } from '../errors/duty.errors';
+import {
+  ClusterScopeNeedsRedisError,
+  DutyLeaseKeyError,
+  DutyNameConflictError,
+  InvalidDutyCronError,
+} from '../errors/duty.errors';
 import { FrontMcpConfig } from '../front-mcp/front-mcp.tokens';
 import type { BackgroundLifecycle } from '../provider/provider.lifecycle';
 import type ProviderRegistry from '../provider/provider.registry';
@@ -22,6 +29,7 @@ import { DutyRunner } from './duty.runner';
 import { LazyLeaseStore } from './lazy-lease-store';
 import {
   isLongLivedProcess,
+  keyedLeaseKey,
   LeaseClaims,
   leaseKey,
   leaseStorageConfig,
@@ -62,9 +70,34 @@ export async function startDuties(providers: ProviderRegistry): Promise<void> {
   }
 }
 
-/** Where the leases of duties live (see `leaseStorageConfig`). */
+/** Where the leases of duties live (see `leaseStorageConfig`); a lease the app names is one of the machine's. */
 export function dutyStorageConfig(redis: unknown, scope: DutyScope = 'machine'): StorageConfig {
-  return leaseStorageConfig(redis, 'duty', scope);
+  return leaseStorageConfig(redis, 'duty', typeof scope === 'string' ? scope : 'machine');
+}
+
+/** The longest key `scope: { key }` takes, once trimmed, as its metadata check bounds a literal one. */
+const MAX_DUTY_LEASE_KEY_LENGTH = 1_024;
+
+/** The key the app names a duty's lease with: the string, or what the function answers, trimmed and bounded alike. */
+async function appLeaseKey(name: string, scope: DutyKeyedScope): Promise<string> {
+  let key: unknown;
+  try {
+    key = typeof scope.key === 'function' ? await scope.key() : scope.key;
+  } catch (error) {
+    throw new DutyLeaseKeyError(name, `failed (${error instanceof Error ? error.message : String(error)})`);
+  }
+  const trimmed = typeof key === 'string' ? key.trim() : '';
+  if (trimmed === '') throw new DutyLeaseKeyError(name, 'answered no string');
+  if (trimmed.length > MAX_DUTY_LEASE_KEY_LENGTH) {
+    throw new DutyLeaseKeyError(name, `answered a key longer than ${MAX_DUTY_LEASE_KEY_LENGTH} characters`);
+  }
+  return trimmed;
+}
+
+/** Whether this process prefers to run the duty; undefined when the duty states no preference. */
+async function preferenceOf(prefer: DutyPreference | undefined): Promise<boolean | undefined> {
+  if (prefer === undefined) return undefined;
+  return (typeof prefer === 'function' ? await prefer() : prefer) === true;
 }
 
 /** What `/readyz` shows for a duty: whether this process holds its lease, unhealthy while its store cannot be opened. */
@@ -182,12 +215,16 @@ export class DutyLifecycle implements OnBootstrap, OnReady, OnShutdown, Backgrou
     }
     const config = this.providers.get(FrontMcpConfig);
     const serverName = config.info?.name ?? 'frontmcp';
-    const key = leaseKey(name, scope, serverName);
+    const key =
+      typeof scope === 'string'
+        ? leaseKey(name, scope, serverName)
+        : keyedLeaseKey(name, await appLeaseKey(name, scope), serverName);
+    const prefer = await preferenceOf(metadata.prefer);
     this.claim(serverName);
     const storage = new LazyLeaseStore(dutyStorageConfig(config.redis, scope));
     // Each run is a work span, so a stall while it runs names the duty
     const run = (context: DutyRunContext) => withWorkSpan('duty', name, () => this.duty.run(context));
-    const common = { name, key, leaseMs, storage, logger, run };
+    const common = { name, key, leaseMs, storage, logger, run, ...(prefer === undefined ? {} : { prefer }) };
     const runner = new DutyRunner(
       metadata.cron
         ? { ...common, cron: await this.cronSchedule(metadata.cron) }

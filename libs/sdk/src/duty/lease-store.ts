@@ -105,6 +105,11 @@ export function leaseKey(name: string, scope: LeaseScope, serverName: string): s
   return `${key}:${sha256Hex(findProjectRoot(cwd) ?? cwd)}`;
 }
 
+/** A lease the app names (`scope: { key }`): one per server name, duty and key, among the processes of a machine. */
+export function keyedLeaseKey(name: string, key: string, serverName: string): string {
+  return `${nameKey(name, serverName)}:key:${sha256Hex(key)}`;
+}
+
 /** Open the lease store, creating its SQLite file owner-only first. */
 export async function openLeaseStore(config: StorageConfig): Promise<RootStorage> {
   if (config.sqlite) await prepareLeaseFile(config.sqlite.path);

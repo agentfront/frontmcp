@@ -46,6 +46,7 @@ function pausable(storage: DutyLeaseStorage) {
   let open: () => void = () => undefined;
   const through = <T>(operation: () => Promise<T>): Promise<T> => (gate ? gate.then(operation) : operation());
   const view: DutyLeaseStorage = {
+    get: (key) => through(() => storage.get(key)),
     set: (key, value, options) => through(() => storage.set(key, value, options)),
     ttl: (key) => through(() => storage.ttl(key)),
     expireIfEquals: (key, value, ttlSeconds) => through(() => storage.expireIfEquals(key, value, ttlSeconds)),
@@ -69,6 +70,7 @@ function cuttable(storage: DutyLeaseStorage) {
   const through = <T>(operation: () => Promise<T>): Promise<T> =>
     cut ? Promise.reject(new Error('connection lost')) : operation();
   const view: DutyLeaseStorage = {
+    get: (key) => through(() => storage.get(key)),
     set: (key, value, options) => through(() => storage.set(key, value, options)),
     ttl: (key) => through(() => storage.ttl(key)),
     expireIfEquals: (key, value, ttlSeconds) => through(() => storage.expireIfEquals(key, value, ttlSeconds)),

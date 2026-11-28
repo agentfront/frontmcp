@@ -1,6 +1,6 @@
 ---
 name: create-duty
-description: Run recurring work in exactly one process of the machine, the project or the cluster with @Duty, every interval or on a cron schedule, under a lease that one process holds and another takes over when the holder dies
+description: Run recurring work in exactly one process of the machine, the project, the cluster or a key the app names with @Duty, every interval or on a cron schedule, under a lease that one process holds and another takes over when the holder dies, or a preferred process takes over
 ---
 
 # Duties: Recurring Work in One Process
@@ -120,27 +120,30 @@ once, however many servers start on the container.
 
 ## `@Duty` Options
 
-| Field      | Type                                                        | Default                                                    | Notes                                                                                                                                                                                            |
-| ---------- | ----------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `name`     | `string`                                                    | The class name                                             | The lease's name in the server. Set it when the build renames classes                                                                                                                            |
-| `every`    | `number` (ms) or `'500ms'`, `'30s'`, `'5m'`, `'1h'`, `'1d'` | One of `every` or `cron`                                   | From 1 ms to 2147483647 ms (about 24.8 days)                                                                                                                                                     |
-| `cron`     | `string`                                                    | One of `every` or `cron`                                   | A cron expression of 5 fields, or 6 with seconds first (see Cron Schedules)                                                                                                                      |
-| `timezone` | `string`                                                    | `'UTC'`                                                    | The IANA time zone `cron` is read in, such as `'Europe/Berlin'`. Only with `cron`                                                                                                                |
-| `scope`    | `'machine'`, `'workspace'` or `'cluster'`                   | Required                                                   | `'workspace'`: one holder per project root: the nearest folder at or above the working directory with a `package.json`. `'cluster'`: one holder among the machines that share the server's Redis |
-| `leaseMs`  | `number`                                                    | Three intervals, between 3000 and 60000; 60000 with `cron` | At least 1000 (stores keep a TTL in whole seconds). How soon another process takes over from a holder that died                                                                                  |
+| Field      | Type                                                        | Default                                                    | Notes                                                                                                                                                                                                                                                                                                                                 |
+| ---------- | ----------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`     | `string`                                                    | The class name                                             | The lease's name in the server. Set it when the build renames classes                                                                                                                                                                                                                                                                 |
+| `every`    | `number` (ms) or `'500ms'`, `'30s'`, `'5m'`, `'1h'`, `'1d'` | One of `every` or `cron`                                   | From 1 ms to 2147483647 ms (about 24.8 days)                                                                                                                                                                                                                                                                                          |
+| `cron`     | `string`                                                    | One of `every` or `cron`                                   | A cron expression of 5 fields, or 6 with seconds first (see Cron Schedules)                                                                                                                                                                                                                                                           |
+| `timezone` | `string`                                                    | `'UTC'`                                                    | The IANA time zone `cron` is read in, such as `'Europe/Berlin'`. Only with `cron`                                                                                                                                                                                                                                                     |
+| `scope`    | `'machine'`, `'workspace'`, `'cluster'` or `{ key }`        | Required                                                   | `'workspace'`: one holder per project root: the nearest folder at or above the working directory with a `package.json`. `'cluster'`: one holder among the machines that share the server's Redis. `{ key }`: one holder per key the app names, among the processes of the machine (see [Leases the App Names](#leases-the-app-names)) |
+| `prefer`   | `boolean` or `() => boolean \| Promise<boolean>`            | Unset                                                      | Whether this process takes the duty over from one that is not preferred (see [A Preferred Holder](#a-preferred-holder))                                                                                                                                                                                                               |
+| `leaseMs`  | `number`                                                    | Three intervals, between 3000 and 60000; 60000 with `cron` | At least 1000 (stores keep a TTL in whole seconds). How soon another process takes over from a holder that died                                                                                                                                                                                                                       |
 
 A duty has exactly one of `every` and `cron`. An invalid option throws `InvalidDecoratorMetadataError`
 (`INVALID_DECORATOR_METADATA`) when the class is decorated:
 
-| Mistake                       | Message                                                                                                  |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------- |
-| A malformed `every`           | `@Duty invalid metadata for "every": every must be milliseconds or a duration such as "30s", "5m", "1h"` |
-| Both `every` and `cron`       | `@Duty invalid metadata for "cron": set either every or cron, not both`                                  |
-| Neither                       | `@Duty invalid metadata for "every": a duty needs every (an interval) or cron (a cron expression)`       |
-| An empty or non-string `cron` | `@Duty invalid metadata for "cron": cron must be a cron expression such as "0 9 * * 1-5"`                |
-| An unknown time zone          | `@Duty invalid metadata for "timezone": timezone must be an IANA time zone such as "Europe/Berlin"`      |
-| `timezone` with `every`       | `@Duty invalid metadata for "timezone": timezone applies to cron; a duty with every has none`            |
-| An unknown `scope`            | `@Duty invalid metadata for "scope": scope must be 'machine', 'workspace' or 'cluster'`                  |
+| Mistake                       | Message                                                                                                                       |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| A malformed `every`           | `@Duty invalid metadata for "every": every must be milliseconds or a duration such as "30s", "5m", "1h"`                      |
+| Both `every` and `cron`       | `@Duty invalid metadata for "cron": set either every or cron, not both`                                                       |
+| Neither                       | `@Duty invalid metadata for "every": a duty needs every (an interval) or cron (a cron expression)`                            |
+| An empty or non-string `cron` | `@Duty invalid metadata for "cron": cron must be a cron expression such as "0 9 * * 1-5"`                                     |
+| An unknown time zone          | `@Duty invalid metadata for "timezone": timezone must be an IANA time zone such as "Europe/Berlin"`                           |
+| `timezone` with `every`       | `@Duty invalid metadata for "timezone": timezone applies to cron; a duty with every has none`                                 |
+| An unknown `scope`            | `@Duty invalid metadata for "scope": scope must be 'machine', 'workspace' or 'cluster', or { key } for a lease the app names` |
+| An empty `scope.key`          | `@Duty invalid metadata for "scope.key": scope.key must be a string of 1 to 1024 characters, or a function that returns one`  |
+| A `prefer` of another type    | `@Duty invalid metadata for "prefer": prefer must be true, false, or a function that returns one`                             |
 
 A class without `run()` fails to compile, and throws `@Duty invalid metadata for "run": <Class> has no run() method`.
 
@@ -267,6 +270,66 @@ export class WeekdayReportDuty implements DutyInterface {
   clock of the machine that holds it: keep the machines' clocks in sync (NTP), since a scheduled time runs as early or
   late as the holder's clock is off.
 
+## Leases the App Names
+
+`scope: { key }` (since 1.14) gives a duty one lease per key the app chooses, among the processes of a machine,
+whatever folder each runs from: the processes whose key is the same share it. `'workspace'` keys the lease by the
+project root, so each git worktree of a project gets a lease of its own; a key the app names lets every worktree share
+one, such as the path of the main checkout whose data file they all use. A function is called each time the duty
+starts, in each process, and its answer is trimmed as a string key is, so `'main\n'` and `'main'` share a lease. One
+that throws, answers no string, or answers a key longer than 1024 characters fails the duty's start with
+`DutyLeaseKeyError` (`DUTY_LEASE_KEY`): `Duty "<name>" could not name its lease: scope.key <reason>; it answers the key
+its processes share`.
+
+```typescript
+import { execFileSync } from 'node:child_process';
+
+import { Duty, type DutyRunContext } from '@frontmcp/sdk';
+
+/** The main checkout of the repository this process runs in, which every worktree of it shares. */
+function mainCheckout(): string {
+  const common = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { encoding: 'utf8' });
+  return common.trim().replace(/\/\.git$/, '');
+}
+
+@Duty({ name: 'index-data-file', every: '30s', scope: { key: mainCheckout } })
+class IndexDataFile {
+  async run({ signal }: DutyRunContext): Promise<void> {
+    // one process of the machine indexes the main checkout's file, whichever worktree it runs in
+  }
+}
+```
+
+The lease lives where a `'machine'` lease does (see [Where Leases Live](#where-leases-live)), under
+`<info.name>:<duty name>:key:<SHA-256 of the key>`.
+
+## A Preferred Holder
+
+`@Duty({ prefer })` (since 1.14) lets a designated process take a duty over: a dashboard that should hold the role
+whenever it runs, with the other processes standing in while it doesn't. `prefer` is `true`, `false`, or a function
+called each time the duty starts, in each process, so one class can prefer in one process and not in another.
+
+```typescript
+@Duty({ name: 'keep-data-file', every: '10s', scope: 'machine', prefer: () => process.env.APP_ROLE === 'dashboard' })
+class KeepDataFile {
+  run(): void {
+    // ...
+  }
+}
+```
+
+- A preferred process marks the lease as wanted (`<key>:prefer`, holding its id for as long as a lease lasts, renewed
+  at each lease check) and contends for it as usual.
+- A holder that is not preferred sees the mark at its next lease check (every third of `leaseMs`): it stops, aborts its
+  run in flight and waits for it to end, renewing the lease meanwhile and starting no run, then releases the lease,
+  logging `Duty "<name>" hands its lease over to a preferred process`. The preferred process takes the lease at its next
+  check, so it never starts while the run it took over from still runs, however long that run takes to end.
+- While a preferred process wants the lease, a process that is not preferred doesn't take it, even when it is free.
+- A preferred process that stops removes its mark, so another takes the duty over at once; one that dies leaves its
+  mark to expire with its lease (`leaseMs`).
+- Two preferred processes contend as any two do: the holder keeps the duty.
+- Only processes of a duty that states `prefer` (even as `false`) read the mark, so a duty without it works as before.
+
 ## Where Leases Live
 
 | Server config                        | Scope                      | Store                                                                    | Key                                                |
@@ -275,7 +338,8 @@ export class WeekdayReportDuty implements DutyInterface {
 | A top-level `redis` (Redis provider) | `'machine'`, `'workspace'` | That Redis                                                               | `frontmcp:duty:<hostname>:<info.name>:<duty name>` |
 | A top-level `redis` (Redis provider) | `'cluster'`                | That Redis                                                               | `frontmcp:cluster:duty:<info.name>:<duty name>`    |
 
-A `'workspace'` duty's key ends with the SHA-256 of the project root. The server and duty names are URI-encoded in the
+A `'workspace'` duty's key ends with the SHA-256 of the project root, and a `{ key }` duty's with `:key:` and the SHA-256
+of its key. The server and duty names are URI-encoded in the
 key, so a `:` in either never makes two leases one. Next to each lease, `<key>:ran` records the last run: for an
 interval it expires after one interval, for a cron it holds the time the schedule was last taken and does not expire.
 The store never falls back to memory. The duty opens it at its first lease check, so the server starts even when the

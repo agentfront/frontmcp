@@ -89,8 +89,16 @@ describe('@Duty', () => {
     [{ every: -5, scope: 'machine' }, 'every', 'every must be greater than 0'],
     [{ every: 1.5, scope: 'machine' }, 'every', 'every must be a whole number of milliseconds'],
     [{ every: '30d', scope: 'machine' }, 'every', 'every must be at most 2147483647 ms (about 24.8 days)'],
-    [{ every: '1m', scope: 'galaxy' }, 'scope', "scope must be 'machine', 'workspace' or 'cluster'"],
-    [{ every: '1m' }, 'scope', "scope must be 'machine', 'workspace' or 'cluster'"],
+    [
+      { every: '1m', scope: 'galaxy' },
+      'scope',
+      "scope must be 'machine', 'workspace' or 'cluster', or { key } for a lease the app names",
+    ],
+    [
+      { every: '1m' },
+      'scope',
+      "scope must be 'machine', 'workspace' or 'cluster', or { key } for a lease the app names",
+    ],
     [
       { every: '1m', scope: 'machine', leaseMs: 500 },
       'leaseMs',
@@ -141,5 +149,32 @@ describe('@Duty', () => {
     expect(dutyMetadataOf(new PlainProvider())).toBeUndefined();
     expect(dutyMetadataOf(undefined)).toBeUndefined();
     expect(dutyMetadataOf('text')).toBeUndefined();
+  });
+});
+
+describe('@Duty with a lease the app names, and a preferred process', () => {
+  it('keeps a key, or a function that answers one, as its scope', () => {
+    const key = () => '/srv/main-checkout';
+    expect(dutyMetadataOf(decorate({ every: '1m', scope: { key: 'main-index' } }))?.scope).toEqual({
+      key: 'main-index',
+    });
+    expect(dutyMetadataOf(decorate({ every: '1m', scope: { key } }))?.scope).toEqual({ key });
+  });
+
+  it('keeps prefer, true, false or a function, and leaves it out when unset', () => {
+    const prefer = () => true;
+    expect(dutyMetadataOf(decorate({ every: '1m', scope: 'machine', prefer: true }))?.prefer).toBe(true);
+    expect(dutyMetadataOf(decorate({ cron: '0 9 * * *', scope: 'machine', prefer }))?.prefer).toBe(prefer);
+    expect(dutyMetadataOf(decorate({ every: '1m', scope: 'machine' }))).not.toHaveProperty('prefer');
+  });
+
+  it.each([
+    [{ every: '1m', scope: { key: '' } }, 'scope.key must be a string of 1 to 1024 characters, or a function'],
+    [{ every: '1m', scope: { key: 5 } }, 'scope must be'],
+    [{ every: '1m', scope: { key: 'a', cluster: true } }, 'Unrecognized key: "cluster"'],
+    [{ every: '1m', scope: 'machine', prefer: 'yes' }, 'prefer must be true, false, or a function that returns one'],
+  ])('refuses %j', (metadata, message) => {
+    expect(() => decorate(metadata as unknown as DutyMetadata)).toThrow(InvalidDecoratorMetadataError);
+    expect(() => decorate(metadata as unknown as DutyMetadata)).toThrow(message);
   });
 });

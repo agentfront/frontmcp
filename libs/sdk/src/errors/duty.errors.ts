@@ -11,6 +11,16 @@ export class DutyNameConflictError extends InternalMcpError {
   }
 }
 
+/** Thrown when a duty starts and the `scope.key` function it names its lease with fails, or answers no key. */
+export class DutyLeaseKeyError extends InternalMcpError {
+  constructor(dutyName: string, reason: string) {
+    super(
+      `Duty "${dutyName}" could not name its lease: scope.key ${reason}; it answers the key its processes share`,
+      'DUTY_LEASE_KEY',
+    );
+  }
+}
+
 /** Thrown at startup when a duty's cron expression can't be read. */
 export class InvalidDutyCronError extends InternalMcpError {
   /** Names the duty, its expression and why it can't be read. */
