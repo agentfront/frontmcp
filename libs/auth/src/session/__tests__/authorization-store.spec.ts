@@ -2,6 +2,7 @@
  * Authorization Store Tests
  */
 import { assertDefined } from '../../__test-utils__/assertion.helpers';
+import { AuthFlowError } from '../../errors/auth-internal.errors';
 import { AuthorizationRowNames } from '../authorization-row-names';
 import {
   generatePkceChallenge,
@@ -549,6 +550,19 @@ describe('RedisAuthorizationStore', () => {
     };
   }
 
+  /** Expect `pending` to reject with the AuthFlowError a store throws for a code or refresh token it refuses. */
+  async function expectRefused(
+    pending: Promise<unknown>,
+    code: 'AUTHORIZATION_CODE_REDEEMED' | 'REFRESH_TOKEN_REDEEMED',
+  ) {
+    const error = await pending.then(
+      () => undefined,
+      (reason: unknown) => reason,
+    );
+    expect(error).toBeInstanceOf(AuthFlowError);
+    expect(error).toMatchObject({ code });
+  }
+
   /** The row name of `value` without a key hash secret. */
   function hashed(value: string): string {
     return new AuthorizationRowNames().name(value);
@@ -563,12 +577,13 @@ describe('RedisAuthorizationStore', () => {
       const rowName = hashed(record.token);
 
       expect(await redisStore.getRefreshToken(rowName)).toBeNull();
-      await expect(
+      await expectRefused(
         redisStore.rotateRefreshToken(
           rowName,
           redisStore.createRefreshTokenRecord({ clientId: 'client-1', userSub: 'user-1', scopes: [] }),
         ),
-      ).rejects.toThrow('already rotated');
+        'REFRESH_TOKEN_REDEEMED',
+      );
       await redisStore.revokeRefreshToken(rowName);
 
       expect(await redisStore.getRefreshToken(record.token)).toEqual(record);
@@ -588,7 +603,7 @@ describe('RedisAuthorizationStore', () => {
       const rowName = hashed(record.code);
 
       expect(await redisStore.getAuthorizationCode(rowName)).toBeNull();
-      await expect(redisStore.markCodeUsed(rowName)).rejects.toThrow('already redeemed');
+      await expectRefused(redisStore.markCodeUsed(rowName), 'AUTHORIZATION_CODE_REDEEMED');
       await redisStore.deleteAuthorizationCode(rowName);
 
       expect(await redisStore.getAuthorizationCode(record.code)).toEqual(record);
@@ -675,12 +690,13 @@ describe('RedisAuthorizationStore', () => {
       await redis.set(legacyKey, JSON.stringify(record));
 
       expect(await redisStore.getRefreshToken(record.token)).toBeNull();
-      await expect(
+      await expectRefused(
         redisStore.rotateRefreshToken(
           record.token,
           redisStore.createRefreshTokenRecord({ clientId: 'client-1', userSub: 'user-1', scopes: [] }),
         ),
-      ).rejects.toThrow('already rotated');
+        'REFRESH_TOKEN_REDEEMED',
+      );
     });
   });
 
