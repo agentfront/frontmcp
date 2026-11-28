@@ -1244,3 +1244,28 @@ A skill's tool that `availableWhen.surface` doesn't offer the caller is reported
 ```
 
 **Codemod available:** no
+
+## BC-058: 1.14: baseLayout styles inline, and builtInAuthPageHeaders() sends the inline CSP, by default
+
+**Package:** `@frontmcp/auth` | **Category:** change | **Severity:** medium
+
+A custom page built with `baseLayout` (or `createLayout`, `authLayout`, `centeredCardLayout`, `wideLayout`, `extraWideLayout`) inlines FrontMCP's stylesheet and a system font stack by default (`inlineStyles: true`), as the built-in sign-in and consent pages do since 1.13.2, and `builtInAuthPageHeaders()` sends `INLINE_AUTH_PAGE_CSP`, which allows no third-party host. Up to 1.13 the layout loaded the Tailwind CDN script from jsDelivr and Inter from Google Fonts, and the headers sent `BUILT_IN_AUTH_PAGE_CSP`, which allows them. The inline stylesheet covers only the Tailwind classes the built-in pages use, and `theme.customCss` is plain CSS there. A page that needs other classes or Inter sets `inlineStyles: false` on the layout and sends `builtInAuthPageHeaders({ csp: 'cdn' })`; `includeTailwind` and `includeFonts` apply only with `inlineStyles: false`. `{ csp: 'inline' }` and `{ csp: false }` work as before.
+
+**Before:**
+
+```typescript
+baseLayout(html, { title }); // Tailwind CDN + Inter
+builtInAuthPageHeaders(); // BUILT_IN_AUTH_PAGE_CSP (allows jsDelivr, Google Fonts)
+```
+
+**After:**
+
+```typescript
+baseLayout(html, { title }); // inline stylesheet, system fonts
+builtInAuthPageHeaders(); // INLINE_AUTH_PAGE_CSP
+// opt back in to the CDN:
+baseLayout(html, { title, inlineStyles: false });
+builtInAuthPageHeaders({ csp: 'cdn' });
+```
+
+**Codemod available:** no
