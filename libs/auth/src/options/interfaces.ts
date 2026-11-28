@@ -957,8 +957,9 @@ export interface TransparentAuthOptionsInterface {
   /**
    * Decides who a verified token speaks for, where the provider marks machines in a way FrontMCP does not detect
    * (a Keycloak service account, say): it gets the token's claims and the detected principal, and returns the fields
-   * to change (`{ kind: 'machine' }`) or `undefined`. It may be async. One that throws, or answers a kind that is not
-   * `'person'`, `'machine'` or `'anonymous'`, leaves the detected principal and logs a warning.
+   * to change (`{ kind: 'machine' }`) or `undefined`. It may be async. One that throws, or answers a principal that
+   * is not one (an unknown kind, a non-string `clientId` or `grantType`, a non-finite `authTime`), leaves the detected
+   * principal and logs a warning.
    * @default the detected principal: a machine for a client-credentials token (`gty`), an Entra app token
    *   (`idtyp: 'app'`) or a token whose `sub` is its client (`client_id`, `azp`, `cid`, `appid`), else a person
    */
@@ -1011,8 +1012,9 @@ export interface LocalAuthOptionsInterface {
   /**
    * Decides who a verified token speaks for, where the provider marks machines in a way FrontMCP does not detect
    * (a Keycloak service account, say): it gets the token's claims and the detected principal, and returns the fields
-   * to change (`{ kind: 'machine' }`) or `undefined`. It may be async. One that throws, or answers a kind that is not
-   * `'person'`, `'machine'` or `'anonymous'`, leaves the detected principal and logs a warning.
+   * to change (`{ kind: 'machine' }`) or `undefined`. It may be async. One that throws, or answers a principal that
+   * is not one (an unknown kind, a non-string `clientId` or `grantType`, a non-finite `authTime`), leaves the detected
+   * principal and logs a warning.
    * @default the detected principal: a machine for a client-credentials token (`gty`), an Entra app token
    *   (`idtyp: 'app'`) or a token whose `sub` is its client (`client_id`, `azp`, `cid`, `appid`), else a person
    */

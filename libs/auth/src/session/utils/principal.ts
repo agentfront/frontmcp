@@ -22,8 +22,8 @@ export interface AuthPrincipal {
 /**
  * Decides the principal of a verified token, for an identity provider that marks machines another way: it gets the
  * token's claims and the principal FrontMCP detected, and returns the fields to change (`{ kind: 'machine' }`), or
- * `undefined` to keep the detected one. It may be async. One that throws, or answers a `kind` that is not one of
- * the three, leaves the detected principal.
+ * `undefined` to keep the detected one. It may be async. One that throws, or answers a principal that is not one (an
+ * unknown `kind`, a non-string `clientId` or `grantType`, a non-finite `authTime`), leaves the detected principal.
  */
 export type PrincipalResolver = (
   claims: Readonly<Record<string, unknown>>,
