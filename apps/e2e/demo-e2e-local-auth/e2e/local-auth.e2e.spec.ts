@@ -200,6 +200,36 @@ describe('LOCAL-mode auth E2E (single-operator, non-federated)', () => {
         await client.disconnect();
       }
     });
+
+    it('serves the signed-in caller as a person, authenticated when the token was issued (#1363)', async () => {
+      const { verifier, challenge } = makePkce();
+      const { pendingAuthId } = await startAuthorization(baseUrl, challenge, { scope: 'read' });
+      const { code } = await completeLogin(baseUrl, pendingAuthId);
+      const { access_token } = (await (await exchangeToken(baseUrl, { code, verifier })).json()) as {
+        access_token: string;
+      };
+      const claims = JSON.parse(Buffer.from(access_token.split('.')[1], 'base64url').toString()) as {
+        sub: string;
+        iat: number;
+      };
+
+      const client = await McpTestClient.create({
+        baseUrl,
+        transport: 'streamable-http',
+        auth: { token: access_token },
+      }).buildAndConnect();
+      try {
+        const result = await client.tools.call('whoami', {});
+        expect(result).toBeSuccessful();
+        expect(result.json<{ principal: unknown }>().principal).toEqual({
+          kind: 'person',
+          sub: claims.sub,
+          authTime: claims.iat,
+        });
+      } finally {
+        await client.disconnect();
+      }
+    });
   });
 
   // ===========================================================

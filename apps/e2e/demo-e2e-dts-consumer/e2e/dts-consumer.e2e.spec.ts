@@ -59,6 +59,7 @@ const fixtureFiles = [
   'lazy-apps-must-compile.ts',
   'subpath-exports-must-compile.ts',
   'direct-server-must-fail.ts',
+  'principal-must-compile.ts',
 ].map((fileName) => path.join(fixtureDir, fileName));
 
 function compileFixture(withoutExpectErrors?: string): { diagnostics: FixtureDiagnostic[]; sourceFiles: string[] } {
@@ -288,6 +289,10 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
     expect(failures.map(({ summary }) => summary)).toEqual([
       expect.stringMatching(/^TS2741: Property 'scope' is missing in type .* but required in type 'DirectMcpServer'\.$/),
     ]);
+  });
+
+  it("types this.auth.principal, the auth options' principal resolver and the typed auth_time, azp and client_id", () => {
+    expect(describeEach(inFixtureFile('principal-must-compile.ts'))).toEqual([]);
   });
 
   it('ships declaration files that type-check with skipLibCheck disabled', () => {

@@ -46,6 +46,7 @@
     "persistent-questions-must-compile.ts",
     "lazy-apps-must-compile.ts",
     "subpath-exports-must-compile.ts",
+    "principal-must-compile.ts",
     "http-routes-must-compile.ts",
     "direct-server-must-fail.ts"
   ]
