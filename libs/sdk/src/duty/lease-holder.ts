@@ -43,6 +43,8 @@ export class LeaseHolder {
   private held = false;
   private stopped = false;
   private settled = false;
+  /** Set by a stop whose work did not end: the lease then ends by its TTL, and a hand-over releases nothing. */
+  private leftToExpire = false;
   private reportedHeldElsewhere = false;
   private leaseCheck?: Promise<void>;
   /** The hand-over to a preferred process, while what ran under the lease ends: the lease is renewed meanwhile. */
@@ -80,16 +82,17 @@ export class LeaseHolder {
 
   /**
    * Stop contending, keep renewing the lease until `untilSettled` resolves (what ran under it has ended), then
-   * release it. When it resolves `false` (what ran did not end), stop renewing without releasing: the lease then ends
-   * by the store's TTL.
+   * release it. When it resolves `false` (what ran did not end), stop renewing without releasing, and without waiting
+   * for a hand-over in progress: the lease then ends by the store's TTL.
    */
   async stop(untilSettled: () => boolean | void | Promise<boolean | void>): Promise<void> {
     this.stopped = true;
     const ended = (await untilSettled()) !== false;
     this.settled = true;
+    this.leftToExpire = !ended;
     clearTimeout(this.leaseTimer);
     await this.leaseCheck;
-    await this.handingOver;
+    if (ended) await this.handingOver;
     clearTimeout(this.leaseDeadline);
     // A preferred process that stops no longer wants the lease: the others take it at once
     if (this.options.prefer === true) {
@@ -183,6 +186,7 @@ export class LeaseHolder {
     this.options.onLost();
     this.handingOver = (async () => {
       await this.options.settled?.();
+      if (this.leftToExpire) return;
       await this.options.storage.deleteIfEquals(this.options.key, this.id);
       this.options.logger.info(`${this.options.label} hands its lease over to a preferred process`);
     })()

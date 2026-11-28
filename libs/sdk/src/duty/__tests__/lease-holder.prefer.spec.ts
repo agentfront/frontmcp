@@ -103,6 +103,29 @@ describe('LeaseHolder with prefer', () => {
     expect(other.holder.holding).toBe(false);
   });
 
+  it('stops at once, and lets the lease end by its TTL, when stopped mid-hand-over with work that did not end', async () => {
+    let finishWork: () => void = () => undefined;
+    const work = new Promise<void>((resolve) => (finishWork = resolve));
+    const other = probe(false, () => work);
+    const preferred = probe(true);
+    await start(other, preferred);
+    await jest.advanceTimersByTimeAsync(LEASE_MS / 3);
+    expect(other.events).toContain(`stopped at ${LEASE_MS / 3}`);
+
+    let stopped = false;
+    void other.holder.stop(() => false).then(() => (stopped = true));
+    started.splice(started.indexOf(other.holder), 1);
+    await jest.advanceTimersByTimeAsync(0);
+    expect(stopped).toBe(true);
+
+    finishWork();
+    await jest.advanceTimersByTimeAsync(0);
+    expect(await storage.get(KEY)).toBe(other.holder.id);
+    expect(other.events).not.toContain('info: Duty "sweep" hands its lease over to a preferred process');
+    await jest.advanceTimersByTimeAsync(LEASE_MS * 2);
+    expect(preferred.holder.holding).toBe(true);
+  });
+
   it('hands the lease over at once when the work under it ends at once', async () => {
     const other = probe(false, () => Promise.resolve());
     const preferred = probe(true);
