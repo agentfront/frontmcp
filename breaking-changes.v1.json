@@ -649,7 +649,7 @@
     "codemod": "no"
   },
   {
-    "id": "BC-065",
+    "id": "BC-062",
     "title": "1.14: a stall names the HTTP routes, duties and workers in flight",
     "package": "@frontmcp/observability",
     "category": "change",

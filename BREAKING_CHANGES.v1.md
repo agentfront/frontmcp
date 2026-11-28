@@ -1337,7 +1337,7 @@ server.scope.events?.listSubscriptions();
 
 **Codemod available:** no
 
-## BC-065: 1.14: a stall names the HTTP routes, duties and workers in flight
+## BC-062: 1.14: a stall names the HTTP routes, duties and workers in flight
 
 **Package:** `@frontmcp/observability` | **Category:** change | **Severity:** low
 
