@@ -180,4 +180,34 @@ describe('a function key', () => {
       error: expect.stringContaining('the key function answered 42'),
     });
   });
+
+  it('says what a key function answered, or threw, whatever it is, and never rejects', async () => {
+    const circular: Record<string, unknown> = {};
+    circular['self'] = circular;
+    const bare = Object.create(null) as object;
+    const bareCircular = Object.create(null) as Record<string, unknown>;
+    bareCircular['self'] = bareCircular;
+    const answers: Array<[unknown, string]> = [
+      [10n, 'answered 10'],
+      [circular, 'answered [object Object]'],
+      [bare, 'answered {}'],
+      [Symbol('key'), 'answered Symbol(key)'],
+      [bareCircular, 'answered a value of type object'],
+    ];
+    for (const [answer, said] of answers) {
+      await expect(readSharedServerKey(() => answer as string)).resolves.toEqual({
+        error: expect.stringContaining(`the key function ${said}`),
+      });
+    }
+    await expect(
+      readSharedServerKey(() => {
+        throw Object.create(null);
+      }),
+    ).resolves.toEqual({ error: 'the key function failed ({})' });
+    await expect(
+      readSharedServerKey(() => {
+        throw 10n;
+      }),
+    ).resolves.toEqual({ error: 'the key function failed (10)' });
+  });
 });

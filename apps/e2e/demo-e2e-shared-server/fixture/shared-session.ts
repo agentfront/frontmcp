@@ -5,7 +5,8 @@
  *
  * `SHARED_SPARE` gives the session a spare. With `SHARED_PAGES` the server serves pages too: a plain route, people
  * sign-in and a page for signed-in people; with `SHARED_JOBS`, a detached job.
- * With `SHARED_KEY_FILE` the key is that file's text, read again on each change; `e2e-two` starts with this entry.
+ * With `SHARED_KEY_FILE` the key is that file's text, read again on each change; `e2e-two` starts with this entry,
+ * unless `SHARED_NO_ENTRIES` names none.
  */
 import 'reflect-metadata';
 
@@ -164,7 +165,7 @@ const keyOptions = keyFile
   ? {
       key: async () => (await readFile(keyFile)).trim(),
       rereadKey: { file: keyFile, intervalMs: 200 },
-      entries: { 'e2e-two': String(process.argv[1]) },
+      ...(env['SHARED_NO_ENTRIES'] === '1' ? {} : { entries: { 'e2e-two': String(process.argv[1]) } }),
     }
   : { key: 'e2e' };
 

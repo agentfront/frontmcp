@@ -1,28 +1,27 @@
 /**
  * A session that moves to another key (#1349): a function `key` is read again each time `rereadKey.file` changes, and a
- * new key moves the session to that key's server, which it starts only from an entry its own config names.
+ * new key moves the session to that key's server, which it starts only from an entry its own config names. The moves
+ * over both transports, and a squatter on the new key, are covered end to end in demo-e2e-shared-server.
  */
 import 'reflect-metadata';
 
-import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { PassThrough } from 'node:stream';
 
-import { randomBytes } from '@frontmcp/utils';
+import { mkdtemp, readFile, rm, writeFile } from '@frontmcp/utils';
 
-import { startIdentityStub, type IdentityStub } from '../../__test-utils__/helpers/shared-server-stub';
 import { callTool, clientOf, initialize, structuredOf } from '../../__test-utils__/helpers/shared-session-client';
 import { App, LogLevel, Tool, ToolContext, type FrontMcpConfigInput } from '../../common';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import {
   attachSharedSession,
+  keyFileSignature,
   mayStartServerOf,
   type AttachSharedSessionOptions,
   type SharedSession,
 } from '../shared-attach';
 import { bootEmbeddedServer } from '../shared-embedded';
-import { prepareSharedDirectory, sharedServerFiles, writeServerRecord } from '../shared-files';
 import { serveShared, type SharedServerHandle } from '../shared-serve';
 import { parseSharedServerOptions, type ResolvedSharedServerOptions } from '../shared-server.options';
 
@@ -68,20 +67,18 @@ posixOnly('a shared session that moves to another key', () => {
   let keyFile: string;
   let servers: SharedServerHandle[];
   let sessions: SharedSession[];
-  let stubs: IdentityStub[];
   let stderr: jest.SpyInstance;
-  let nextKey: () => string;
+  let nextKey: () => string | Promise<string>;
 
-  beforeEach(() => {
-    home = fs.mkdtempSync(path.join(os.tmpdir(), 'sdk-moves-'));
+  beforeEach(async () => {
+    home = await mkdtemp(path.join(os.tmpdir(), 'sdk-moves-'));
     previousHome = process.env['FRONTMCP_HOME'];
     process.env['FRONTMCP_HOME'] = home;
     keyFile = path.join(home, 'active-key');
-    fs.writeFileSync(keyFile, 'one');
-    nextKey = () => fs.readFileSync(keyFile, 'utf8').trim();
+    await writeFile(keyFile, 'one');
+    nextKey = async () => (await readFile(keyFile)).trim();
     servers = [];
     sessions = [];
-    stubs = [];
     gate = Promise.resolve();
     stderr = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
   });
@@ -90,11 +87,10 @@ posixOnly('a shared session that moves to another key', () => {
     openGate();
     for (const session of sessions) await session.stop();
     for (const server of servers) await server.close();
-    for (const stub of stubs) await stub.close();
     stderr.mockRestore();
     if (previousHome === undefined) delete process.env['FRONTMCP_HOME'];
     else process.env['FRONTMCP_HOME'] = previousHome;
-    fs.rmSync(home, { recursive: true, force: true });
+    await rm(home, { recursive: true, force: true });
   });
 
   function stderrLines(): string[] {
@@ -105,10 +101,15 @@ posixOnly('a shared session that moves to another key', () => {
     return parseSharedServerOptions({ key, transport, idleTimeoutMs: false, checkout: false });
   }
 
-  async function serve(transport: 'unix' | 'http', key: string, label = key): Promise<void> {
-    servers.push(
-      await serveShared({ config: configOf(label), options: optionsFor(transport, key), create, exit: jest.fn() }),
-    );
+  async function serve(transport: 'unix' | 'http', key: string, label = key): Promise<SharedServerHandle> {
+    const server = await serveShared({
+      config: configOf(label),
+      options: optionsFor(transport, key),
+      create,
+      exit: jest.fn(),
+    });
+    servers.push(server);
+    return server;
   }
 
   /** A session of key `one` whose key is read from the key file again each time it changes. */
@@ -141,8 +142,12 @@ posixOnly('a shared session that moves to another key', () => {
   }
 
   /** Point the key file at `key`: its size or time changes, which the session's watch sees. */
-  function writeKey(key: string): void {
-    fs.writeFileSync(keyFile, `${key}\n`);
+  async function writeKey(key: string): Promise<void> {
+    await writeFile(keyFile, `${key}\n`);
+  }
+
+  function moved(key: string): () => boolean {
+    return () => stderrLines().some((line) => line.includes(`moved to the shared server "${key}"`));
   }
 
   async function waitFor(condition: () => boolean, what: string, timeoutMs = 15_000): Promise<void> {
@@ -153,24 +158,6 @@ posixOnly('a shared session that moves to another key', () => {
     }
   }
 
-  describe.each(['unix', 'http'] as const)('over %s', (transport) => {
-    it("moves to the new key's server when the key file changes, and tells the client the lists changed", async () => {
-      await serve(transport, 'one');
-      await serve(transport, 'two');
-      const client = attach(transport);
-      expect((await client.request(initialize)).result).toBeDefined();
-      client.send({ jsonrpc: '2.0', method: 'notifications/initialized' });
-      expect(await whoami(client, 2)).toBe('one');
-
-      writeKey('two');
-      await waitFor(() => stderrLines().some((line) => line.includes('moved to the shared server "two"')), 'the move');
-
-      expect(await whoami(client, 3)).toBe('two');
-      expect(client.received.some(({ method }) => method === 'notifications/tools/list_changed')).toBe(true);
-      expect(client.received.filter(({ id }) => id === 1)).toHaveLength(1);
-    });
-  });
-
   it('finishes the requests in flight on the server it moves from', async () => {
     await serve('unix', 'one');
     await serve('unix', 'two');
@@ -179,7 +166,7 @@ posixOnly('a shared session that moves to another key', () => {
     gate = new Promise((resolve) => (openGate = resolve));
     const slow = client.request(callTool(2, 'slow'));
 
-    writeKey('two');
+    await writeKey('two');
     await waitFor(() => stderrLines().some((line) => line.includes('moved to the shared server "two"')), 'the move');
     expect(await whoami(client, 3)).toBe('two');
     openGate();
@@ -193,7 +180,7 @@ posixOnly('a shared session that moves to another key', () => {
     const client = attach('unix', { spawnServer });
     await client.request(initialize);
 
-    writeKey('two');
+    await writeKey('two');
     await waitFor(
       () => stderrLines().some((line) => line.includes('staying on the shared server "one"')),
       'the refusal',
@@ -226,7 +213,7 @@ posixOnly('a shared session that moves to another key', () => {
     });
     await client.request(initialize);
 
-    writeKey('two');
+    await writeKey('two');
     await waitFor(() => stderrLines().some((line) => line.includes('moved to the shared server "two"')), 'the move');
 
     expect(spawned).toEqual(['two']);
@@ -242,48 +229,58 @@ posixOnly('a shared session that moves to another key', () => {
     nextKey = () => {
       throw new Error('no checkout');
     };
-    writeKey('two');
+    await writeKey('two');
     await waitFor(
       () => stderrLines().some((line) => line.includes('the key function failed (no checkout)')),
       'a warning',
     );
     nextKey = () => 'Not A Key';
-    writeKey('three');
+    await writeKey('three');
     await waitFor(() => stderrLines().some((line) => line.includes('answered "Not A Key"')), 'a second warning');
 
     expect(await whoami(client, 2)).toBe('one');
     expect(stderrLines().filter((line) => line.includes('keeping the shared server key "one"'))).toHaveLength(2);
   });
 
-  it("never moves to a process on the new key that does not prove it is that key's server", async () => {
-    await serve('http', 'one');
-    const secret = Buffer.from(randomBytes(32)).toString('base64url');
-    const stub = await startIdentityStub({
-      secret: Buffer.from(randomBytes(32)).toString('base64url'),
-      behavior: 'prove',
-    });
-    stubs.push(stub);
-    const files = sharedServerFiles('two');
-    await prepareSharedDirectory(files);
-    await writeServerRecord(files, {
-      name: 'moves-spec',
-      transport: 'http',
-      port: stub.port,
-      path: '/',
-      pid: 1,
-      secret,
-    });
-    const client = attach('http');
+  it('moves when the key file changed between the first read and the start of its watch', async () => {
+    await serve('unix', 'one');
+    await serve('unix', 'two');
+    const keySignature = await keyFileSignature(keyFile);
+    // The first read answered `one`; the file names `two` before the watch starts
+    await writeKey('two');
+    const client = attach('unix', { keySignature });
     await client.request(initialize);
 
-    writeKey('two');
-    await waitFor(
-      () => stderrLines().some((line) => line.includes('staying on the shared server "one"')),
-      'the refusal',
-    );
+    await waitFor(moved('two'), 'the move');
+    expect(await whoami(client, 2)).toBe('two');
+  });
 
-    expect(await whoami(client, 2)).toBe('one');
-    expect(stub.requests.filter(({ headers }) => headers['authorization'] !== undefined)).toEqual([]);
+  it('reads the key once more when its watch starts with no signature from before the first read', async () => {
+    await serve('unix', 'one');
+    await serve('unix', 'two');
+    await writeKey('two');
+    const client = attach('unix');
+    await client.request(initialize);
+
+    await waitFor(moved('two'), 'the move');
+    expect(await whoami(client, 2)).toBe('two');
+  });
+
+  it('moves back to its first key, and says so, when the server of the key it moved to is gone for good', async () => {
+    await serve('unix', 'one');
+    const two = await serve('unix', 'two');
+    const client = attach('unix');
+    await client.request(initialize);
+    await writeKey('two');
+    await waitFor(moved('two'), 'the move');
+    expect(await whoami(client, 2)).toBe('two');
+
+    await two.close();
+    servers.splice(servers.indexOf(two), 1);
+
+    expect(await whoami(client, 3)).toBe('one');
+    expect(stderrLines().some((line) => line.includes('moving back to the shared server "one"'))).toBe(true);
+    expect(stderrLines().some((line) => line.includes('in this process'))).toBe(false);
   });
 
   it('may start only its first key, with its own entry, and the keys its entries name', () => {
