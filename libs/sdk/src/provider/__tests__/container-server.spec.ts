@@ -86,6 +86,16 @@ class SettingsReader implements OnReady {
   }
 }
 
+let finishSlowReady: (() => void) | undefined;
+
+/** A container provider whose `onReady()` waits until the test lets it finish. */
+@Provider({ name: 'held-ready' })
+class HeldReady implements OnReady {
+  async onReady() {
+    await new Promise<void>((resolve) => (finishSlowReady = resolve));
+  }
+}
+
 @Provider({ name: 'ledger' })
 class Ledger implements OnBootstrap, OnShutdown {
   constructor(readonly settings: Settings) {
@@ -156,6 +166,7 @@ describe('a server started on an existing container', () => {
     phases.length = 0;
     audited.length = 0;
     slowReadyDone = false;
+    finishSlowReady = undefined;
     built = { settings: 0, ledger: 0, only: 0 };
     dutyReady = 0;
     home = fs.mkdtempSync(path.join(os.tmpdir(), 'sdk-container-'));
@@ -237,6 +248,20 @@ describe('a server started on an existing container', () => {
     await serve(serverConfig(made, { providers: [Settings, SettingsReader] }));
 
     expect(phases.filter((phase) => phase.startsWith('ready:'))).toEqual(['ready:settings', 'ready:settings-reader']);
+  });
+
+  it("refuses a container disposed while its providers' onReady() ran for the server", async () => {
+    const made = await container({ providers: [Settings, OnlyInContainer, HeldReady] });
+    const starting = FrontMcpInstance.createDirect(serverConfig(made, { providers: [Settings, HeldReady] }));
+    const refused = expect(starting).rejects.toBeInstanceOf(ContainerDisposedError);
+    for (let tries = 0; !finishSlowReady && tries < 200; tries++)
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+    await made.dispose();
+    containers.splice(containers.indexOf(made), 1);
+    finishSlowReady?.();
+
+    await refused;
   });
 
   it("leaves the container's providers running when a server on it shuts down; dispose() shuts them down once", async () => {

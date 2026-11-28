@@ -287,6 +287,8 @@ export class FrontMcpInstance implements FrontMcpInterface {
     for (const scope of this.getScopes() as Scope[]) {
       await scope.providers.runReadyHooks(scope.logger);
     }
+    // A container disposed while its providers were readied for this server is refused, as one disposed before it
+    if (containerHandleOf(this.config.container)?.disposed) throw new ContainerDisposedError();
   }
 
   /**
