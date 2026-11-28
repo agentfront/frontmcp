@@ -61,6 +61,11 @@ export interface RunReplayToolLimits {
 
 const ENCLAVE_RAPID_ENUMERATION_THRESHOLD = 30;
 
+/** How long Enclave waits for one review hook when `review.timeoutMs` is unset. */
+const ENCLAVE_REVIEW_TIMEOUT_MS = 30_000;
+/** The longest a held answer leaves before its review hook's timeout, so Enclave never takes it for a hook that hung. */
+const MAX_HOLD_MARGIN_MS = 1000;
+
 const ALLOW: ReviewDecision = { decision: 'allow' };
 const PASS: PostReviewAction = { action: 'pass' };
 
@@ -92,6 +97,10 @@ export class RunReplay {
   private hostFunctionCalls = 0;
   private callTimesApplied = false;
   private readonly refusalsBeforeTool = new Set<number>();
+  /** For each refused call the script got, how many calls had reached the host when it got it. */
+  private readonly releases = new Map<number, number>();
+  /** The calls whose failure the script ended with, uncaught. */
+  private readonly endedWithCalls = new Set<number>();
   private callsReached = 0;
   private divergence?: RunDivergedError;
   private applied = false;
@@ -176,14 +185,16 @@ export class RunReplay {
 
   /**
    * Whether replaying the run up to the call at `callIndex` stays clear of Enclave's sequence detectors and rate limits,
-   * which read the real clock. Where the runtime judges replayed calls by their recorded times, only its host function
-   * calls, which run again, count against the rate limit; elsewhere its operations before that call, from its first,
-   * took less than the shortest detector window, were fewer than the rate limit allows a second, and called no tool more
-   * often than it allows in its window.
+   * which read the real clock. Where the runtime judges replayed calls by their recorded times and the replay is the
+   * run's calls before its paused call, every one of them (`prefix`), only its host function calls, which run again,
+   * count against the rate limit; elsewhere its operations before that call, from its first, took less than the shortest
+   * detector window, were fewer than the rate limit allows a second, and called no tool more often than it allows in its
+   * window. Enclave judges by recorded times only the replayed calls before the first live one, so a record with calls
+   * after the paused one, or a gap before it, is judged the second way.
    */
-  replaysWithinDetectors(callIndex: number): boolean {
+  replaysWithinDetectors(callIndex: number, prefix = true): boolean {
     const point = this.pointAtCall.get(callIndex) ?? this.pointNow();
-    if (this.callTimesApplied) return point.hostFunctionCalls < MAX_OPERATIONS_PER_SECOND;
+    if (this.callTimesApplied && prefix) return point.hostFunctionCalls < MAX_OPERATIONS_PER_SECOND;
     return this.passesFallbackGuard(callIndex, point);
   }
 
@@ -191,10 +202,17 @@ export class RunReplay {
    * Whether replaying the run up to the call at `callIndex` needs a runtime that judges replayed calls by their recorded
    * times: it may pause there only because this one does.
    */
-  needsCallTimes(callIndex: number): boolean {
+  needsCallTimes(callIndex: number, prefix = true): boolean {
     return (
-      this.callTimesApplied && !this.passesFallbackGuard(callIndex, this.pointAtCall.get(callIndex) ?? this.pointNow())
+      this.callTimesApplied &&
+      prefix &&
+      !this.passesFallbackGuard(callIndex, this.pointAtCall.get(callIndex) ?? this.pointNow())
     );
+  }
+
+  /** The last call that reached the host so far, or -1 before any. */
+  get lastCallIndex(): number {
+    return this.callsReached - 1;
   }
 
   private passesFallbackGuard(callIndex: number, point: RunPoint): boolean {
@@ -265,6 +283,34 @@ export class RunReplay {
     return this.refusalsBeforeTool.has(callIndex);
   }
 
+  /** How many calls reached the host so far. */
+  get callsSeen(): number {
+    return this.pointAtCall.size;
+  }
+
+  /** Records that the script got the refusal of the call at `callIndex` now, after the calls that reached the host. */
+  released(callIndex: number): void {
+    this.releases.set(callIndex, Math.max(this.callsReached, callIndex + 1));
+  }
+
+  /**
+   * Whether no call reached the host after the script got the refusal of the call at `callIndex`: a script that went
+   * on to make another call caught it, and a run is never paused at a refusal its script caught.
+   */
+  releasedLast(callIndex: number): boolean {
+    return this.callsReached <= (this.releases.get(callIndex) ?? callIndex + 1);
+  }
+
+  /** Records the calls whose failure the script ended with: the one it threw, or those a failed `parallel()` named. */
+  endedWith(callIndexes: Iterable<number>): void {
+    for (const callIndex of callIndexes) this.endedWithCalls.add(callIndex);
+  }
+
+  /** Whether the script ended with the failure of the call at `callIndex`. */
+  endedWithCallAt(callIndex: number): boolean {
+    return this.endedWithCalls.has(callIndex);
+  }
+
   /**
    * The divergence the run ends with: a recorded call made with another tool or arguments, or a script that ended before
    * making every recorded call, unless the sandbox stopped it there (a timeout, or a refusal of its own).
@@ -279,8 +325,10 @@ export class RunReplay {
     return this.callsReached < this.recordedCalls;
   }
 
+  /** The calls the replayed run made up to its last recorded one, the paused call included. */
   private get recordedCalls(): number {
-    return (this.source?.journal.length ?? 0) + (this.source?.pending ? 1 : 0);
+    const positions = (this.source?.journal ?? []).map((entry) => entry.position);
+    return Math.max(0, this.source?.pending?.call.position ?? 0, ...positions);
   }
 
   /**
@@ -337,9 +385,14 @@ export class RunReplay {
     };
   }
 
-  /** The calls this run replays, for Enclave's detectors, or undefined when its record lacks a time. */
+  /**
+   * The calls this run replays before its paused call, for Enclave's detectors, or undefined when its record lacks a
+   * time. Enclave judges replayed calls by their recorded times only up to the first call that runs live; the recorded
+   * calls of a `parallel()` after the paused one reach it at about the times they first did, as live calls.
+   */
   private replayedCalls(): CodeCallReplayedCall[] | undefined {
-    const entries = this.source?.journal ?? [];
+    const pausedAt = this.source?.pending?.call.position ?? Number.POSITIVE_INFINITY;
+    const entries = (this.source?.journal ?? []).filter((entry) => entry.position < pausedAt);
     if (entries.length === 0 || entries.some((entry) => entry.arrivedAtMs === undefined)) return undefined;
     let elapsedMs = 0;
     return entries.map((entry) => {
@@ -446,25 +499,51 @@ export async function callOrReplay(
   }
 }
 
+/** When a held answer must go out at the latest: before Enclave's review hook, which started at `startedAt`, times out. */
+function holdDeadlineOf(startedAt: number, timeoutMs = ENCLAVE_REVIEW_TIMEOUT_MS): number {
+  return startedAt + timeoutMs - Math.min(MAX_HOLD_MARGIN_MS, Math.ceil(timeoutMs / 10));
+}
+
 /**
  * The run's call-phase hooks (the review's and the budgets'): a call the replayed run recorded is not asked again but
  * gets its recorded decision, the pending call is asked with its corrected arguments, and a call refused, live or from
  * the record, is recorded in the journal, which it never reaches otherwise.
+ *
+ * In a run that can pause, a live refusal is held while the run's other calls, a `parallel()`'s, settle (see
+ * `RunStops`): a `needs_approval` then stops the run with each of them recorded. A refusal the script never got,
+ * because another call's `needs_approval` stopped the run first, is not journaled: its call is asked again on resume.
+ * A call allowed while a `needs_approval` stops the run gets its answer once the run stopped, and never runs.
  */
 export function journaledReviewHooks({ pre, post, ...options }: ReviewOptions, journal: RunJournal): ReviewOptions {
-  const { replay } = journal;
+  const { replay, stops } = journal;
   return {
     ...options,
     ...(pre && {
       pre: async (input) => {
         if (input.phase !== 'call') return pre(input);
+        const startedAt = Date.now();
         const recorded = replay?.decisionOf(input.callIndex, input.toolName, input.args);
         if (recorded && recorded.decision !== 'allow')
           journal.refuse(input.toolName, input.args, input.callIndex, recorded);
         if (recorded) return recorded;
         const args = replay ? replay.argumentsFor(input.callIndex, input.args) : input.args;
-        const decision = await pre({ ...input, args });
-        if (decision.decision !== 'allow') journal.refuse(input.toolName, input.args, input.callIndex, decision);
+        const asked = stops.asked();
+        let decision: ReviewDecision;
+        try {
+          decision = await pre({ ...input, args });
+        } finally {
+          asked();
+        }
+        if (decision.decision === 'allow') {
+          await stops.afterHalt();
+          return decision;
+        }
+        if (journal.holdsStops) {
+          const halts = decision.decision === 'needs_approval';
+          const deadline = holdDeadlineOf(startedAt, options.timeoutMs);
+          if ((await stops.hold(input.callIndex, halts, deadline)) === 'moot') return decision;
+        }
+        journal.refuse(input.toolName, input.args, input.callIndex, decision);
         return decision;
       },
     }),

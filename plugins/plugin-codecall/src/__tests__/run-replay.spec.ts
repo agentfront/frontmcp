@@ -176,6 +176,44 @@ describe('RunReplay', () => {
       expect(replay.divergenceOf(false)?.message).toContain('script ended before call 3');
     });
 
+    describe('inside a parallel()', () => {
+      const parallel: RunReplaySource = {
+        journal: [
+          entry(1, 'orders.note', { id: 1 }, { result: { noted: 1 }, arrivedAtMs: 10 }),
+          entry(4, 'orders.note', { id: 4 }, { result: { noted: 4 }, arrivedAtMs: 12 }),
+        ],
+        pending: {
+          call: { position: 2, tool: 'orders.void', argumentsHash: argumentsHashOf({ id: 2 }), arrivedAtMs: 11 },
+        },
+      };
+
+      it('answers the calls after the paused one from the record, and asks a call the record leaves out live', async () => {
+        const replay = new RunReplay(parallel);
+
+        expect(replay.answerOf({ callIndex: 1 }, 'orders.void', { id: 2 })).toBeUndefined();
+        expect(replay.decisionOf(2, 'orders.void', { id: 3 })).toBeUndefined();
+        expect(replay.answerOf({ callIndex: 2 }, 'orders.void', { id: 3 })).toBeUndefined();
+        await expect(replay.answerOf({ callIndex: 3 }, 'orders.note', { id: 4 })).resolves.toEqual({ noted: 4 });
+      });
+
+      it('is a divergence when the script ends before the last recorded call, after the paused one', async () => {
+        const replay = new RunReplay(parallel);
+        await replay.answerOf({ callIndex: 0 }, 'orders.note', { id: 1 });
+        replay.answerOf({ callIndex: 1 }, 'orders.void', { id: 2 });
+
+        expect(replay.divergenceOf(false)?.message).toContain('script ended before call 4');
+      });
+
+      it("gives Enclave's detectors only the recorded calls before the paused one, the first that runs live", () => {
+        const replay = new RunReplay(parallel);
+
+        expect(replay.hooks).toMatchObject({
+          replayedCalls: [{ callIndex: 0, toolName: 'orders.note', elapsedMs: 10 }],
+          replayedCallsResumeAtMs: 11,
+        });
+      });
+    });
+
     it('keeps the clock and random values read before a call reached the host', () => {
       jest.spyOn(Date, 'now').mockReturnValue(5000);
       const replay = new RunReplay();

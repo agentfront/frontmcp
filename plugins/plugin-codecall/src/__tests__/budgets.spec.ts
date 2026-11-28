@@ -655,7 +655,7 @@ describe('a call stopped as it starts, with the run journal', () => {
     expect(call.refusal?.pending?.reference.toolName).toBe(ARCHIVE.toolName);
   });
 
-  it('does not take a call stopped as it starts for pausable once a later call of a parallel() ran with effects', async () => {
+  it('takes a call stopped as it starts for pausable beside a later call of a parallel() that ran: a resume answers that call from the record', async () => {
     const replay = new RunReplay();
     replay.appliedByRuntime(true);
     const pausable = (laterCallRan: boolean) => {
@@ -678,10 +678,8 @@ describe('a call stopped as it starts, with the run journal', () => {
 
     expect(alone.refusal?.decision).toMatchObject({ decision: 'needs_approval' });
     expect(beside.refusal?.decision).toMatchObject({
-      decision: 'needs_changes',
-      findings: [
-        expect.objectContaining({ rule: 'approval-after-effects', message: expect.stringContaining('tickets.delete') }),
-      ],
+      decision: 'needs_approval',
+      findings: [expect.objectContaining({ suggestion: expect.stringContaining('codecall:resume') })],
     });
   });
 

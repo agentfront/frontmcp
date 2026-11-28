@@ -1,7 +1,8 @@
 /**
  * Pause and resume over HTTP: a script whose third call needs a person's approval pauses before it; once a person
- * approves, codecall:resume runs the third call live without calling the first two again; a run past its wait is not
- * found, and so is a run another session tries to resume.
+ * approves, codecall:resume runs the third call live without calling the first two again, and a parallel() whose third
+ * call needs approval runs only that call; a run past its wait is not found, and so is a run another session tries to
+ * resume.
  */
 import { expect, test } from '@frontmcp/testing';
 
@@ -64,6 +65,44 @@ test.describe('CodeCall pause and resume E2E', () => {
     const offboarded = await mcp.tools.call('codecall:invoke', { tool: 'users-get', input: { id: 'user-3' } });
     expect(offboarded.json<{ user: unknown }>().user).toBeNull();
     expect(await mcp.tools.call('codecall:resume', { runId: paused.runId })).toBeError();
+  });
+
+  test('pauses a parallel() at its third call, which needs approval, and resumes it without running the other four again', async ({
+    mcp,
+  }) => {
+    const logged = async () =>
+      (await mcp.tools.call('codecall:invoke', { tool: 'activities-list', input: { userId: 'user-2' } }))
+        .json<ActivitiesAnswer>()
+        .activities.filter(({ description }) => description.startsWith('parallel-e2e'));
+    const script =
+      'return await parallel([1, 2, 3, 4, 5], (step) =>\n' +
+      '  step === 3\n' +
+      "    ? callTool('users-offboard', { id: 'user-' + 2 })\n" +
+      "    : callTool('activities-log', { userId: 'user-2', type: 'note', description: 'parallel-e2e ' + step }),\n" +
+      ');';
+
+    const paused = (await mcp.tools.call('codecall:execute', { script })).json<RunAnswer>();
+
+    expect(paused).toMatchObject({
+      status: 'needs_approval',
+      approval: { toolName: 'users-offboard' },
+      paused: { call: { position: 3, tool: 'users-offboard' } },
+    });
+    expect((await logged()).map(({ description }) => description).sort()).toEqual([
+      'parallel-e2e 1',
+      'parallel-e2e 2',
+      'parallel-e2e 4',
+      'parallel-e2e 5',
+    ]);
+
+    await mcp.tools.call('approvals-grant', { id: paused.approval?.id });
+    const resumed = (await mcp.tools.call('codecall:resume', { runId: paused.runId })).json<RunAnswer>();
+
+    expect(resumed).toMatchObject({ status: 'ok', runId: paused.runId });
+    expect((resumed.result as unknown[])[2]).toEqual({ offboarded: true });
+    expect(await logged()).toHaveLength(4);
+    const offboarded = await mcp.tools.call('codecall:invoke', { tool: 'users-get', input: { id: 'user-2' } });
+    expect(offboarded.json<{ user: unknown }>().user).toBeNull();
   });
 
   test('answers that a run past its wait is not found', async ({ mcp }) => {

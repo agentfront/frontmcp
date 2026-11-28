@@ -11,10 +11,13 @@ import { createPublicToolCallError, TOOL_CALL_ERROR_CODES } from '../errors';
 import { isKeptValueCall } from '../kept-values/kept-value-script';
 import type CodeCallConfig from '../providers/code-call.config';
 import { extractionThresholdOf, MAX_ITERATIONS_PER_LOOP } from '../providers/code-call.config';
+import { refusalsEndedWith } from '../review/run-review';
+import { isRefusedBeforeTool } from '../runs/call-stage';
 import { RunJournal } from '../runs/run-journal';
 import { callOrReplay, journaledReviewHooks, replayedEnvironment, type RunReplay } from '../runs/run-replay';
 import { findScriptPolicyIssues } from '../security/script-policy';
 import { toSandboxToolNamespaces } from '../utils/build-tool-namespaces';
+import { parallelFailuresOf } from '../utils/parallel-failure';
 import { withScriptLines } from '../utils/script-lines';
 import { countResultValues } from '../utils/value-count';
 import {
@@ -87,6 +90,28 @@ interface ToolFailure {
   name: string;
   message: string;
   code?: string;
+  /** The call's position in the run, from 0. */
+  callIndex?: number;
+}
+
+/**
+ * The calls whose failure the script ended with, uncaught: the failure it threw (each call that failed with that name
+ * and message), or the failures a failed `parallel()` it threw listed.
+ */
+function callsEndedWith(result: CodeCallRunResult, toolFailures: readonly ToolFailure[]): number[] {
+  const reported = result.error;
+  if (result.success || !reported) return [];
+  const thrown = toolFailures.filter(
+    (failure) => failure.message === reported.message && failure.name === reported.name,
+  );
+  const listed = thrown.length > 0 ? undefined : parallelFailuresOf(reported.message);
+  const ended = listed ? toolFailures.filter((failure) => listed(failure.message)) : thrown;
+  return ended.flatMap((failure) => (failure.callIndex === undefined ? [] : [failure.callIndex]));
+}
+
+/** A review record's call position, as a list: none for a record of the script. */
+function callIndexOf(record: { callIndex?: number }): number[] {
+  return record.callIndex === undefined ? [] : [record.callIndex];
 }
 
 /** The message the sandbox gives a script for an error the tool handler threw (as its tool bridge reads it). */
@@ -388,7 +413,9 @@ export default class EnclaveService {
           name: toolFailureName(error),
           message: toolFailureMessage(error, toolName),
           ...(typeof code === 'string' ? { code } : {}),
+          ...(toolCall && { callIndex: toolCall.callIndex }),
         });
+        if (toolCall) await this.releaseRefusal(journal, toolCall.callIndex, error);
         throw error;
       }
     });
@@ -457,7 +484,11 @@ export default class EnclaveService {
 
     try {
       const result = await runner.run(script);
-      const { pendingToolCalls } = gate.close();
+      gate.close();
+      // The calls still running in their tools: a refusal held while they settle is not one (see `releaseRefusal`).
+      const pendingToolCalls = journal.running();
+      replay?.endedWith(callsEndedWith(result, toolFailures));
+      replay?.endedWith(refusalsEndedWith(result.review?.decisions ?? [], result.error).flatMap(callIndexOf));
       const mapped = this.mapEnclaveResult(result, logs, toolFailures, script, pendingToolCalls);
       const ended = replay ? replayEndOf(replay, result, mapped, runner.reportsRefusals === true) : mapped;
       return result.review ? { ...ended, review: result.review } : ended;
@@ -466,6 +497,21 @@ export default class EnclaveService {
       journal.close();
       runner.dispose();
     }
+  }
+
+  /**
+   * Hands the script the failure of a call the call flow refused before its tool ran (its input, or a budget as it
+   * entered the tool). In a run that can pause, it waits first while the run's other calls, a `parallel()`'s, settle,
+   * so a run that stops at it records each of them (see `RunStops`); a failure the script never gets, because another
+   * call's `needs_approval` stopped the run meanwhile, is moot, and its call is asked again on resume.
+   */
+  private async releaseRefusal(journal: RunJournal, callIndex: number, error: unknown): Promise<void> {
+    if (!isRefusedBeforeTool(error)) return;
+    if (journal.holdsStops && (await journal.stops.hold(callIndex, false)) === 'moot') {
+      journal.markMoot(callIndex + 1);
+      return;
+    }
+    journal.replay?.released(callIndex);
   }
 
   /** Whether the configured runtime's Enclave judges replayed calls by their recorded times, which some paused runs need. */

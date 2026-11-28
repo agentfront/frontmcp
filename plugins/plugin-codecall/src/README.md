@@ -868,8 +868,10 @@ on both runtimes. The code lives in `src/review/`:
   tool's JSON Schema (type, enum, `anyOf`/`oneOf`, required names).
 - `run-review.ts`: the `pre` hook of one run. The rules answer first; a destructive call goes through the approvals;
   then the server's reviewers (`reviewer`, then `provider`) review the script. A call that needs approval pauses the
-  run when it can (`canPause`: every call so far recorded and settled, see `runs/run-pause.ts`), and an approval then
-  resumes it from that call. In a run that cannot pause, a call that needs approval after a tool without
+  run when it can (`canPause`: the run keeps what a replay needs and its calls so far stay clear of Enclave's
+  detectors, see `runs/run-pause.ts`), and an approval then resumes it from that call. Calls still running count for
+  it: `runs/run-stops.ts` holds the answer that stops a run until the other calls of a `parallel()` settle, so each is
+  recorded and a resume answers it from the record; `pendingCallOf` then checks that every call settled. In a run that cannot pause, a call that needs approval after a tool without
   `readOnlyHint` reached its tool (`effectsSoFar`, from the run's journal) gets `needs_changes`
   (`approval-after-effects`) instead, since an approval would run the whole script again; a run that could pause at
   the call but was not kept paused (its record did not fit) gets the same answer (`unpausedResultOf`). On a resumed

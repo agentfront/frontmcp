@@ -80,7 +80,7 @@ the options when your module is imported, and throws a `ZodError` naming a wrong
 | `codecall:status`          | Reads a run's status: how it ended, or that it is paused.     |
 | `codecall:cancel`          | Cancels a paused run.                                         |
 
-Together they take about 18.5 KB of `tools/list` (the JSON of its `tools` array), whatever the number of tools
+Together they take about 18.7 KB of `tools/list` (the JSON of its `tools` array), whatever the number of tools
 CodeCall searches. Their output schemas list each result's fields and keep nested objects (errors, findings,
 approvals, `paused`) loose, so the list stays small; `codecall:resume` lists its answer as an object with a `status`,
 since it answers as `codecall:execute` does.
@@ -221,9 +221,10 @@ uncaught, before its tool ran: its input, or a [budget](#budgets) as the tool st
 }
 ```
 
-`codecall:resume` with that `runId` runs the same script again: the calls before the paused one get their recorded
-results without running again, `Date` and `Math.random()` read their recorded values, and the paused call runs live,
-then the rest of the script. Its optional `arguments` replace the paused call's arguments, and only that call's; the
+`codecall:resume` with that `runId` runs the same script again: the calls that ran (those before the paused one, and
+those beside it in a `parallel()`, see [Inside `parallel()`](#inside-parallel)) get their recorded results without
+running again, `Date` and `Math.random()` read their recorded values, and the paused call runs live, then the rest of
+the script. Its optional `arguments` replace the paused call's arguments, and only that call's; the
 recorded results and the script's variables never change. A run that pauses at that same call again keeps them, so a
 later resume without `arguments` runs the call with them. The answer is a `codecall:execute` result, which may pause
 again at a later call. `codecall:status` reads a run's status (`paused` and until when, `resuming` while a resume
@@ -232,9 +233,9 @@ runs it, `cancelled`, or how it ended), and `codecall:cancel` ends a paused run.
 - **Only before the call ran.** Whether a call reached its tool comes from FrontMCP's call flow (its input
   validation stage, and the review hooks), never from a tool's error text: a tool that throws a validation error of
   its own has run, and its run does not pause. A call that may have had an effect never pauses and is never retried.
-  So a run pauses only when its paused call is its last, every call before it settled and none of them also asked for
-  approval (a `parallel()` that asked twice does not pause), and its record fits whole in `runs.maxRecordBytes`. A run
-  that cannot pause answers as it did before.
+  So a run pauses only when every one of its calls settled (a call still running, `unfinished`, may have had an
+  effect that nothing recorded), the calls before the paused one are answered again as the script got them, and its
+  record fits whole in `runs.maxRecordBytes`. A run that cannot pause answers as it did before.
 - **Clear of Enclave's detectors.** Enclave's rate limit (100 operations a second) and its sequence detectors (calls
   to one tool, a read then a send, within 5 to 30 seconds) read the real clock, and a replay answers its recorded calls
   at once. A paused record keeps when each call reached the host, and Enclave 2.21.1 and later judge the replayed calls
@@ -262,6 +263,51 @@ runs it, `cancelled`, or how it ended), and `codecall:cancel` ends a paused run.
 - **Its call-phase hooks.** A replayed call is not reviewed again and does not go through the budgets again: a call
   that reached its tool is allowed, and a refusal the script caught (`needs_changes`, `denied`) is given again. A
   `needs_approval` is never answered from a record. The paused call is asked live, with its corrected arguments.
+
+### Inside `parallel()`
+
+A call that stops the run can be one of several running at once: a `parallel()`'s, or calls a script started without
+awaiting each. Enclave answers a `needs_approval` by stopping the run at once, and a failed `parallel()` (on the
+`node-vm` runtime) ends the script at its first failure, while the other calls are still running in their tools. Their
+effects happen, but nothing would record their results, so a resume would have to run them again. So CodeCall waits
+first:
+
+- **The other calls finish.** In a run that can pause, an answer that can stop the run (a call-phase
+  `needs_approval`, `needs_changes` or `denied`, or a call the call flow refused before its tool ran) is held until
+  every other call that reached the host settled, and no new one came for a few turns of the event loop; a refusal the
+  script then catches only comes later. Calls the script starts meanwhile run too: those that don't wait on a result
+  behind the held one (tool results reach the script in call order). Each is recorded with its result or error. They
+  are neither cancelled nor run again. Then the answer goes out and the run stops at that call.
+- **The resume.** It answers every recorded call from the record, matched by position, tool and arguments, and runs
+  only the paused call live: a `parallel()` of five calls whose third needed approval resolves, once a person approved
+  it, to the same five results in the same order, and only the third call runs. Each call keeps the idempotency key of
+  its position (`this.idempotencyKey`), so the paused call gets the same key it would have had.
+- **Several calls stop.** The run pauses at the first of them in call order. A `needs_approval` goes first, since
+  Enclave stops the run there: another call's answer the script never got is moot, and its call did not run. A
+  resume asks those calls again, live, so the next resume may pause at the next call that needs approval: one
+  approval at a time, each call run once. Calls after the paused one that did not reach their tool (refused, or moot)
+  are always asked again on resume; a refusal before it that the script caught is answered again from the record.
+- **A refusal the script got.** A call the call flow refused before its tool ran (its input, or a budget as it
+  started), or a call-phase `needs_changes` or `denied`, goes to the script, which may catch it. The run pauses there
+  only when the script ended with it, uncaught, alone or in the failed `parallel()`'s error that lists its whole
+  message (one the sandbox cut off where the list reaches 16 KB doesn't count), and no call reached the host after
+  the script got it. The answer keeps its status: on `node-vm` a failed `parallel()` ends the
+  script with its first failure (`tool_error` for a call refused before its tool), and on `interpreter` with an error
+  that lists every failure (`runtime_error`). A script that went on to another call after it got the refusal does
+  not pause there: it caught it, or (on `interpreter`, whose `parallel()` waits for every callback) a callback made
+  a second call that depends on the order the results came in.
+- **Limits.** The wait ends before the review hook would time out (`review.timeoutMs`, 30 seconds by default, less a
+  tenth of it, at most a second), and with the script (`vm.timeoutMs`). A call still running then keeps the run from
+  pausing: it answers as before (`approval-after-effects` for an approval after a tool with effects ran, or a
+  `timeout` that counts the calls still running). Enclave judges replayed calls by their recorded times only up to
+  the first call that runs live, the paused one; so a record that holds calls after the paused one pauses only when
+  the run made them, from its first call, within 5 seconds, fewer than 100 of them, and no more calls to one tool than
+  `vm.rapidEnumerationThreshold` allows.
+
+Up to 1.13, a run whose stopping call was inside a `parallel()` beside other calls did not pause: a `needs_approval`
+there stopped the run with the other calls cut off, two calls that needed approval kept it from pausing, and a refused
+input ended it as a `tool_error` or `runtime_error` without `paused`. Sending the script again ran the other calls
+again.
 
 ## Keep and recall
 

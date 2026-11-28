@@ -1,10 +1,11 @@
 import type { PreReviewInput, ReviewDecision } from '@enclave-vm/core/worker';
 
 import { createToolCallError, TOOL_CALL_ERROR_CODES, type ToolCallErrorCode } from '../errors';
+import { markRefusedBeforeTool } from '../runs/call-stage';
 import { argumentsHashOf, RunJournal } from '../runs/run-journal';
 import { pausableSoFar, pausedRunOf, pendingCallOf, resumeSourceOf, retrySourceOf } from '../runs/run-pause';
 import type { CodeCallRunInput } from '../runs/run-record.store';
-import type { CodeCallCallDecision } from '../runs/run-record.types';
+import type { CodeCallCallDecision, CodeCallJournalEntry } from '../runs/run-record.types';
 import { journaledReviewHooks, RunReplay, type RunReplaySource, type RunReplayToolLimits } from '../runs/run-replay';
 
 const APPROVAL: CodeCallCallDecision = { decision: 'needs_approval', reason: 'destructive' };
@@ -35,12 +36,15 @@ describe('pendingCallOf', () => {
     expect(pendingCallOf('needs_approval', journal)).toMatchObject({ position: 3, tool: 'orders.void' });
   });
 
-  it('does not pause when two calls asked for approval, as in a parallel()', () => {
+  it('pauses at the first of two calls that asked for approval, as in a parallel(), and asks for the other again', () => {
     const journal = journalWithReplay();
     journal.refuse('orders.void', { id: 1 }, 0, APPROVAL);
     journal.refuse('orders.void', { id: 2 }, 1, APPROVAL);
 
-    expect(pendingCallOf('needs_approval', journal)).toBeUndefined();
+    const pending = pendingCallOf('needs_approval', journal);
+
+    expect(pending).toMatchObject({ position: 1, tool: 'orders.void' });
+    expect(resumeSourceOf(journal, pending as CodeCallJournalEntry).journal).toEqual([]);
   });
 
   it('does not pause when replaying the calls before it could trip the rate limit, compressed into a second', () => {
@@ -102,33 +106,67 @@ describe('retrySourceOf', () => {
     ]);
   });
 
-  it('does not run again an attempt that completed a call after the approved one, which a retry would repeat', () => {
+  it('answers a call after the approved one that completed, as in a parallel(), from the record on retry', () => {
     const journal = journalWithReplay();
     journal.refuse('orders.void', {}, 0, APPROVAL);
     journal.begin('mail.send', {}, 1).succeed({ sent: true });
 
+    expect(retrySourceOf('needs_approval', journal)?.source).toMatchObject({
+      journal: [expect.objectContaining({ position: 2, result: { sent: true } })],
+      pending: { call: { position: 1, tool: 'orders.void' } },
+    });
+  });
+
+  it('does not run again an attempt with a call still running beside the approved one, which a retry would repeat', () => {
+    const journal = journalWithReplay();
+    journal.refuse('orders.void', {}, 0, APPROVAL);
+    journal.begin('mail.send', {}, 1);
+
     expect(retrySourceOf('needs_approval', journal)).toBeUndefined();
   });
 
-  it('runs the previous source again when no call reached its tool live', () => {
-    const previous: RunReplaySource = { journal: [] };
+  it('runs the previous source again when the attempt cannot pause and no call reached its tool live', () => {
+    const start = Date.now();
+    const now = jest.spyOn(Date, 'now').mockReturnValue(start);
+    const previous: RunReplaySource = {
+      journal: [
+        {
+          position: 1,
+          tool: 'orders.get',
+          argumentsHash: argumentsHashOf({}),
+          outcome: 'success',
+          durationMs: 1,
+          result: { id: 'o1' },
+        },
+      ],
+    };
     const journal = journalWithReplay(previous);
-    journal.refuse('orders.void', {}, 0, APPROVAL);
+    void journal.replay?.answerOf({ callIndex: 0 }, 'orders.get', {});
+    journal.begin('orders.get', {}, 0).succeed({ id: 'o1' });
+    now.mockReturnValue(start + 6000);
+    journal.replay?.decisionOf(1, 'orders.void', {});
     journal.refuse('orders.void', {}, 1, APPROVAL);
 
     expect(retrySourceOf('needs_approval', journal, previous)).toEqual({ source: previous });
+    jest.restoreAllMocks();
   });
 
-  it('runs no attempt again after a call after the approved one whose result was refused once its tool ran', () => {
+  it('answers a call after the approved one whose result was refused once its tool ran, and asks again one refused before', () => {
     const attemptWith = (code: ToolCallErrorCode) => {
       const journal = journalWithReplay();
       journal.refuse('orders.void', {}, 0, APPROVAL);
       journal.begin('orders.export', {}, 1).fail(createToolCallError(code, 'orders.export'));
-      return journal;
+      return retrySourceOf('needs_approval', journal)?.source?.journal;
     };
 
-    expect(retrySourceOf('needs_approval', attemptWith(TOOL_CALL_ERROR_CODES.RESULT_TOO_LARGE))).toBeUndefined();
-    expect(retrySourceOf('needs_approval', attemptWith(TOOL_CALL_ERROR_CODES.RATE_LIMITED))).toEqual({});
+    expect(attemptWith(TOOL_CALL_ERROR_CODES.RESULT_TOO_LARGE)).toEqual([
+      expect.objectContaining({
+        position: 2,
+        phase: 'result',
+        error: expect.objectContaining({ code: 'RESULT_TOO_LARGE' }),
+      }),
+    ]);
+    expect(attemptWith(TOOL_CALL_ERROR_CODES.RATE_LIMITED)).toEqual([]);
   });
 });
 
@@ -267,5 +305,202 @@ describe('pausedRunOf', () => {
 
     expect(pauseOf(previous)).toMatchObject({ call: { position: 1 }, arguments: { id: 'o2' } });
     expect(pauseOf()).not.toHaveProperty('arguments');
+  });
+});
+
+describe('pausing inside a parallel()', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  /** Five calls that reached the host at once, as a parallel()'s do; the one at `stopAt` is refused with `decision`. */
+  function parallelOfFive(stopAt: number, decision: CodeCallCallDecision = APPROVAL): RunJournal {
+    const journal = journalWithReplay();
+    for (let index = 0; index < 5; index++) journal.replay?.decisionOf(index, 'orders.note', { index });
+    for (let index = 0; index < 5; index++) {
+      if (index === stopAt) journal.refuse('orders.note', { index }, index, decision);
+      else journal.begin('orders.note', { index }, index).succeed({ noted: index });
+    }
+    return journal;
+  }
+
+  it('pauses at the call that needs approval with the calls after it recorded, which a resume answers from the record', () => {
+    const journal = parallelOfFive(2);
+
+    const pending = pendingCallOf('needs_approval', journal) as CodeCallJournalEntry;
+    const source = resumeSourceOf(journal, pending);
+
+    expect(pending).toMatchObject({ position: 3 });
+    expect(source.journal.map((entry) => [entry.position, entry.result])).toEqual([
+      [1, { noted: 0 }],
+      [2, { noted: 1 }],
+      [4, { noted: 3 }],
+      [5, { noted: 4 }],
+    ]);
+    const resumed = new RunReplay(source);
+    expect(resumed.answerOf({ callIndex: 2 }, 'orders.note', { index: 2 })).toBeUndefined();
+    void expect(resumed.answerOf({ callIndex: 3 }, 'orders.note', { index: 3 })).resolves.toEqual({ noted: 3 });
+  });
+
+  it('does not pause while a call beside it is still running: it may have run, and nothing records what it did', () => {
+    const journal = journalWithReplay();
+    journal.begin('orders.note', { index: 0 }, 0).succeed({});
+    journal.refuse('orders.void', {}, 1, APPROVAL);
+    journal.begin('orders.export', {}, 2);
+
+    expect(pendingCallOf('needs_approval', journal)).toBeUndefined();
+    expect(pausableSoFar(journal)).toBe(true);
+  });
+
+  it('asks again the calls after the paused one that did not run, and a moot one before it', () => {
+    const journal = journalWithReplay();
+    journal.begin('orders.refund', {}, 0).fail(createToolCallError(TOOL_CALL_ERROR_CODES.VALIDATION, 'orders.refund'));
+    journal.markMoot(1);
+    journal.refuse('orders.void', {}, 1, APPROVAL);
+    journal.refuse('orders.note', {}, 2, DENIAL);
+    journal.begin('orders.note', { index: 3 }, 3).succeed({ noted: 3 });
+
+    const pending = pendingCallOf('needs_approval', journal) as CodeCallJournalEntry;
+
+    expect(pending).toMatchObject({ position: 2 });
+    expect(resumeSourceOf(journal, pending).journal.map((entry) => entry.position)).toEqual([4]);
+  });
+
+  it('pauses at the refusal the run ended with, not at one the script caught and went on from', () => {
+    const journal = journalWithReplay();
+    journal.replay?.decisionOf(0, 'orders.note', {});
+    journal.refuse('orders.note', {}, 0, DENIAL);
+    journal.replay?.decisionOf(1, 'orders.get', {});
+    journal.begin('orders.get', {}, 1).succeed({ id: 'o1' });
+    journal.replay?.decisionOf(2, 'orders.void', {});
+    journal.refuse('orders.void', {}, 2, DENIAL);
+    journal.replay?.endedWith([0, 2]);
+
+    expect(pendingCallOf('denied', journal)).toMatchObject({ position: 3 });
+  });
+
+  it('pauses at the second of two refusals a parallel() got at once when the script caught the first', () => {
+    const journal = journalWithReplay();
+    for (const index of [0, 1, 2]) journal.replay?.decisionOf(index, 'orders.void', { index });
+    journal.begin('orders.void', { index: 0 }, 0).succeed({ voided: 0 });
+    journal.refuse('orders.void', { index: 1 }, 1, DENIAL);
+    journal.refuse('orders.void', { index: 2 }, 2, DENIAL);
+
+    expect(pendingCallOf('denied', journal)).toBeUndefined();
+    journal.replay?.endedWith([2]);
+    expect(pendingCallOf('denied', journal)).toMatchObject({ position: 3 });
+  });
+
+  it('does not pause at a refusal after which the script made another call: it caught it', () => {
+    const journal = journalWithReplay();
+    journal.replay?.decisionOf(0, 'orders.void', {});
+    journal.refuse('orders.void', {}, 0, DENIAL);
+    journal.replay?.decisionOf(1, 'orders.get', {});
+    journal.begin('orders.get', {}, 1).succeed({});
+    journal.replay?.endedWith([0]);
+
+    expect(pendingCallOf('denied', journal)).toBeUndefined();
+  });
+
+  it('pauses at the first call refused before its tool whose failure the script ended with, and asks the next again', () => {
+    const journal = journalWithReplay();
+    const { replay } = journal;
+    const refused = (index: number) => {
+      const error = markRefusedBeforeTool(createToolCallError(TOOL_CALL_ERROR_CODES.VALIDATION, 'orders.refund'));
+      replay?.failedLive(index, error);
+      return error;
+    };
+    for (let index = 0; index < 4; index++) replay?.answerOf({ callIndex: index }, 'orders.refund', { index });
+    journal.begin('orders.refund', { index: 0 }, 0).succeed({ refunded: 1 });
+    journal.begin('orders.refund', { index: 1 }, 1).fail(refused(1));
+    journal.begin('orders.refund', { index: 2 }, 2).fail(refused(2));
+    journal.begin('orders.refund', { index: 3 }, 3).succeed({ refunded: 4 });
+    replay?.released(1);
+    replay?.released(2);
+
+    expect(pendingCallOf('runtime_error', journal)).toBeUndefined();
+    replay?.endedWith([1, 2]);
+    const pending = pendingCallOf('runtime_error', journal) as CodeCallJournalEntry;
+
+    expect(pending).toMatchObject({ position: 2 });
+    expect(pendingCallOf('ok', journal)).toBeUndefined();
+    expect(resumeSourceOf(journal, pending).journal.map((entry) => entry.position)).toEqual([1, 4]);
+  });
+
+  it('judges a record with calls after the paused one by its whole run, not by recorded times', () => {
+    const start = Date.now();
+    const now = jest.spyOn(Date, 'now').mockReturnValue(start);
+    const replay = new RunReplay();
+    replay.appliedByRuntime(true, true);
+    const journal = new RunJournal({ keepResults: true, replay });
+    replay.decisionOf(0, 'orders.get', {});
+    journal.begin('orders.get', {}, 0).succeed({});
+    now.mockReturnValue(start + 6000);
+    replay.decisionOf(1, 'orders.void', {});
+    journal.refuse('orders.void', {}, 1, APPROVAL);
+
+    expect(pendingCallOf('needs_approval', journal)).toMatchObject({ position: 2 });
+
+    replay.decisionOf(2, 'orders.note', {});
+    journal.begin('orders.note', {}, 2).succeed({});
+
+    expect(pendingCallOf('needs_approval', journal)).toBeUndefined();
+  });
+
+  it('keeps what the script read up to the last call a resume answers from the record', () => {
+    jest.spyOn(Date, 'now').mockReturnValue(5000);
+    const journal = journalWithReplay();
+    const { replay } = journal;
+    replay?.clock();
+    replay?.decisionOf(0, 'orders.void', {});
+    replay?.clock();
+    replay?.decisionOf(1, 'orders.note', {});
+    replay?.clock();
+    journal.refuse('orders.void', {}, 0, APPROVAL);
+    journal.begin('orders.note', {}, 1).succeed({});
+
+    const pending = pendingCallOf('needs_approval', journal) as CodeCallJournalEntry;
+
+    expect(resumeSourceOf(journal, pending).clock).toEqual([5000, 5000]);
+  });
+});
+
+describe('holding a refusal in a run that can pause', () => {
+  it('journals a needs_approval once the call running beside it settled, and a refusal the run never gave not at all', async () => {
+    const journal = journalWithReplay();
+    const hooks = journaledReviewHooks(
+      { pre: async (input) => (input.phase === 'call' && input.callIndex === 2 ? DENIAL : APPROVAL) },
+      journal,
+    );
+    const running = journal.begin('orders.export', {}, 0);
+    const order: string[] = [];
+
+    const answer = async (callIndex: number, tool: string) => {
+      const decision = await hooks.pre?.(callInput(callIndex, tool));
+      order.push(`${callIndex}:${decision?.decision}`);
+    };
+    const approval = answer(1, 'orders.void');
+    const denial = answer(2, 'orders.note');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(order).toEqual([]);
+
+    running.succeed({ exported: true });
+    await Promise.all([approval, denial]);
+
+    expect(order).toEqual(['1:needs_approval', '2:denied']);
+    expect(journal.entriesSoFar().map((entry) => [entry.position, entry.decision?.decision])).toEqual([
+      [1, undefined],
+      [2, 'needs_approval'],
+    ]);
+    expect(pendingCallOf('needs_approval', journal)).toMatchObject({ position: 2 });
+  });
+
+  it('answers at once in a run that cannot pause', async () => {
+    const journal = new RunJournal();
+    const hooks = journaledReviewHooks({ pre: async () => APPROVAL }, journal);
+    journal.begin('orders.export', {}, 0);
+
+    await expect(hooks.pre?.(callInput(1, 'orders.void'))).resolves.toEqual(APPROVAL);
+    expect(journal.entriesSoFar()).toHaveLength(2);
   });
 });

@@ -55,7 +55,8 @@ const BUDGET_LINE =
 const BUDGET_PAUSED_LINE = ' With "paused", codecall:resume the run instead, once approved, reset or answered.';
 
 const PAUSED_LINE =
-  '\nPAUSED: a result with "paused" stopped before that call, which did not run; the calls before it ran once. ' +
+  '\nPAUSED: a result with "paused" stopped before that call, which did not run. Calls before or beside it in a ' +
+  'parallel() that completed ran once, and resume answers them from the record; other refused calls are asked again. ' +
   'Fix the cause (approval, or corrected arguments), then codecall:resume { runId, arguments? } instead of sending ' +
   'the script again; codecall:cancel drops the run.';
 
