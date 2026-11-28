@@ -179,5 +179,10 @@ export function createWrappedServer(base: DirectMcpServer, dynamicRegistry: Dyna
     get events() {
       return base.events;
     },
+
+    /** The scope the base server serves. */
+    get scope() {
+      return base.scope;
+    },
   };
 }

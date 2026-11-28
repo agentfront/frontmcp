@@ -24,6 +24,8 @@ function createMockBaseServer(overrides: Partial<Record<keyof DirectMcpServer, u
     getWorkflowStatus: jest.fn().mockResolvedValue({ content: [] }),
     connect: jest.fn().mockResolvedValue({}),
     dispose: jest.fn().mockResolvedValue(undefined),
+    // DirectMcpServer.scope is required (#1513)
+    scope: { id: 'base-scope' },
     ...overrides,
   } as unknown as DirectMcpServer;
 }
@@ -65,6 +67,24 @@ describe('createWrappedServer', () => {
   describe('ready', () => {
     it('delegates to base server ready property', () => {
       expect(wrapped.ready).toBe(base.ready);
+    });
+  });
+
+  describe('scope', () => {
+    it("is the base server's scope (#1513)", () => {
+      expect(wrapped.scope).toBe(base.scope);
+    });
+
+    it('follows the base server when its scope is read later', () => {
+      const scopes = [{ id: 'first' }, { id: 'second' }];
+      let reads = 0;
+      const changing = createMockBaseServer();
+      Object.defineProperty(changing, 'scope', { get: () => scopes[reads++] });
+
+      const wrappedChanging = createWrappedServer(changing, dynamicRegistry);
+
+      expect(wrappedChanging.scope).toBe(scopes[0]);
+      expect(wrappedChanging.scope).toBe(scopes[1]);
     });
   });
 
