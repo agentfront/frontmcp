@@ -27,6 +27,7 @@ import {
 } from '@frontmcp/utils';
 
 import { type TokenStorageConfig, type TokenStorageSqliteConfig } from '../options/interfaces';
+import { type AuthorizationKeyHashSecret } from './authorization-row-names';
 import { type RedisConfig } from './transport-session.types';
 
 /**
@@ -52,6 +53,23 @@ export function isSqliteTokenStorage(
  */
 export function isPersistentTokenStorage(config: TokenStorageConfig | undefined): boolean {
   return config !== undefined && config !== 'memory';
+}
+
+/**
+ * The secret the authorization store names its rows with (`StorageAuthorizationStoreOptions.keyHashSecret`): the
+ * SQLite `encryption.secret` when the token storage has one, since it already guards that file and stays the same
+ * for as long as the file can be read; otherwise `serverSecret`, the server's `JWT_SECRET`, which every instance
+ * sharing the storage holds. Undefined when neither is set, and the rows are then named under a fixed key.
+ */
+export function tokenStorageKeyHashSecret(
+  config: TokenStorageConfig | undefined,
+  serverSecret?: AuthorizationKeyHashSecret,
+): AuthorizationKeyHashSecret | undefined {
+  const encryptionSecret = isSqliteTokenStorage(config) ? config.sqlite.encryption?.secret : undefined;
+  if (encryptionSecret) return encryptionSecret;
+  // A blank JWT_SECRET is no secret: the server signs with a random one then, as it does here.
+  if (typeof serverSecret === 'string') return serverSecret.trim() ? serverSecret : undefined;
+  return serverSecret && serverSecret.length > 0 ? serverSecret : undefined;
 }
 
 /**

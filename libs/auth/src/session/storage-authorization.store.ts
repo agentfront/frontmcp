@@ -6,14 +6,21 @@
  * {@link InMemoryAuthorizationStore}, giving local-mode auth persistent
  * authorization codes, pending authorizations, and refresh tokens.
  *
- * Records are stored as JSON blobs keyed by type, with TTL derived from each
- * record's `expiresAt`. The pure record-builder helpers (`createCodeRecord`,
- * etc.) are inherited from the shared `authorization.store` functions, so the
- * minted records are byte-for-byte identical to the in-memory store's.
+ * Records are stored as JSON blobs with TTL derived from each record's
+ * `expiresAt`. Each row is named by its type and a keyed hash of the value a
+ * client presents (`oauth:refresh:<HMAC-SHA256(k, token)>`), never by the value
+ * itself; see `authorization-row-names.ts`. A row named by the value, as up to
+ * 1.13, is still read, and moves under its hashed name when it is used. A row is
+ * read for a value only when the record in it is that value's own, so the name of
+ * one row never stands in for the value it holds. The pure
+ * record-builder helpers (`createCodeRecord`, etc.) are inherited from the shared
+ * `authorization.store` functions, so the minted records are byte-for-byte
+ * identical to the in-memory store's.
  */
 
 import { StorageNotSupportedError, TypedStorage, type NamespacedStorage, type StorageAdapter } from '@frontmcp/utils';
 
+import { AuthorizationRowNames, type AuthorizationKeyHashSecret } from './authorization-row-names';
 import {
   authorizationCodeRedeemedError,
   buildCodeRecord,
@@ -39,9 +46,33 @@ export interface StorageAuthorizationStoreOptions {
    * @default 'oauth'
    */
   namespace?: string;
+
+  /**
+   * The secret the row names are derived from: each code, pending authorization and refresh token row is named
+   * `<type>:<HMAC-SHA256(k, value)>`, with `k` derived from this secret by HKDF-SHA256. Keep it the same across
+   * restarts and on every instance that shares the storage: rows named under another secret are not found. Local
+   * auth passes `tokenStorageKeyHashSecret()`: the SQLite `encryption.secret`, else `JWT_SECRET`. Without one the
+   * names are hashed under a fixed key: they hold no value, and stay the same across restarts.
+   */
+  keyHashSecret?: AuthorizationKeyHashSecret;
 }
 
 type RecordType = 'code' | 'pending' | 'refresh';
+
+/** A record and the key it was read from: its hashed name, or the name up to 1.13 (`legacy`). */
+interface FoundRecord<T> {
+  key: string;
+  record: T;
+  legacy: boolean;
+}
+
+/** The field holding the value each record type is named after. */
+const NAMED_BY: Record<RecordType, 'code' | 'id' | 'token'> = { code: 'code', pending: 'id', refresh: 'token' };
+
+/** Whether `record` is the record of `id`: the one a row for `id` may hold. */
+function isRecordOf(type: RecordType, record: unknown, id: string): boolean {
+  return typeof record === 'object' && record !== null && (record as Record<string, unknown>)[NAMED_BY[type]] === id;
+}
 
 export class StorageAuthorizationStore implements AuthorizationStore {
   private readonly codeStore: TypedStorage<AuthorizationCodeRecord>;
@@ -50,10 +81,12 @@ export class StorageAuthorizationStore implements AuthorizationStore {
   private readonly namespace: string;
   private readonly storageIsNamespaced: boolean;
   private readonly base: StorageAdapter | NamespacedStorage;
+  private readonly rowNames: AuthorizationRowNames;
 
   constructor(storage: StorageAdapter | NamespacedStorage, options: StorageAuthorizationStoreOptions = {}) {
     this.namespace = options.namespace ?? 'oauth';
     this.storageIsNamespaced = this.isNamespacedStorage(storage);
+    this.rowNames = new AuthorizationRowNames(options.keyHashSecret);
 
     const base = this.storageIsNamespaced ? (storage as NamespacedStorage).namespace(this.namespace) : storage;
     this.base = base;
@@ -96,34 +129,28 @@ export class StorageAuthorizationStore implements AuthorizationStore {
   }
 
   async getAuthorizationCode(code: string): Promise<AuthorizationCodeRecord | null> {
-    const record = await this.codeStore.get(this.key('code', code));
-    if (!record) return null;
-    if (Date.now() > record.expiresAt) {
-      await this.codeStore.delete(this.key('code', code));
-      return null;
-    }
-    return record;
+    return (await this.findUnexpired(this.codeStore, 'code', code))?.record ?? null;
   }
 
   async markCodeUsed(code: string, issuedRefreshToken?: string): Promise<void> {
     if (issuedRefreshToken === undefined) {
-      const claimed = await this.claim(this.codeStore, this.key('code', code), isRedeemableCode, (record) => ({
+      const claimed = await this.claim(this.codeStore, 'code', code, isRedeemableCode, (record) => ({
         ...record,
         used: true,
       }));
       if (!claimed) throw authorizationCodeRedeemedError();
       return;
     }
-    const record = await this.getAuthorizationCode(code);
-    if (record) {
-      record.used = true;
+    const found = await this.findUnexpired(this.codeStore, 'code', code);
+    if (found) {
+      const record = { ...found.record, used: true };
       if (issuedRefreshToken) record.issuedRefreshToken = issuedRefreshToken;
-      await this.codeStore.set(this.key('code', code), record, this.ttl(record.expiresAt));
+      await this.replace(this.codeStore, 'code', code, found, record);
     }
   }
 
   async deleteAuthorizationCode(code: string): Promise<void> {
-    await this.codeStore.delete(this.key('code', code));
+    await this.deleteBoth(this.codeStore, 'code', code);
   }
 
   // ============================================
@@ -131,21 +158,17 @@ export class StorageAuthorizationStore implements AuthorizationStore {
   // ============================================
 
   async storePendingAuthorization(record: PendingAuthorizationRecord): Promise<void> {
+    // A pending authorization started before 1.14 keeps a row under its old name until it is deleted or expires
+    // (10 minutes): reads find the newer row under the hashed name first.
     await this.pendingStore.set(this.key('pending', record.id), record, this.ttl(record.expiresAt));
   }
 
   async getPendingAuthorization(id: string): Promise<PendingAuthorizationRecord | null> {
-    const record = await this.pendingStore.get(this.key('pending', id));
-    if (!record) return null;
-    if (Date.now() > record.expiresAt) {
-      await this.pendingStore.delete(this.key('pending', id));
-      return null;
-    }
-    return record;
+    return (await this.findUnexpired(this.pendingStore, 'pending', id))?.record ?? null;
   }
 
   async deletePendingAuthorization(id: string): Promise<void> {
-    await this.pendingStore.delete(this.key('pending', id));
+    await this.deleteBoth(this.pendingStore, 'pending', id);
   }
 
   // ============================================
@@ -157,32 +180,26 @@ export class StorageAuthorizationStore implements AuthorizationStore {
   }
 
   async getRefreshToken(token: string): Promise<RefreshTokenRecord | null> {
-    const record = await this.refreshStore.get(this.key('refresh', token));
-    if (!record) return null;
-    if (Date.now() > record.expiresAt || record.revoked) {
+    const found = await this.find(this.refreshStore, 'refresh', token);
+    if (!found) return null;
+    if (Date.now() > found.record.expiresAt || found.record.revoked) {
       return null;
     }
-    return record;
+    return found.record;
   }
 
   async revokeRefreshToken(token: string): Promise<void> {
-    const record = await this.refreshStore.get(this.key('refresh', token));
-    if (record) {
-      record.revoked = true;
-      await this.refreshStore.set(this.key('refresh', token), record, this.ttl(record.expiresAt));
+    const found = await this.find(this.refreshStore, 'refresh', token);
+    if (found) {
+      await this.replace(this.refreshStore, 'refresh', token, found, { ...found.record, revoked: true });
     }
   }
 
   async rotateRefreshToken(oldToken: string, newRecord: RefreshTokenRecord): Promise<void> {
-    const claimed = await this.claim(
-      this.refreshStore,
-      this.key('refresh', oldToken),
-      isRotatableRefreshToken,
-      (record) => ({
-        ...record,
-        revoked: true,
-      }),
-    );
+    const claimed = await this.claim(this.refreshStore, 'refresh', oldToken, isRotatableRefreshToken, (record) => ({
+      ...record,
+      revoked: true,
+    }));
     if (!claimed) throw refreshTokenRedeemedError();
     newRecord.previousToken = oldToken;
     await this.storeRefreshToken(newRecord);
@@ -202,20 +219,96 @@ export class StorageAuthorizationStore implements AuthorizationStore {
   // ============================================
 
   /**
-   * Replace the record under `key` with `update(record)` while `isLive(record)`. The compare-and-delete lets one
-   * request win: false when the record is missing or not live, or another request changed it first.
+   * The record of `id` under its hashed name, else under its name up to 1.13; null when neither holds it. A row
+   * counts only when its record is the record of `id`: a hashed name presented as a value names that row under the
+   * old scheme, and must not find it.
+   */
+  private async find<T>(store: TypedStorage<T>, type: RecordType, id: string): Promise<FoundRecord<T> | null> {
+    const key = this.key(type, id);
+    const record = await store.get(key);
+    if (record !== null) return isRecordOf(type, record, id) ? { key, record, legacy: false } : null;
+    // A row under its hashed name is the only one read, so a row under the old name is never claimed after it.
+    const legacyKey = this.legacyKey(type, id);
+    const legacy = await store.get(legacyKey);
+    if (legacy !== null) return isRecordOf(type, legacy, id) ? { key: legacyKey, record: legacy, legacy: true } : null;
+    // A move that ran between the two reads left the row under the hashed name: read it there once more.
+    const moved = await store.get(key);
+    return moved !== null && isRecordOf(type, moved, id) ? { key, record: moved, legacy: false } : null;
+  }
+
+  /** {@link find}, deleting an expired record and answering null for it. */
+  private async findUnexpired<T extends { expiresAt: number }>(
+    store: TypedStorage<T>,
+    type: RecordType,
+    id: string,
+  ): Promise<FoundRecord<T> | null> {
+    const found = await this.find(store, type, id);
+    if (!found || Date.now() <= found.record.expiresAt) return found;
+    await store.delete(found.key);
+    return null;
+  }
+
+  /** Write `record` under the hashed name of `id`, and delete the row it was read from when that was the old name. */
+  private async replace<T extends { expiresAt: number }>(
+    store: TypedStorage<T>,
+    type: RecordType,
+    id: string,
+    found: FoundRecord<T>,
+    record: T,
+  ): Promise<void> {
+    await store.set(this.key(type, id), record, this.ttl(record.expiresAt));
+    if (found.legacy) await store.delete(found.key);
+  }
+
+  /**
+   * Delete the rows of `id` under both names, one key per call (a Redis Cluster may keep them on different nodes).
+   * The row under the old name is deleted only when it holds the record of `id`.
+   */
+  private async deleteBoth<T>(store: TypedStorage<T>, type: RecordType, id: string): Promise<void> {
+    const legacyKey = this.legacyKey(type, id);
+    const deleteLegacy = async (): Promise<void> => {
+      if (isRecordOf(type, await store.get(legacyKey), id)) await store.delete(legacyKey);
+    };
+    await Promise.all([store.delete(this.key(type, id)), deleteLegacy()]);
+  }
+
+  /**
+   * Replace the record of `id` with `update(record)` while `isLive(record)`, under its hashed name. The
+   * compare-and-delete lets one request win: false when the record is missing or not live, or another request
+   * changed it first. A record under the old name is claimed there, by deleting that row, and moves to the hashed
+   * name; each step touches one key. A row found under neither name is read under the hashed one once more, for a
+   * move that ran between the two reads.
    */
   private async claim<T extends { expiresAt: number }>(
     store: TypedStorage<T>,
-    key: string,
+    type: RecordType,
+    id: string,
     isLive: (record: T) => boolean,
     update: (record: T) => T,
   ): Promise<boolean> {
+    const key = this.key(type, id);
     const raw = await this.base.get(key);
-    if (raw === null) return false;
+    const isClaimable = (record: T) => isRecordOf(type, record, id) && isLive(record);
+    if (raw !== null) return this.claimRow(store, key, key, raw, isClaimable, update);
+    const legacyKey = this.legacyKey(type, id);
+    const legacyRaw = await this.base.get(legacyKey);
+    if (legacyRaw !== null) return this.claimRow(store, legacyKey, key, legacyRaw, isClaimable, update);
+    // A row moved between the two reads is under the hashed name now, and is claimed there.
+    const movedRaw = await this.base.get(key);
+    return movedRaw !== null && this.claimRow(store, key, key, movedRaw, isClaimable, update);
+  }
+
+  private async claimRow<T extends { expiresAt: number }>(
+    store: TypedStorage<T>,
+    from: string,
+    to: string,
+    raw: string,
+    isClaimable: (record: T) => boolean,
+    update: (record: T) => T,
+  ): Promise<boolean> {
     const record = JSON.parse(raw) as T;
-    if (!isLive(record) || !(await this.deleteIfEquals(key, raw))) return false;
-    await store.set(key, update(record), this.ttl(record.expiresAt));
+    if (!isClaimable(record) || !(await this.deleteIfEquals(from, raw))) return false;
+    await store.set(to, update(record), this.ttl(record.expiresAt));
     return true;
   }
 
@@ -231,14 +324,23 @@ export class StorageAuthorizationStore implements AuthorizationStore {
     return this.base.deleteIfEquals(key, expectedValue);
   }
 
-  private ttl(expiresAtMs: number): { ttlSeconds: number } | undefined {
+  private ttl(expiresAtMs: number): { ttlSeconds: number } {
     const ttl = Math.ceil((expiresAtMs - Date.now()) / 1000);
     return { ttlSeconds: ttl > 0 ? ttl : 1 };
   }
 
+  /** The row of `id`: named by the keyed hash of `id`. */
   private key(type: RecordType, id: string): string {
-    const composite = `${type}:${id}`;
-    return this.storageIsNamespaced ? composite : `${this.namespace}:${composite}`;
+    return `${this.prefix(type)}${this.rowNames.name(id)}`;
+  }
+
+  /** The row of `id` as named up to 1.13, by `id` itself: read, and moved when used. */
+  private legacyKey(type: RecordType, id: string): string {
+    return `${this.prefix(type)}${id}`;
+  }
+
+  private prefix(type: RecordType): string {
+    return this.storageIsNamespaced ? `${type}:` : `${this.namespace}:${type}:`;
   }
 
   private isNamespacedStorage(storage: StorageAdapter | NamespacedStorage): storage is NamespacedStorage {

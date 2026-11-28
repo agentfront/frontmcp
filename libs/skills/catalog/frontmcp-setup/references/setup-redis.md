@@ -489,6 +489,7 @@ throttle: {
 - `createRedisClient()` from `@frontmcp/utils` is deprecated: `createRedisConnection()` takes the same settings plus `cluster` and `client`, and returns `{ client, owned, kind, isCluster }`.
 - A `RedisStateStoreLike` (the job state store's client) and the HA heartbeat client need `scan` instead of `keys`: FrontMCP lists keys with `SCAN` now, never `KEYS`.
 - CachePlugin `type: 'redis-client'` no longer quits your client in `close()`.
+- `auth.tokenStorage: { redis }` names the rows of authorization codes, pending authorizations and refresh tokens by a keyed hash of the value (`oauth:refresh:<HMAC-SHA256(k, token)>`, `k` derived from `JWT_SECRET`), not by the value. Rows written before are still read and move under their new names when used, the rest expire on their own TTL, and every command still touches one key, on a cluster too. See `configure-auth`'s Upgrading to 1.14, which covers rolling upgrades.
 
 ## Reference
 

@@ -47,3 +47,68 @@ export async function signInWithApiKey(baseUrl: string, signIn: ApiKeySignIn): P
   const tokenBody = (await tokenResponse.json()) as { access_token: string };
   return tokenBody.access_token;
 }
+
+export interface RefreshTokenGrant {
+  clientId: string;
+  redirectUri: string;
+}
+
+/**
+ * Signs in on the login page of a server without `authenticate` (no email asked), exchanges the code, and returns the
+ * code and the refresh token it issued.
+ */
+export async function grantRefreshToken(
+  baseUrl: string,
+  grant: RefreshTokenGrant,
+): Promise<{ code: string; refreshToken: string }> {
+  const codeVerifier = generateCodeVerifier();
+  const authorizeUrl = new URL(`${baseUrl}/oauth/authorize`);
+  authorizeUrl.search = new URLSearchParams({
+    response_type: 'code',
+    client_id: grant.clientId,
+    redirect_uri: grant.redirectUri,
+    code_challenge: sha256Base64url(codeVerifier),
+    code_challenge_method: 'S256',
+    scope: 'read',
+  }).toString();
+  const loginPage = await browserFetch(authorizeUrl.toString(), { method: 'GET', redirect: 'manual' });
+  expect(loginPage.status).toBe(200);
+  const pendingAuthId = (await loginPage.text()).match(/name="pending_auth_id"\s+value="([^"]+)"/)?.[1] ?? '';
+  expect(pendingAuthId).not.toBe('');
+
+  const callbackUrl = new URL(`${baseUrl}/oauth/callback`);
+  callbackUrl.search = new URLSearchParams({ pending_auth_id: pendingAuthId }).toString();
+  const callback = await browserFetch(callbackUrl.toString(), { method: 'GET', redirect: 'manual' });
+  expect([302, 303]).toContain(callback.status);
+  const code = new URL(callback.headers.get('location') ?? baseUrl).searchParams.get('code') ?? '';
+  expect(code).not.toBe('');
+
+  const tokenResponse = await browserFetch(`${baseUrl}/oauth/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: grant.redirectUri,
+      client_id: grant.clientId,
+      code_verifier: codeVerifier,
+    }).toString(),
+  });
+  expect(tokenResponse.status).toBe(200);
+  const tokenBody = (await tokenResponse.json()) as { refresh_token?: string };
+  expect(tokenBody.refresh_token).toBeTruthy();
+  return { code, refreshToken: tokenBody.refresh_token ?? '' };
+}
+
+/** POST a refresh_token grant to the token endpoint. */
+export function refreshAt(baseUrl: string, clientId: string, refreshToken: string): Promise<Response> {
+  return browserFetch(`${baseUrl}/oauth/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+      client_id: clientId,
+    }).toString(),
+  });
+}
