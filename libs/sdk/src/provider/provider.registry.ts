@@ -29,6 +29,7 @@ import { shouldCacheProviders, type DistributedEnabled } from '../common/types/o
 import { FrontMcpContext, validateSessionId } from '../context/frontmcp-context';
 import { FRONTMCP_CONTEXT } from '../context/frontmcp-context.provider';
 import {
+  ContainerDisposedError,
   DependencyCycleError,
   InternalMcpError,
   InvalidDependencyScopeError,
@@ -376,13 +377,16 @@ export default class ProviderRegistry
     if (!instance || this.heldEntries.some((held) => held.instance === instance)) return;
     const entry = { token, instance };
     const shared = this.sharedLifecycles.get(instance);
+    // A container disposed while this server was built has shut its instances down: none is taken after that
+    const borrowed = !!shared && !!this.container?.owned.has(instance);
+    if (borrowed && this.container?.disposed) throw new ContainerDisposedError();
     const lifecycle = shared ?? { holders: 0, bootstrapped: bootstrapProvider(entry) };
     if (!shared) this.sharedLifecycles.set(instance, lifecycle);
     lifecycle.holders++;
     await lifecycle.bootstrapped;
     if (!shared) this.lifecycleEntries.push(entry);
     if (!shared && background) this.backgroundEntries.push({ token, lifecycle: background });
-    if (shared && this.container?.owned.has(instance)) this.borrowedEntries.push({ entry, background: !!background });
+    if (borrowed) this.borrowedEntries.push({ entry, background: !!background });
     this.heldEntries.push(entry);
   }
 
