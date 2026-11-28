@@ -10,6 +10,7 @@ import { internalZ as z } from '@frontmcp/lazy-zod';
 import { randomUUID, sha256Base64url } from '@frontmcp/utils';
 
 import { AuthFlowError } from '../errors/auth-internal.errors';
+import { AuthorizationRowNames, type AuthorizationKeyHashSecret } from './authorization-row-names';
 
 /**
  * PKCE challenge data
@@ -746,20 +747,72 @@ export class InMemoryAuthorizationStore implements AuthorizationStore {
   }
 }
 
+/** Options of {@link RedisAuthorizationStore}. */
+export interface RedisAuthorizationStoreOptions {
+  /**
+   * The secret the row names are derived from (see `StorageAuthorizationStoreOptions.keyHashSecret`): each row is
+   * named `<namespace><type>:<HMAC-SHA256(k, value)>`. Keep it the same across restarts and instances.
+   */
+  keyHashSecret?: AuthorizationKeyHashSecret;
+}
+
 /**
  * Redis Authorization Store (placeholder)
  *
- * Production implementation using Redis for distributed storage.
+ * Production implementation using Redis for distributed storage. Each row is named by a keyed hash of the value a
+ * client presents; a row named by the value, as up to 1.13, is still read, and moves under its hashed name when it
+ * is used. Every command touches one key, so it runs on a Redis Cluster.
  * TODO: Implement after in-memory store is validated.
  */
 export class RedisAuthorizationStore implements AuthorizationStore {
+  private readonly rowNames: AuthorizationRowNames;
+
   constructor(
     private readonly redis: any,
     private readonly namespace = 'oauth:',
-  ) {}
+    options: RedisAuthorizationStoreOptions = {},
+  ) {
+    this.rowNames = new AuthorizationRowNames(options.keyHashSecret);
+  }
 
+  /** The row of `id`: named by the keyed hash of `id`. */
   private key(type: 'code' | 'pending' | 'refresh', id: string): string {
+    return `${this.namespace}${type}:${this.rowNames.name(id)}`;
+  }
+
+  /** The row of `id` as named up to 1.13, by `id` itself: read, and moved when used. */
+  private legacyKey(type: 'code' | 'pending' | 'refresh', id: string): string {
     return `${this.namespace}${type}:${id}`;
+  }
+
+  /** The stored JSON of `id` and the key it was read from: its hashed name first, else its name up to 1.13. */
+  private async read(
+    type: 'code' | 'pending' | 'refresh',
+    id: string,
+  ): Promise<{ key: string; data: string; legacy: boolean } | null> {
+    const key = this.key(type, id);
+    const data: string | null = await this.redis.get(key);
+    if (data) return { key, data, legacy: false };
+    const legacyKey = this.legacyKey(type, id);
+    const legacy: string | null = await this.redis.get(legacyKey);
+    return legacy ? { key: legacyKey, data: legacy, legacy: true } : null;
+  }
+
+  /** Write `record` under the hashed name of `id`, and delete the row it was read from when that was the old name. */
+  private async replace<T extends { expiresAt: number }>(
+    type: 'code' | 'refresh',
+    id: string,
+    found: { key: string; legacy: boolean },
+    record: T,
+  ): Promise<void> {
+    const ttl = Math.ceil((record.expiresAt - Date.now()) / 1000);
+    await this.redis.set(this.key(type, id), JSON.stringify(record), 'EX', Math.max(ttl, 1));
+    if (found.legacy) await this.redis.del(found.key);
+  }
+
+  /** Delete the rows of `id` under both names, one DEL each (a cluster may keep them on different nodes). */
+  private async deleteBoth(type: 'code' | 'pending' | 'refresh', id: string): Promise<void> {
+    await Promise.all([this.redis.del(this.key(type, id)), this.redis.del(this.legacyKey(type, id))]);
   }
 
   generateCode(): string {
@@ -788,9 +841,8 @@ export class RedisAuthorizationStore implements AuthorizationStore {
   }
 
   async getAuthorizationCode(code: string): Promise<AuthorizationCodeRecord | null> {
-    const data = await this.redis.get(this.key('code', code));
-    if (!data) return null;
-    return JSON.parse(data) as AuthorizationCodeRecord;
+    const found = await this.read('code', code);
+    return found ? (JSON.parse(found.data) as AuthorizationCodeRecord) : null;
   }
 
   async markCodeUsed(code: string, issuedRefreshToken?: string): Promise<void> {
@@ -802,17 +854,16 @@ export class RedisAuthorizationStore implements AuthorizationStore {
       if (!claimed) throw authorizationCodeRedeemedError();
       return;
     }
-    const record = await this.getAuthorizationCode(code);
-    if (record) {
-      record.used = true;
+    const found = await this.read('code', code);
+    if (found) {
+      const record = { ...(JSON.parse(found.data) as AuthorizationCodeRecord), used: true };
       if (issuedRefreshToken) record.issuedRefreshToken = issuedRefreshToken;
-      const ttl = Math.ceil((record.expiresAt - Date.now()) / 1000);
-      await this.redis.set(this.key('code', code), JSON.stringify(record), 'EX', Math.max(ttl, 1));
+      await this.replace('code', code, found, record);
     }
   }
 
   async deleteAuthorizationCode(code: string): Promise<void> {
-    await this.redis.del(this.key('code', code));
+    await this.deleteBoth('code', code);
   }
 
   async storePendingAuthorization(record: PendingAuthorizationRecord): Promise<void> {
@@ -821,13 +872,12 @@ export class RedisAuthorizationStore implements AuthorizationStore {
   }
 
   async getPendingAuthorization(id: string): Promise<PendingAuthorizationRecord | null> {
-    const data = await this.redis.get(this.key('pending', id));
-    if (!data) return null;
-    return JSON.parse(data) as PendingAuthorizationRecord;
+    const found = await this.read('pending', id);
+    return found ? (JSON.parse(found.data) as PendingAuthorizationRecord) : null;
   }
 
   async deletePendingAuthorization(id: string): Promise<void> {
-    await this.redis.del(this.key('pending', id));
+    await this.deleteBoth('pending', id);
   }
 
   async storeRefreshToken(record: RefreshTokenRecord): Promise<void> {
@@ -836,20 +886,19 @@ export class RedisAuthorizationStore implements AuthorizationStore {
   }
 
   async getRefreshToken(token: string): Promise<RefreshTokenRecord | null> {
-    const data = await this.redis.get(this.key('refresh', token));
-    if (!data) return null;
-    const record = JSON.parse(data) as RefreshTokenRecord;
+    const found = await this.read('refresh', token);
+    if (!found) return null;
+    const record = JSON.parse(found.data) as RefreshTokenRecord;
     if (record.revoked) return null;
     return record;
   }
 
   async revokeRefreshToken(token: string): Promise<void> {
-    const record = await this.getRefreshToken(token);
-    if (record) {
-      record.revoked = true;
-      const ttl = Math.ceil((record.expiresAt - Date.now()) / 1000);
-      await this.redis.set(this.key('refresh', token), JSON.stringify(record), 'EX', Math.max(ttl, 1));
-    }
+    const found = await this.read('refresh', token);
+    if (!found) return;
+    const record = JSON.parse(found.data) as RefreshTokenRecord;
+    if (record.revoked) return;
+    await this.replace('refresh', token, found, { ...record, revoked: true });
   }
 
   async rotateRefreshToken(oldToken: string, newRecord: RefreshTokenRecord): Promise<void> {
@@ -867,8 +916,10 @@ export class RedisAuthorizationStore implements AuthorizationStore {
   }
 
   /**
-   * Replace the record under `type:id` with `update(record)` while `isLive(record)`. The compare-and-delete lets
-   * one request win: false when the record is missing or not live, or another request changed it first.
+   * Replace the record of `type:id` with `update(record)` while `isLive(record)`, under its hashed name. The
+   * compare-and-delete lets one request win: false when the record is missing or not live, or another request
+   * changed it first. A record under the old name is claimed there, by deleting that row, and moves to the hashed
+   * name. The script and each command touch one key.
    */
   private async claim<T extends { expiresAt: number }>(
     type: 'code' | 'refresh',
@@ -876,14 +927,13 @@ export class RedisAuthorizationStore implements AuthorizationStore {
     isLive: (record: T) => boolean,
     update: (record: T) => T,
   ): Promise<boolean> {
-    const key = this.key(type, id);
-    const raw: string | null = await this.redis.get(key);
-    if (!raw) return false;
-    const record = JSON.parse(raw) as T;
+    const found = await this.read(type, id);
+    if (!found) return false;
+    const record = JSON.parse(found.data) as T;
     if (!isLive(record)) return false;
-    if ((await this.redis.eval(COMPARE_AND_DELETE_SCRIPT, 1, key, raw)) !== 1) return false;
+    if ((await this.redis.eval(COMPARE_AND_DELETE_SCRIPT, 1, found.key, found.data)) !== 1) return false;
     const ttl = Math.ceil((record.expiresAt - Date.now()) / 1000);
-    await this.redis.set(key, JSON.stringify(update(record)), 'EX', Math.max(ttl, 1));
+    await this.redis.set(this.key(type, id), JSON.stringify(update(record)), 'EX', Math.max(ttl, 1));
     return true;
   }
 }

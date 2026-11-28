@@ -38,7 +38,9 @@ export type {
   CreateCodeRecordParams,
   CreatePendingRecordParams,
   CreateRefreshTokenRecordParams,
+  RedisAuthorizationStoreOptions,
 } from './authorization.store';
+export type { AuthorizationKeyHashSecret } from './authorization-row-names';
 
 // Verified sign-in kept on a pending authorization during consent
 export { sealPendingLogin, openPendingLogin } from './pending-login';
@@ -329,6 +331,7 @@ export {
   isRedisTokenStorage,
   isSqliteTokenStorage,
   isPersistentTokenStorage,
+  tokenStorageKeyHashSecret,
 } from './token-storage.factory';
 
 // Encrypted Authorization Vault

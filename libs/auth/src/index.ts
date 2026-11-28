@@ -220,6 +220,7 @@ export {
   isRedisTokenStorage,
   isSqliteTokenStorage,
   isPersistentTokenStorage,
+  tokenStorageKeyHashSecret,
   // Encrypted Authorization Vault
   redisVaultEntrySchema,
   EncryptedRedisVault,
@@ -269,6 +270,8 @@ export type {
   CreatePendingRecordParams,
   CreateRefreshTokenRecordParams,
   StorageAuthorizationStoreOptions,
+  RedisAuthorizationStoreOptions,
+  AuthorizationKeyHashSecret,
   // Credential types
   CredentialType,
   OAuthCredential,
