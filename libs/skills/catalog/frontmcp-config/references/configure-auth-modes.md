@@ -87,7 +87,7 @@ Every request carries the principal its token speaks for: `this.auth.principal` 
 
 A token is a machine's when it names the client-credentials grant (`gty`), when Microsoft Entra marks it an app token (`idtyp: 'app'`), or when its subject is its client (`sub` equal to `client_id`, `azp`, `cid` or `appid`, as RFC 9068 §2.2 has it, and as it is when the token has no `sub`); else a person's. The claims `auth_time`, `azp` and `client_id` are typed on the request's user (`UserClaim`) too; a value of the wrong type is dropped.
 
-A provider that marks machines another way (a Keycloak service account has its own `sub`) sets `principal` on the transparent, local or remote auth options. It gets the token's claims and the detected principal, returns the fields to change or `undefined`, and may be async. One that throws, or answers a kind that is not one of the three, leaves the detected principal and logs a warning:
+A machine whose token marks it none of these ways (a Keycloak service account has a `sub` of its own) reads as a `'person'`, so an authorities rule for people only (`match: { 'user.principal': 'person' }`) admits it. For such a provider, set `principal` on the transparent, local or remote auth options. It gets the token's claims and the detected principal, returns the fields to change or `undefined`, and may be async. One that throws, or answers a principal FrontMCP cannot use (a kind that is not one of the three, or a `clientId`, `authTime` or `grantType` of the wrong type), leaves the detected principal and logs a warning:
 
 ```typescript
 auth: {
