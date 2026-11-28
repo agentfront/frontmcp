@@ -6,12 +6,11 @@
 import 'reflect-metadata';
 
 import { spawnSync } from 'child_process';
-import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
 import { z } from '@frontmcp/lazy-zod';
-import { resetRuntimeContext } from '@frontmcp/utils';
+import { mkdtemp, resetRuntimeContext, rm } from '@frontmcp/utils';
 
 import { App, Job, JobContext, LogLevel, Workflow, type JobPermission } from '../../common';
 import { type DirectMcpServer } from '../../direct/direct.types';
@@ -156,10 +155,10 @@ async function runOf(server: DirectMcpServer, runId: string): Promise<WorkflowRu
   return (await storeOf(server).getRun(runId)) as WorkflowRunRecord | null;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   steps.length = 0;
   gate = Promise.resolve();
-  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sdk-detached-workflows-'));
+  dir = await mkdtemp(path.join(os.tmpdir(), 'sdk-detached-workflows-'));
   dbPath = path.join(dir, 'jobs.sqlite');
 });
 
@@ -167,7 +166,7 @@ afterEach(async () => {
   openGate();
   await Promise.allSettled(workers.splice(0));
   for (const server of servers.splice(0)) await server.dispose().catch(() => undefined);
-  fs.rmSync(dir, { recursive: true, force: true });
+  await rm(dir, { recursive: true, force: true });
 });
 
 describe('a detached workflow run', () => {

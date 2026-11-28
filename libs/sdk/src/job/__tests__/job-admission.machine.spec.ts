@@ -2,11 +2,10 @@
  * Machine-wide admission (#1351): `jobs.admission` with `scope: 'machine'` counts the attempts of every process that
  * shares the job store, through leases in it. Each `MachineJobAdmission` here stands for one process.
  */
-import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { createStorage } from '@frontmcp/utils';
+import { createStorage, mkdtemp, rm } from '@frontmcp/utils';
 
 import { JobAdmissionLostError, JobAdmissionTimeoutError, JobStoreNotSupportedError } from '../../errors';
 import { createJobAdmission, JobAdmission, MachineJobAdmission, type AdmissionLeaseStore } from '../job-admission';
@@ -271,13 +270,13 @@ describe('MachineJobAdmission', () => {
     let dir: string;
     const stores: JobStateStore[] = [];
 
-    beforeEach(() => {
-      dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sdk-admission-'));
+    beforeEach(async () => {
+      dir = await mkdtemp(path.join(os.tmpdir(), 'sdk-admission-'));
     });
 
     afterEach(async () => {
       for (const store of stores.splice(0)) await store.dispose();
-      fs.rmSync(dir, { recursive: true, force: true });
+      await rm(dir, { recursive: true, force: true });
     });
 
     async function openStore(): Promise<StorageJobStateStore> {
