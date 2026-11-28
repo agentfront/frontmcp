@@ -20,11 +20,16 @@ const redisPort = parseInt(redisUrlParsed.port || '6379', 10);
  * - REDIS_CLIENT=ioredis | node-redis: a cluster client the app makes itself, passed as `client`.
  */
 function redisOption(): RedisOptionsInput {
+  // A client the app makes is the app's to listen to: FrontMCP attaches no listener to it
+  const logError = (error: unknown) => console.error('[redis]', error);
   switch (process.env['REDIS_CLIENT']) {
     case 'ioredis':
-      return { client: new Cluster([{ host, port: redisPort }]) };
-    case 'node-redis':
-      return { client: createCluster({ rootNodes: [{ url: `redis://${host}:${redisPort}` }] }) };
+      return { client: new Cluster([{ host, port: redisPort }]).on('error', logError) };
+    case 'node-redis': {
+      const client = createCluster({ rootNodes: [{ url: `redis://${host}:${redisPort}` }] });
+      client.on('error', logError);
+      return { client };
+    }
     default:
       return process.env['REDIS_CLUSTER'] === '1'
         ? { provider: 'redis', host, port: redisPort, cluster: true }
