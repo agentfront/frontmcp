@@ -17,11 +17,18 @@ import {
 import { withoutStores } from '../common/metadata/front-mcp-stores';
 import { type SqliteOptionsInput } from '../common/types/options/sqlite/schema';
 import { DirectMcpServerImpl, type DirectMcpServer, type DirectServerOptions } from '../direct';
-import { describeConfigIssues, InternalMcpError, ScopeConfigurationError, ServerNotFoundError } from '../errors';
+import {
+  ContainerDisposedError,
+  describeConfigIssues,
+  InternalMcpError,
+  ScopeConfigurationError,
+  ServerNotFoundError,
+} from '../errors';
 import type { HealthService } from '../health';
 import type { FileLogTransportInstance } from '../logger/instances/instance.file-logger';
 import LoggerRegistry from '../logger/logger.registry';
 import type { MetricsService } from '../metrics';
+import { containerHandleOf } from '../provider/container-handle';
 import ProviderRegistry from '../provider/provider.registry';
 import { type Scope } from '../scope/scope.instance';
 import { ScopeRegistry } from '../scope/scope.registry';
@@ -182,8 +189,12 @@ export class FrontMcpInstance implements FrontMcpInterface {
   }
 
   async initialize(): Promise<void> {
+    // A server on a container shares its lifecycle bookkeeping, and uses the instances it built
+    const container = containerHandleOf(this.config.container);
+    if (container?.disposed) throw new ContainerDisposedError();
     this.providers = new ProviderRegistry([...createMcpGlobalProviders(this.config)], undefined, {
       shutdownHookTimeoutMs: this.config.lifecycle?.shutdownHookTimeoutMs,
+      ...(container ? { sharedLifecycles: container.lifecycles, container } : {}),
     });
     await this.providers.ready;
 
@@ -276,6 +287,8 @@ export class FrontMcpInstance implements FrontMcpInterface {
     for (const scope of this.getScopes() as Scope[]) {
       await scope.providers.runReadyHooks(scope.logger);
     }
+    // A container disposed while its providers were readied for this server is refused, as one disposed before it
+    if (containerHandleOf(this.config.container)?.disposed) throw new ContainerDisposedError();
   }
 
   /**

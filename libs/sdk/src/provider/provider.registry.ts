@@ -29,6 +29,7 @@ import { shouldCacheProviders, type DistributedEnabled } from '../common/types/o
 import { FrontMcpContext, validateSessionId } from '../context/frontmcp-context';
 import { FRONTMCP_CONTEXT } from '../context/frontmcp-context.provider';
 import {
+  ContainerDisposedError,
   DependencyCycleError,
   InternalMcpError,
   InvalidDependencyScopeError,
@@ -46,6 +47,7 @@ import { isManifestMode } from '../front-mcp/manifest-mode.flag';
 import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
 import { Scope } from '../scope';
 import { STATELESS_SESSION_ID } from '../transport/transport.types';
+import { type ContainerHandle } from './container-handle';
 import {
   bootstrapProvider,
   DEFAULT_SHUTDOWN_HOOK_TIMEOUT_MS,
@@ -80,6 +82,13 @@ export interface ProviderRegistryOptions {
   providerCaching?: boolean;
   /** How long each provider's `onShutdown()` may run; a registry with a parent and no value follows its parent. */
   shutdownHookTimeoutMs?: number;
+  /**
+   * The lifecycle bookkeeping of the tree, for the root registry: `createContainer()` keeps its own, and a server
+   * started on the container shares it. A registry with a parent uses its parent's.
+   */
+  sharedLifecycles?: WeakMap<object, SharedLifecycle>;
+  /** The container a server starts on (`@FrontMcp({ container })`); a registry with a parent follows its parent. */
+  container?: ContainerHandle;
 }
 
 interface HierarchyDef {
@@ -139,12 +148,14 @@ export default class ProviderRegistry
   /** The registries built below this one (an app's, a plugin's, an agent's), disposed with it. */
   private readonly childRegistries = new Set<ProviderRegistry>();
 
-  /** The GLOBAL instances built here that declare a lifecycle hook and whose bootstrap and ready hooks run here. */
-  private readonly lifecycleEntries: LifecycleEntry[] = [];
   /** Every GLOBAL instance with a lifecycle hook this registry holds, one another registry also holds included. */
   private readonly heldEntries: LifecycleEntry[] = [];
   /** The `@Duty` and `@Worker` lifecycles whose ready hooks run here, with the token each was built for. */
   private readonly backgroundEntries: Array<{ token: Token; lifecycle: BackgroundLifecycle }> = [];
+  /** What `onReady()` runs on here, in build order: the instances built here, and the container's ones it borrows. */
+  private readonly readyEntries: Array<{ entry: LifecycleEntry; borrowed: boolean; background: boolean }> = [];
+  /** The container a server of this tree starts on. */
+  readonly container?: ContainerHandle;
   /** Each instance's shared lifecycle in this tree: the first holder bootstraps and readies it, the last shuts it down. */
   private readonly sharedLifecycles: WeakMap<object, SharedLifecycle>;
   /** How long each shutdown hook may run (`lifecycle.shutdownHookTimeoutMs`), in ms. */
@@ -166,7 +177,8 @@ export default class ProviderRegistry
       !configured && parentProviders
         ? parentProviders.sessionCacheEnabled
         : shouldCacheProviders(options?.distributedMode, options?.providerCaching);
-    this.sharedLifecycles = parentProviders?.sharedLifecycles ?? new WeakMap();
+    this.sharedLifecycles = parentProviders?.sharedLifecycles ?? options?.sharedLifecycles ?? new WeakMap();
+    this.container = parentProviders?.container ?? options?.container;
     this.shutdownHookTimeoutMs =
       options?.shutdownHookTimeoutMs ?? parentProviders?.shutdownHookTimeoutMs ?? DEFAULT_SHUTDOWN_HOOK_TIMEOUT_MS;
 
@@ -363,13 +375,21 @@ export default class ProviderRegistry
     if (!instance || this.heldEntries.some((held) => held.instance === instance)) return;
     const entry = { token, instance };
     const shared = this.sharedLifecycles.get(instance);
+    // A container disposed while this server was built has shut its instances down: none is taken after that
+    const borrowed = !!shared && !!this.container?.owned.has(instance);
+    if (borrowed && this.container?.disposed) throw new ContainerDisposedError();
     const lifecycle = shared ?? { holders: 0, bootstrapped: bootstrapProvider(entry) };
     if (!shared) this.sharedLifecycles.set(instance, lifecycle);
     lifecycle.holders++;
     await lifecycle.bootstrapped;
-    if (!shared) this.lifecycleEntries.push(entry);
     if (!shared && background) this.backgroundEntries.push({ token, lifecycle: background });
+    if (!shared || borrowed) this.readyEntries.push({ entry, borrowed, background: !!background });
     this.heldEntries.push(entry);
+  }
+
+  /** The lifecycle hooks of the instances this registry holds, its `@Duty` and `@Worker` lifecycles included. */
+  heldLifecycles(): readonly object[] {
+    return this.heldEntries.map(({ instance }) => instance);
   }
 
   /**
@@ -410,8 +430,35 @@ export default class ProviderRegistry
   }
 
   private async readyHereAndBelow(logger: LifecycleLogger): Promise<unknown[]> {
-    const failures = await readyProviders(this.lifecycleEntries, logger);
+    const failures = await this.readyInBuildOrder(logger);
     for (const child of [...this.childRegistries]) failures.push(...(await child.runReadyHooks(logger)));
+    return failures;
+  }
+
+  /**
+   * Run `onReady()` on the providers held here in build order, so each after those it depends on. A container's
+   * instance is readied by the first server on it that serves, and the others wait for that run; the `@Duty` and
+   * `@Worker` providers of a container that runs its background work itself are left as they are. Resolves to what
+   * this server's runs threw.
+   */
+  private async readyInBuildOrder(logger: LifecycleLogger): Promise<unknown[]> {
+    const container = this.container;
+    const failures: unknown[] = [];
+    for (const { entry, borrowed, background } of this.readyEntries) {
+      if (!borrowed || !container) {
+        failures.push(...(await readyProviders([entry], logger)));
+        continue;
+      }
+      if (background && container.backgroundStarted) continue;
+      const running = container.readied.get(entry.instance);
+      if (running) {
+        await running;
+        continue;
+      }
+      const readying = readyProviders([entry], logger);
+      container.readied.set(entry.instance, readying);
+      failures.push(...(await readying));
+    }
     return failures;
   }
 

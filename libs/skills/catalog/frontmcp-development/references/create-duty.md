@@ -114,6 +114,10 @@ await container.dispose(); // stops the duties and releases their leases
 A container without `runBackground` builds a `'cluster'` duty without Redis; one that runs duties refuses it, like a
 server.
 
+A server started on a container (`@FrontMcp({ container })`, since 1.14; see `create-provider`) starts the container's
+duties once it serves, as it starts its own, unless the container started them (`runBackground: true`); each runs
+once, however many servers start on the container.
+
 ## `@Duty` Options
 
 | Field      | Type                                                        | Default                                                    | Notes                                                                                                                                                                                            |

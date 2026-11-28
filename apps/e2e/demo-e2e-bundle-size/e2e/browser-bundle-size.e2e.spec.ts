@@ -33,16 +33,19 @@ const BUDGETS: Array<{ entry: string; label: string; maxBytes: number }> = [
   // token speaks for, and the typed auth_time, azp and client_id (#1363), then +437 and +438: a principal's optional
   // fields checked, and the principal told by the subject claimsMapping.userId resolves. Then +30 and +30: the shared
   // server's changes (#1349). Then +282 and +282: detached workflows, workflow cancel and machine-wide admission
-  // (#1351)
-  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_357_699 },
-  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_364_945 },
+  // (#1351). Then +1,549 and +1,544: starting a server on an existing container (#1356). Then +120 and +120: its review
+  // fixes, one onReady() per instance and the disposal check at acquisition. Then +9 and +9: one ready pass in build
+  // order, and the disposal check after it
+  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_359_377 },
+  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_366_618 },
 ];
 
 // +413 bytes, the 1.13.2 batch: producer-backed resource keys (#1354, +241), the client metadata a transparent server
 // publishes (#1360, +166) and the people session store option (#1355, +6). Then +3,991: the redis option's cluster,
 // cluster-seed-node and client forms (#1503), then +1,008: the client check names a custom client's missing methods.
-// Then +2,064: the principal a token speaks for (#1363), then +513: its review fixes
-const VITE_INITIAL_CHUNK_MAX_BYTES = 793_694;
+// Then +2,064: the principal a token speaks for (#1363), then +513: its review fixes. Then +131: a server started on an
+// existing container (#1356) and the runtime review fixes
+const VITE_INITIAL_CHUNK_MAX_BYTES = 793_825;
 
 // What create() never needs: the parser behind @enclave-vm/ast (#885), the MCP client (#886) and server-only code
 const NEVER_BUNDLED: Record<string, RegExp> = {

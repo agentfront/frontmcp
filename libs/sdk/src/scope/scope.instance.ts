@@ -76,6 +76,7 @@ import { OffloadService } from '../offload/offload.service';
 import { agentToolMetadata, findUnenforcedMetadata } from '../plugin/enforced-metadata.check';
 import PluginRegistry, { type PluginScopeInfo } from '../plugin/plugin.registry';
 import PromptRegistry from '../prompt/prompt.registry';
+import { borrowProviders } from '../provider/borrow-providers';
 import ProviderRegistry from '../provider/provider.registry';
 import { MaterializedResources } from '../resource/materialized/materialized-resources';
 import ResourceRegistry from '../resource/resource.registry';
@@ -319,7 +320,8 @@ export class Scope extends ScopeEntry {
     // FrontMcpContextStorage, FrontMcpContextProvider) write last and cannot
     // be accidentally shadowed by a user provider that happens to declare the
     // same token.
-    const userProviders = rec.metadata.providers ?? [];
+    // On a container, the server-level providers it built are used as they are, and its others are added
+    const userProviders = borrowProviders(rec.metadata.providers ?? [], globalProviders.container?.server, true);
     this.scopeProviders = new ProviderRegistry([...userProviders, ...this.defaultScopeProviders], globalProviders, {
       distributedMode,
       providerCaching,
@@ -739,8 +741,13 @@ export class Scope extends ScopeEntry {
       );
       if (closeVaultStorage) this.onDispose(closeVaultStorage);
     }
-    // Hooks declared on `@FrontMcp({ providers })` run for every app's entries, like an app's provider hooks do for its own.
-    const serverHooks = serverProviderHooks(this.scopeProviders, this.metadata.providers, scopeRef);
+    // Hooks on `@FrontMcp({ providers })`, and on a container's other server-level ones, run for every app's entries
+    const serverProviders = borrowProviders(
+      this.metadata.providers ?? [],
+      this.globalProviders.container?.server,
+      true,
+    );
+    const serverHooks = serverProviderHooks(this.scopeProviders, serverProviders, scopeRef);
     if (serverHooks.length > 0) await this.scopeHooks.registerHooks(false, ...serverHooks);
     this.logger.verbose('HookRegistry initialized');
     this.logger.verbose('FlowRegistry initialized');
