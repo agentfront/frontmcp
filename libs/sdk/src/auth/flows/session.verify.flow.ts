@@ -29,13 +29,18 @@ import {
   buildInvalidTokenHeader,
   buildUnauthorizedHeader,
   deriveTypedUser,
+  detectPrincipal,
   encryptJson,
   extractBearerToken,
+  isAuthPrincipal,
   isJwt,
   JwksService,
   normalizeIssuer,
+  resolvePrincipal,
   scopesFromClaims,
   validateAudience,
+  type AuthPrincipal,
+  type PrincipalResolver,
   type ProviderVerifyRef,
   type VerifyResult,
 } from '@frontmcp/auth';
@@ -71,6 +76,8 @@ const stateSchema = z.object({
   user: userClaimSchema.optional(),
   session: sessionIdSchema.optional(),
   principalIssuer: z.string().optional(),
+  // Who the verified token speaks for, as the claims name it or the auth options' `principal` resolver decides
+  principal: z.custom<AuthPrincipal>(isAuthPrincipal).optional(),
 });
 
 const UnauthorizedSchema = z
@@ -218,9 +225,10 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     // A sessionless request (MCP 2026-07-28) has no session to resume or to start: the caller is
     // identified for this request only, and nothing is encrypted for it (#629).
     if (this.rawInput.sessionless) {
+      const user = anonymousCallerClaims(options, randomUUID());
       this.respond({
         kind: 'authorized',
-        authorization: { token: '', user: anonymousCallerClaims(options, randomUUID()) },
+        authorization: { token: '', user, principal: detectPrincipal(user) },
       });
       return;
     }
@@ -281,6 +289,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
           authorization: {
             token: '',
             user,
+            principal: detectPrincipal(user),
             session: { id: sessionIdHeader, payload: existingPayload },
           },
         });
@@ -323,6 +332,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       authorization: {
         token: '',
         user,
+        principal: detectPrincipal(user),
         session: { id: sessionId, payload },
       },
     });
@@ -755,6 +765,13 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       return;
     }
     this.state.set('user', user);
+    this.state.set('principal', await this.principalOf(this.state.required.jwtPayload ?? {}));
+  }
+
+  /** Who the verified token speaks for: as its claims name it, or as the auth options' `principal` resolver decides. */
+  private principalOf(claims: Record<string, unknown>): Promise<AuthPrincipal> {
+    const resolver = (this.scope.auth?.options as { principal?: PrincipalResolver } | undefined)?.principal;
+    return resolvePrincipal(claims, resolver, (message) => this.logger.warn(`deriveUser: ${message}`));
   }
 
   /**
@@ -783,6 +800,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       required: { token, user },
       session,
       principalIssuer,
+      principal,
     } = this.state;
 
     this.logger.verbose('Session verified successfully', {
@@ -795,6 +813,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       authorization: {
         token,
         user,
+        principal: principal ?? detectPrincipal(user),
         session,
         ...(principalIssuer !== undefined && { principalIssuer }),
       },
