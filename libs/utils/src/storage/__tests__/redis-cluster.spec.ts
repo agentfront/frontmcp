@@ -10,6 +10,7 @@ import { createCluster as createClusterV4 } from 'redis-v4';
 
 import { readFileBuffer } from '../../fs';
 import { RedisStorageAdapter } from '../adapters/redis';
+import { createRedisConnection } from '../redis-client/connection';
 
 const NODES = (process.env['REDIS_CLUSTER_NODES'] ?? '')
   .split(',')
@@ -208,6 +209,27 @@ describeTls('RedisStorageAdapter on a TLS cluster that announces hostnames (Elas
     } finally {
       await adapter.disconnect();
     }
+  });
+
+  // These two need the test CA trusted by Node: run with NODE_EXTRA_CA_CERTS=<ca.crt>.
+  const trustsCa = Boolean(process.env['NODE_EXTRA_CA_CERTS']);
+  const itTrusted = trustsCa ? it : it.skip;
+
+  itTrusted('connects over TLS that a rediss:// seed asks for, even with tls: undefined handed over', async () => {
+    const seedUrl = `rediss://:${password ?? ''}@${host}:${port}`;
+    const { client } = createRedisConnection({ cluster: { nodes: [seedUrl] }, ioredisOptions: { tls: undefined } });
+    try {
+      await expect(client.ping()).resolves.toBe('PONG');
+    } finally {
+      client.disconnect();
+    }
+  });
+
+  itTrusted('refuses seeds that mix redis:// and rediss://, before connecting', async () => {
+    const adapter = new RedisStorageAdapter({
+      config: { cluster: { nodes: [`redis://:${password ?? ''}@${host}:${port}`, `rediss://${host}:${port}`] } },
+    });
+    await expect(adapter.connect()).rejects.toThrow(/mixes redis:\/\/ and rediss:\/\/ seeds/);
   });
 
   it('fails without the hostname-keeping dnsLookup (why FrontMCP sets it)', async () => {

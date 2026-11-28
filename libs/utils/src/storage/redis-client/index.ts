@@ -17,7 +17,14 @@ export type {
 } from './types';
 export { adoptRedisClient, createRedisConnection, wantsRedisCluster } from './connection';
 export { hasRedisClusterNodes, isRedisConnection, redisAdapterOptionsOf, redisConnectionOf } from './config';
-export { detectRedisClientKind, isRedisClientInput, UNSUPPORTED_REDIS_CLIENT_MESSAGE } from './detect';
+export {
+  detectRedisClientKind,
+  isRedisClientInput,
+  missingRedisClientMethods,
+  redisClientProblem,
+  REQUIRED_REDIS_CLIENT_METHODS,
+  UNSUPPORTED_REDIS_CLIENT_MESSAGE,
+} from './detect';
 export { borrowRedisClient, isBorrowedRedisClient } from './borrow';
 export { NodeRedisClientAdapter } from './node-redis-adapter';
 export type { NodeRedisClientAdapterOptions, NodeRedisLike } from './node-redis-adapter';
