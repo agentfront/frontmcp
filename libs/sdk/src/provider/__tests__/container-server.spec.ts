@@ -66,6 +66,17 @@ class OnlyInContainer {
   }
 }
 
+let slowReadyDone = false;
+
+/** A provider whose `onReady()` takes a while. */
+@Provider({ name: 'slow-ready' })
+class SlowReady implements OnReady {
+  async onReady() {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    slowReadyDone = true;
+  }
+}
+
 @Provider({ name: 'ledger' })
 class Ledger implements OnBootstrap, OnShutdown {
   constructor(readonly settings: Settings) {
@@ -135,6 +146,7 @@ describe('a server started on an existing container', () => {
   beforeEach(() => {
     phases.length = 0;
     audited.length = 0;
+    slowReadyDone = false;
     built = { settings: 0, ledger: 0, only: 0 };
     dutyReady = 0;
     home = fs.mkdtempSync(path.join(os.tmpdir(), 'sdk-container-'));
@@ -196,6 +208,19 @@ describe('a server started on an existing container', () => {
     expect(await instancesOf(first)).toEqual(await instancesOf(second));
     expect(built).toEqual({ settings: 1, ledger: 1, only: 1 });
     expect(phases).toEqual(['bootstrap:settings', 'bootstrap:ledger', 'ready:settings']);
+  });
+
+  it("starts two servers on one container at once, each once the container's providers are ready", async () => {
+    const made = await container({ providers: [Settings, OnlyInContainer, SlowReady] });
+    const config = serverConfig(made, { providers: [Settings, SlowReady] });
+
+    const readyAtStart = await Promise.all([
+      serve(config).then(() => slowReadyDone),
+      serve(config).then(() => slowReadyDone),
+    ]);
+
+    expect(readyAtStart).toEqual([true, true]);
+    expect(phases.filter((phase) => phase === 'ready:settings')).toHaveLength(1);
   });
 
   it("leaves the container's providers running when a server on it shuts down; dispose() shuts them down once", async () => {

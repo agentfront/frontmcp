@@ -434,23 +434,32 @@ export default class ProviderRegistry
 
   private async readyHereAndBelow(logger: LifecycleLogger): Promise<unknown[]> {
     const failures = await readyProviders(this.lifecycleEntries, logger);
-    failures.push(...(await readyProviders(this.borrowedDue(), logger)));
+    failures.push(...(await this.readyBorrowed(logger)));
     for (const child of [...this.childRegistries]) failures.push(...(await child.runReadyHooks(logger)));
     return failures;
   }
 
   /**
-   * The container's instances this server readies now: those no server on the container readied yet, but the `@Duty`
-   * and `@Worker` providers a container that runs its background work started itself. Each is marked readied.
+   * Ready the container's instances in build order: the first server on the container runs each `onReady()`, and the
+   * others wait for that run; resolves to what this server's runs threw. The `@Duty` and `@Worker` providers of a
+   * container that runs its background work itself are left as they are.
    */
-  private borrowedDue(): LifecycleEntry[] {
+  private async readyBorrowed(logger: LifecycleLogger): Promise<unknown[]> {
     const container = this.container;
     if (!container) return [];
-    const due = this.borrowedEntries.filter(
-      ({ entry, background }) => !container.readied.has(entry.instance) && !(background && container.backgroundStarted),
-    );
-    for (const { entry } of due) container.readied.add(entry.instance);
-    return due.map(({ entry }) => entry);
+    const failures: unknown[] = [];
+    for (const { entry, background } of this.borrowedEntries) {
+      if (background && container.backgroundStarted) continue;
+      const running = container.readied.get(entry.instance);
+      if (running) {
+        await running;
+        continue;
+      }
+      const readying = readyProviders([entry], logger);
+      container.readied.set(entry.instance, readying);
+      failures.push(...(await readying));
+    }
+    return failures;
   }
 
   /** Stop the `@Duty` and `@Worker` work readied here, without their hooks; throws at the first stop to time out. */
