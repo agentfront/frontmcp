@@ -1269,3 +1269,27 @@ builtInAuthPageHeaders({ csp: 'cdn' });
 ```
 
 **Codemod available:** no
+
+## BC-059: 1.14: MockOAuthServer requires S256 PKCE and honours resource indicators by default
+
+**Package:** `@frontmcp/auth` | **Category:** change | **Severity:** medium
+
+`MockOAuthServer` (from `@frontmcp/auth/testing` and `@frontmcp/testing`) uses `pkce: 'strict'` and `resourceIndicators: true` by default, so tests exercise what a real authorization server requires. An authorization request (or the manual sign-in form) without an S256 `code_challenge`, or with `plain`, is redirected back with `error=invalid_request`, a code needs a valid `code_verifier`, and the metadata lists `code_challenge_methods_supported: ['S256']`. A `resource` or `audience` on the authorization or token request becomes the access token's `aud`, and a token request naming a value the authorization didn't grant gets `invalid_target`. Up to 1.13 the mock accepted such a request and ignored `resource` and `audience` (1.13.2 warned once for each). Send S256 PKCE (`generatePkcePair()` from `@frontmcp/utils`), or opt out with `pkce: 'lenient'` and `resourceIndicators: false`. Neither default warns any more.
+
+**Before:**
+
+```typescript
+new MockOAuthServer(factory, { autoApprove: true, testUser });
+// /oauth/authorize without code_challenge -> code; resource ignored, aud = factory audience
+```
+
+**After:**
+
+```typescript
+new MockOAuthServer(factory, { autoApprove: true, testUser });
+// /oauth/authorize without code_challenge -> error=invalid_request; aud = the request's resource
+// keep 1.13's behaviour:
+new MockOAuthServer(factory, { autoApprove: true, testUser, pkce: 'lenient', resourceIndicators: false });
+```
+
+**Codemod available:** no
