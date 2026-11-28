@@ -5,7 +5,12 @@
 import 'reflect-metadata';
 
 import { type ScopeEntry } from '../../common';
-import { CLIENT_NAME_DISPLAY_MAX, clientDisplayName, resolveClientDisplayName } from '../client-display-name';
+import {
+  CLIENT_NAME_DISPLAY_MAX,
+  clientDisplayName,
+  resolveClientDisplayName,
+  UNNAMED_CLIENT,
+} from '../client-display-name';
 
 const CLIENT_ID = '6f1c1c5e-3f7e-4a52-9d55-7d6c2b3b6a10';
 const CIMD_CLIENT = 'https://client.example.com/oauth/metadata.json';
@@ -27,6 +32,12 @@ describe('clientDisplayName', () => {
     expect(clientDisplayName(CLIENT_ID, undefined, 'ChatGPT')).toBe('ChatGPT');
     expect(clientDisplayName(CLIENT_ID, '   ', `${ZERO_WIDTH_SPACE}`, undefined)).toBe(CLIENT_ID);
     expect(clientDisplayName(CLIENT_ID)).toBe(CLIENT_ID);
+  });
+
+  it('never shows a client_id with nothing visible unformatted', () => {
+    expect(clientDisplayName(RIGHT_TO_LEFT_OVERRIDE)).toBe(UNNAMED_CLIENT);
+    expect(clientDisplayName(`${ZERO_WIDTH_SPACE} \n`, `${RIGHT_TO_LEFT_OVERRIDE}`)).toBe(UNNAMED_CLIENT);
+    expect(clientDisplayName(`${RIGHT_TO_LEFT_OVERRIDE}client-7`)).toBe('client-7');
   });
 
   it('leaves HTML as text for the page to escape', () => {
