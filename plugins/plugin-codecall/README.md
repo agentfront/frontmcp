@@ -289,8 +289,9 @@ first:
   are always asked again on resume; a refusal before it that the script caught is answered again from the record.
 - **A refusal the script got.** A call the call flow refused before its tool ran (its input, or a budget as it
   started), or a call-phase `needs_changes` or `denied`, goes to the script, which may catch it. The run pauses there
-  only when the script ended with it, uncaught, alone or in the failed `parallel()`'s error that lists it, and no call
-  reached the host after the script got it. The answer keeps its status: on `node-vm` a failed `parallel()` ends the
+  only when the script ended with it, uncaught, alone or in the failed `parallel()`'s error that lists its whole
+  message (one the sandbox cut off where the list reaches 16 KB doesn't count), and no call reached the host after
+  the script got it. The answer keeps its status: on `node-vm` a failed `parallel()` ends the
   script with its first failure (`tool_error` for a call refused before its tool), and on `interpreter` with an error
   that lists every failure (`runtime_error`). A script that went on to another call after it got the refusal does
   not pause there: it caught it, or (on `interpreter`, whose `parallel()` waits for every callback) a callback made
