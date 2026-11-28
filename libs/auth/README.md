@@ -116,10 +116,10 @@ const tokens = (await getNativeTokens(options)) ?? (await signInNative(options))
 
 ### A mock identity provider for tests
 
-`@frontmcp/auth/testing` exports `MockOAuthServer` and `TestTokenFactory`, the classes `@frontmcp/testing` re-exports, without SWC, the Jest presets or the SDK. The mock serves metadata, JWKS, the authorization endpoint (auto-approved with `autoApprove` and `testUser`), the token endpoint (code, refresh and anonymous grants) and userinfo. Its tokens carry `auth_time`, kept across refresh. All of these are opt-in:
+`@frontmcp/auth/testing` exports `MockOAuthServer` and `TestTokenFactory`, the classes `@frontmcp/testing` re-exports, without SWC, the Jest presets or the SDK. The mock serves metadata, JWKS, the authorization endpoint (auto-approved with `autoApprove` and `testUser`), the token endpoint (code, refresh and anonymous grants) and userinfo. Its tokens carry `auth_time`, kept across refresh. By default it checks what an OAuth 2.1 server requires:
 
-- `pkce: 'strict'` requires S256 PKCE. Unset, the mock accepts a request without it and warns once.
-- `resourceIndicators: true` (or a list of allowed values) issues the access token for the request's `resource` (RFC 8707) and `audience`, and refuses other values with `invalid_target`. Unset, they are ignored, with one warning.
+- PKCE is strict: an authorization request needs an S256 `code_challenge`, and the code exchange a valid `code_verifier`. `pkce: 'lenient'` accepts a request without one, or with `plain`, as the mock did by default up to 1.13.
+- Resource indicators are on: the access token is issued for the request's `resource` (RFC 8707) and `audience`, and a token request naming another value is refused with `invalid_target`. A list (`resourceIndicators: [...]`) allows those values only; `resourceIndicators: false` ignores them, so every token gets the token factory's audience, as up to 1.13.
 - `users` lists several test users; a `login_hint` (a `sub` or `email`) picks the one who signs in.
 
 ```ts
@@ -130,7 +130,6 @@ const idp = new MockOAuthServer(new TestTokenFactory(), {
   users: [{ sub: 'user-1' }, { sub: 'user-2', email: 'two@example.com' }],
   clientId: 'desk-cli',
   validRedirectUris: ['http://127.0.0.1:*/callback'],
-  pkce: 'strict',
   resourceIndicators: ['https://desk.example.com/mcp'],
 });
 const { issuer } = await idp.start();
