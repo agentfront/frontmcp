@@ -414,6 +414,18 @@ export function attachSharedSession(options: AttachSharedSessionOptions): Shared
       dropSpare();
       return undefined;
     }
+    // Only the first key runs in this process: a moved-to key that can't be reached falls back to the first key
+    if (!('server' in attachment) && currentKey !== options.key) {
+      log.warn(
+        `moving back to the shared server "${options.key}": the server of key "${currentKey}" can't be reached (${attachment.embedded})`,
+      );
+      currentKey = options.key;
+      attachment = await connect(options, currentKey, log);
+      if (stopping) {
+        dropSpare();
+        return undefined;
+      }
+    }
     if ('server' in attachment) {
       dropSpare();
       const { url, token, fetch: send, pid } = attachment.server;
