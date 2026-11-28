@@ -143,6 +143,8 @@ contract.
 | Tasks         | core protocol                              | `io.modelcontextprotocol/tasks` extension            |
 | Not found     | `-32002`                                   | `-32602`                                             |
 
+FrontMCP 1.14 runs on the MCP SDK v2, which answers a missing resource with `-32602` on every revision; FrontMCP keeps `-32002` on 2025-era sessions, as up to 1.13.
+
 `server/discover` returns the capabilities and `instructions` `initialize` would: `experimental['claude/channel']` when the server has channels, and the server's `instructions` with the channel hint and the skills line or catalog (`skillsConfig.injectInstructions`) for that caller. Up to 1.9.2 it sent neither the channel capability nor the hint and catalog.
 
 ## Mirrored request headers

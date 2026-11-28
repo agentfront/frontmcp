@@ -24,6 +24,16 @@ The browser build swaps in browser versions of the server and Streamable HTTP mo
 
 The MCP SDK v1 supported protocol revisions up to `2025-11-25`, so the types of revision `2026-07-28` are defined here; FrontMCP's own 2026-07-28 dispatcher and client use them. They only add to the earlier types, because a FrontMCP server serves both revisions on the same endpoint. See [Protocol versions](https://frontmcp.dev/reference/server/protocol-versions) for what the revision changed and how FrontMCP picks one per request.
 
+## On the MCP SDK v2
+
+Since 1.14 this package is built on the MCP SDK v2. The rest of FrontMCP still uses the v1 API shape, which `src/compat-*.ts` keeps on top of v2:
+
+- `McpServer` and `Client` take v1's `setRequestHandler(zodSchema, handler)` and pass handlers v1's `RequestHandlerExtra`, built from v2's context. FrontMCP answers `initialize` itself, so the server records the negotiated version and the client's capabilities from that answer.
+- `tools/call` keeps v1's checks, so a task-augmented call returns its `CreateTaskResult`; `CallToolResult.structuredContent` stays an object, and `ToolSchema` requires object property schemas.
+- `McpError` keeps v1's `MCP error <code>: ` message and matches any v2 `ProtocolError`. A server request that times out or loses its connection fails with `McpError(-32001/-32000)`, and a refused Streamable HTTP request carries its HTTP status as `http.status`.
+- A missing resource answers `-32002` on 2025-era sessions (v2 sends `-32602`, the 2026-07-28 code), and the client keeps the server's code.
+- `StdioServerTransport` stays open when stdin ends, so a request still in flight is answered. Browser builds validate with v2's `@cfworker/json-schema` validator instead of its Ajv build.
+
 ## Contributing
 
 Source: [`libs/protocol`](https://github.com/agentfront/frontmcp/tree/main/libs/protocol). Issues and pull requests are welcome; see [CONTRIBUTING.md](https://github.com/agentfront/frontmcp/blob/main/CONTRIBUTING.md).
