@@ -432,7 +432,8 @@ const direct = await FrontMcpInstance.createDirect({ ...serverConfig, container 
   built by the server as usual, and CONTEXT-scoped providers are built per request.
 - The first server that serves runs their `onReady()` once, however many start on the container, and starts their
   `@Duty` and `@Worker` work, unless the container started it (`runBackground: true`). A server that starts meanwhile
-  waits for those `onReady()` runs before it serves too.
+  waits for those `onReady()` runs before it serves too. They run in build order with the server's own providers, so
+  a provider of the server's that injects one of the container's is readied after it.
 - A server's shutdown leaves them running. `dispose()` runs their `onShutdown()` once no server on the container still
   holds them; when the container is disposed first, the last server to shut down runs it.
 - A disposed container is refused with `ContainerDisposedError` (`CONTAINER_DISPOSED`), also when it is disposed while
