@@ -12,8 +12,9 @@ import {
  *
  * Covers the config type guards (redis / sqlite / persistent), the persistence
  * helper, and each branch of createTokenStorageAdapter (memory default, sqlite
- * lazy-require, redis). @frontmcp/storage-sqlite is virtually mocked so the
- * suite never pulls in better-sqlite3, and RedisStorageAdapter is stubbed so
+ * lazy-require, redis). @frontmcp/storage-sqlite is mocked (by its resolved path:
+ * a virtual mock would not apply after a spec in the same worker loaded the real
+ * package) so the suite never pulls in better-sqlite3, and RedisStorageAdapter is stubbed so
  * the redis branch never opens a socket.
  */
 
@@ -51,19 +52,15 @@ jest.mock('@frontmcp/utils', () => {
   };
 });
 
-jest.mock(
-  '@frontmcp/storage-sqlite',
-  () => {
-    const connectSqlite = jest.fn().mockResolvedValue(undefined);
-    return {
-      SqliteStorageAdapter: jest
-        .fn()
-        .mockImplementation((opts: unknown) => ({ __kind: 'sqlite', opts, connect: connectSqlite })),
-      __connectSqlite: connectSqlite,
-    };
-  },
-  { virtual: true },
-);
+jest.mock('@frontmcp/storage-sqlite', () => {
+  const connectSqlite = jest.fn().mockResolvedValue(undefined);
+  return {
+    SqliteStorageAdapter: jest
+      .fn()
+      .mockImplementation((opts: unknown) => ({ __kind: 'sqlite', opts, connect: connectSqlite })),
+    __connectSqlite: connectSqlite,
+  };
+});
 
 // Retrieve the in-factory spies for assertions (evaluated after hoisting → no TDZ).
 const utilsMock = jest.requireMock('@frontmcp/utils') as {
