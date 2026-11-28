@@ -198,9 +198,11 @@ class InboxLinkTool extends ToolContext {
   `--answer <id> --content '{"approve":true}'` (or `--decline` / `--cancel`) answers one. Each run needs a fresh link. It
   follows no redirect, takes plain `http` for a loopback server only, and strips terminal control characters from what
   the server sends.
-- **Delivery, once:** the waiting call gets the answer; when it stopped waiting (its `ttl` passed, or the session ended,
-  through another instance sharing the session store too), it fails with `QuestionPendingError` (`408`) and the answer
-  waits for the next call that asks the same key. When a newer call of the subject asks while one waits, the newer one
+- **Delivery, once:** the waiting call gets the answer; when it stopped waiting (its `ttl` passed, or the session ended:
+  a client's `DELETE` stops the call before it answers `204` on the instance it reaches, on a distributed deployment's
+  owner, and on the 1.14 instances listening on a shared Redis session store; an instance it can't reach, as with a
+  SQLite store, checks the store before it hands the answer over), it fails with `QuestionPendingError` (`408`) and the
+  answer waits for the next call that asks the same key. When a newer call of the subject asks while one waits, the newer one
   waits for it and the older fails with `QuestionSupersededError`. Each answer is handed to one call only.
 - **Storage:** `persistent.storage` (memory, redis or sqlite), else `elicitation.redis`, else the server's `redis`, else
   its `sqlite`, else `questions.sqlite` in `$FRONTMCP_HOME` (`~/.frontmcp`, made owner-only). Serverless needs one

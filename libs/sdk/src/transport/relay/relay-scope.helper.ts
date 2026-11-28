@@ -1,11 +1,11 @@
 /**
- * Wire a scope's HA relay channel: request relay, remote session destroys and
- * relayed notifications. Kept out of `scope.instance.ts` so the scope stays lean.
+ * Wire a scope's HA relay channel: request relay, remote session destroys (and their
+ * answers) and relayed notifications. Kept out of `scope.instance.ts` so the scope stays lean.
  */
 
 import type { ServerRequest, ServerResponse } from '../../common';
 import type { HaManager, HaRelayMessage } from '../../ha';
-import { isRequestRelayMessage } from '../../ha/relay-messages';
+import { isRequestRelayMessage, type DestroySessionRelayMessage } from '../../ha/relay-messages';
 import type { RedisTransportBus } from '../bus/redis-transport-bus';
 import type { TransportService } from '../transport.registry';
 import { serveRelayedHttpRequest, type RelayFlowRunner } from './relay-flow';
@@ -68,18 +68,52 @@ export function wireSessionRelay(options: WireSessionRelayOptions): SessionRelay
     logger,
   });
 
+  /**
+   * Another node asks this one to close a session (a DELETE it received, #1446). Closing the transport stops
+   * the session's calls in flight; then the asking node hears back, when it waits for that. An entry naming
+   * this node for a session it holds no transport for is stale: it is revoked, so no node waits on it.
+   */
+  const destroyOnRequest = async (message: DestroySessionRelayMessage): Promise<void> => {
+    const sessionLabel = message.sessionId.slice(0, 20);
+    let held: boolean;
+    try {
+      held = await transportService.destroyLocalSession(message.sessionId, message.reason);
+      if (!held) await bus.revokeSession(message.sessionId);
+    } catch (error) {
+      logger.warn('[HA] Failed to destroy a session on request of another node', {
+        sessionId: sessionLabel,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return;
+    }
+    if (!message.requestId || typeof message.sourceNodeId !== 'string') return;
+    try {
+      await haManager.publishToNode(message.sourceNodeId, {
+        kind: 'session-destroyed',
+        requestId: message.requestId,
+        sessionId: message.sessionId,
+        held,
+        sourceNodeId: nodeId,
+      });
+    } catch (error) {
+      logger.warn('[HA] Failed to tell another node a session it asked to close is closed', {
+        sessionId: sessionLabel,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
+
   const handler = (message: HaRelayMessage): void => {
     if (isRequestRelayMessage(message)) {
       relay.handleMessage(message);
       return;
     }
     if (message.kind === 'destroy-session') {
-      transportService.destroyLocalSession(message.sessionId, message.reason).catch((error: unknown) => {
-        logger.warn('[HA] Failed to destroy a session on request of another node', {
-          sessionId: message.sessionId.slice(0, 20),
-          error: error instanceof Error ? error.message : String(error),
-        });
-      });
+      void destroyOnRequest(message);
+      return;
+    }
+    if (message.kind === 'session-destroyed') {
+      bus.handleSessionDestroyed(message);
       return;
     }
     if (message.kind === undefined || message.kind === 'notification') {

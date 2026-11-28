@@ -63,6 +63,7 @@ export {
   redisMasterNodes,
   scanRedisKeys,
   publishRedisMessage,
+  countRedisSubscribers,
   deleteRedisKeys,
   getRedisKeys,
 } from './redis-client';

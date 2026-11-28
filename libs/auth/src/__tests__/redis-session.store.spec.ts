@@ -19,6 +19,8 @@ const mockStorageAdapter = {
   exists: jest.fn().mockResolvedValue(false),
   expire: jest.fn().mockResolvedValue(true),
   getClient: jest.fn().mockReturnValue(null),
+  publish: jest.fn().mockResolvedValue(1),
+  subscribe: jest.fn().mockResolvedValue(async () => undefined),
 };
 
 jest.mock('@frontmcp/utils', () => ({
@@ -46,6 +48,8 @@ describe('RedisSessionStore', () => {
     mockStorageAdapter.exists.mockResolvedValue(false);
     mockStorageAdapter.expire.mockResolvedValue(true);
     mockStorageAdapter.getClient.mockReturnValue(mockRedisClient);
+    mockStorageAdapter.publish.mockResolvedValue(1);
+    mockStorageAdapter.subscribe.mockResolvedValue(async () => undefined);
     mockRedisClient.getex.mockResolvedValue(null);
 
     store = new RedisSessionStore({
@@ -503,6 +507,62 @@ describe('RedisSessionStore', () => {
 
       // disconnect should not be called for external instance
       expect(mockStorageAdapter.disconnect).not.toHaveBeenCalled();
+    });
+  });
+
+  // ============================================
+  // Pub/sub between the instances sharing the store (#1446)
+  // ============================================
+
+  describe('publish / subscribe', () => {
+    it('publishes on a channel of the store and resolves how many listen on a single node', async () => {
+      await expect(store.publish('session-end', 'm')).resolves.toBe(1);
+      expect(mockStorageAdapter.connect).toHaveBeenCalled();
+      expect(mockStorageAdapter.publish).toHaveBeenCalledWith('session-end', 'm');
+    });
+
+    it("counts the listeners of every node of a cluster, under the store's key prefix", async () => {
+      const node = (count: number) => ({ pubsub: jest.fn().mockResolvedValue(['ch', count]) });
+      const nodes = [node(1), node(2)];
+      mockStorageAdapter.getClient.mockReturnValue({ isCluster: true, nodes: jest.fn(() => nodes) });
+
+      await expect(store.publish('session-end', 'm')).resolves.toBe(3);
+      expect(nodes[0].pubsub).toHaveBeenCalledWith('NUMSUB', 'mcp:session:session-end');
+    });
+
+    it('still counts a listener of a cluster that left while the message was published', async () => {
+      const counts = [2, 1];
+      const node = { pubsub: jest.fn(async () => ['ch', counts.shift()]) };
+      mockStorageAdapter.getClient.mockReturnValue({ isCluster: true, nodes: jest.fn(() => [node]) });
+
+      await expect(store.publish('session-end', 'm')).resolves.toBe(2);
+      expect(mockStorageAdapter.publish).toHaveBeenCalledWith('session-end', 'm');
+    });
+
+    it('rejects when a node of the cluster cannot be counted, as the count could be short', async () => {
+      const nodes = [
+        { pubsub: jest.fn().mockResolvedValue(['ch', 1]) },
+        { pubsub: jest.fn().mockRejectedValue(new Error('failing over')) },
+      ];
+      mockStorageAdapter.getClient.mockReturnValue({ isCluster: true, nodes: jest.fn(() => nodes) });
+
+      await expect(store.publish('session-end', 'm')).rejects.toThrow('failing over');
+    });
+
+    it('hands each message on the channel over, and closes the subscriber connection it opened', async () => {
+      const onMessage = jest.fn();
+      const stop = jest.fn(async () => undefined);
+      mockStorageAdapter.subscribe.mockResolvedValue(stop);
+      const externalStore = new RedisSessionStore({ redis: {} as never });
+
+      await expect(externalStore.subscribe('session-end', onMessage)).resolves.toBe(stop);
+      const [channel, handler] = mockStorageAdapter.subscribe.mock.calls[0];
+      handler('hello', 'session-end');
+      expect(channel).toBe('session-end');
+      expect(onMessage).toHaveBeenCalledWith('hello');
+
+      await externalStore.disconnect();
+      expect(mockStorageAdapter.disconnect).toHaveBeenCalled();
     });
   });
 

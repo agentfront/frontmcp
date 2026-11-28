@@ -6,10 +6,11 @@
  * given session, and to relay a request for it to that pod.
  */
 
-import { publishRedisMessage, type FrontMcpRedisClient } from '@frontmcp/utils';
+import { publishRedisMessage, randomUUID, type FrontMcpRedisClient } from '@frontmcp/utils';
 
 import type { ServerRequest, ServerResponse } from '../../common';
-import { SessionOwnerUnreachableError } from '../../errors/transport.errors';
+import { SessionEndUnconfirmedError, SessionOwnerUnreachableError } from '../../errors/transport.errors';
+import type { DestroySessionRelayMessage, SessionDestroyedRelayMessage } from '../../ha/relay-messages';
 import { isRelayedRequest, serializeRelayRequest } from '../relay/relay-http';
 import type { SessionRelay } from '../relay/session-relay';
 import type { RemoteLocation, TransportBus, TransportKey } from '../transport.types';
@@ -34,7 +35,7 @@ const DEFAULT_BUS_TTL_SECONDS = 3600;
 /** `Retry-After` for a request that cannot be relayed (the default heartbeat TTL). */
 const DEFAULT_RETRY_AFTER_SECONDS = 30;
 
-/** How long a remote destroy waits for the owner to release the session, and how often it looks. */
+/** How long a remote destroy waits for the owner to confirm it closed the session, and how often it reads the entry. */
 const RELEASE_TIMEOUT_MS = 5_000;
 const RELEASE_POLL_MS = 25;
 
@@ -102,6 +103,8 @@ export class RedisTransportBus implements TransportBus {
   private readonly retryAfterSeconds: number;
   private readonly logger?: RedisTransportBusOptions['logger'];
   private relay?: SessionRelay;
+  /** Remote destroys waiting for the owner's `session-destroyed` answer, by request id. */
+  private readonly pendingDestroys = new Map<string, { ownerNodeId: string; confirm(): void }>();
 
   constructor(
     private readonly redis: BusRedisClient,
@@ -224,53 +227,95 @@ export class RedisTransportBus implements TransportBus {
     await this.relay.forward(location.nodeId, sessionId, serializeRelayRequest(request), response);
   }
 
-  /** Destroy a session on the node that owns it, and wait (bounded) until that node has released it. */
+  /**
+   * Ask the node that owns a session to close it, and resolve once it did (#1446): closing the session's
+   * transport stops its calls in flight. The owner confirms with a `session-destroyed` answer on this
+   * node's channel; when this node does not listen on its channel, or the owner runs a version before 1.14,
+   * the confirmation is its bus entry gone, which the owner revokes after it closed the transport. An entry
+   * another node took over does not confirm anything: the owner's calls may still run.
+   *
+   * @throws SessionEndUnconfirmedError `not-listening` when no node listens on the owner's channel, so it
+   *   cannot be asked (it stopped, or it cannot hear yet); `timed-out` when the owner did not confirm within
+   *   5 s.
+   */
   async destroyRemote(key: TransportKey, reason?: string): Promise<void> {
     const entry = await this.readEntry(key.sessionId);
     if (!entry || entry.nodeId === this.machineId) return;
 
-    const message = JSON.stringify({
-      kind: 'destroy-session',
-      sessionId: key.sessionId,
-      reason,
-      sourceNodeId: this.machineId,
-      timestamp: Date.now(),
-    });
-
-    // Counted on every node of a cluster, whose PUBLISH counts only its own node's subscribers
-    const receivers = await publishRedisMessage(this.redis, entry.channel, message);
-
-    // Let the owning node revoke after it destroys the transport.
-    // Don't blindly delete — another node may have already taken ownership.
-
-    this.logger?.info('[TransportBus] Sent destroy-remote', {
-      sessionId: key.sessionId.slice(0, 20),
-      targetNodeId: entry.nodeId,
-    });
-    if (receivers > 0) await this.untilReleased(key.sessionId, entry.nodeId);
+    const requestId = randomUUID();
+    const confirmed = new Promise<void>((confirm) =>
+      this.pendingDestroys.set(requestId, { ownerNodeId: entry.nodeId, confirm }),
+    );
+    try {
+      const message: DestroySessionRelayMessage = {
+        kind: 'destroy-session',
+        sessionId: key.sessionId,
+        reason,
+        sourceNodeId: this.machineId,
+        timestamp: Date.now(),
+        requestId,
+      };
+      // Counted on every node of a cluster, whose PUBLISH counts only its own node's subscribers
+      const receivers = await publishRedisMessage(this.redis, entry.channel, JSON.stringify(message));
+      this.logger?.info('[TransportBus] Sent destroy-remote', {
+        sessionId: key.sessionId.slice(0, 20),
+        targetNodeId: entry.nodeId,
+      });
+      if (receivers === 0) {
+        throw new SessionEndUnconfirmedError(
+          entry.nodeId,
+          this.retryAfterSeconds,
+          "no node listens on the session owner's relay channel",
+          'not-listening',
+        );
+      }
+      if (await this.untilClosed(key.sessionId, confirmed)) return;
+      this.logger?.warn('[TransportBus] The session owner did not confirm in time that it closed the session', {
+        sessionId: key.sessionId.slice(0, 20),
+        ownerNodeId: entry.nodeId,
+      });
+      throw new SessionEndUnconfirmedError(
+        entry.nodeId,
+        this.retryAfterSeconds,
+        `the session owner did not confirm within ${RELEASE_TIMEOUT_MS}ms that it closed the session`,
+        'timed-out',
+      );
+    } finally {
+      this.pendingDestroys.delete(requestId);
+    }
   }
 
-  /** The owner revokes a session's entry only after it closed the session's transport, which ends its calls. */
-  private async untilReleased(sessionId: string, ownerNodeId: string): Promise<void> {
-    let polling = true;
+  /** The owner's answer to a destroy this node sent: it closed the session (or held none). */
+  handleSessionDestroyed(message: SessionDestroyedRelayMessage): void {
+    const pending = this.pendingDestroys.get(message.requestId);
+    if (pending && pending.ownerNodeId === message.sourceNodeId) pending.confirm();
+  }
+
+  /** Revoke this node's entry for a session it holds no transport for, so no node waits on it. */
+  async revokeSession(sessionId: string): Promise<void> {
+    await this.redis.eval(REVOKE_LUA, 1, this.busKey(sessionId), this.machineId);
+  }
+
+  /** Whether the owner confirmed, or revoked the session's entry, within the bounded wait. */
+  private async untilClosed(sessionId: string, confirmed: Promise<void>): Promise<boolean> {
+    let waiting = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const released = (async () => {
-      while (polling) {
+    const revoked = (async () => {
+      while (waiting) {
         await new Promise((resolve) => setTimeout(resolve, RELEASE_POLL_MS));
-        if ((await this.readEntry(sessionId))?.nodeId !== ownerNodeId) return true;
+        try {
+          if (waiting && !(await this.readEntry(sessionId))) return true;
+        } catch {
+          // A failed read decides nothing: the answer or the deadline does
+        }
       }
       return false;
     })();
     // The deadline bounds the reads too: a Redis that never answers one cannot hold the DELETE open.
     const timedOut = new Promise<false>((resolve) => (timer = setTimeout(() => resolve(false), RELEASE_TIMEOUT_MS)));
-    const releasedInTime = await Promise.race([released, timedOut]).finally(() => {
-      polling = false;
+    return Promise.race([confirmed.then(() => true), revoked, timedOut]).finally(() => {
+      waiting = false;
       clearTimeout(timer);
-    });
-    if (releasedInTime) return;
-    this.logger?.warn('[TransportBus] The session owner did not release the session in time', {
-      sessionId: sessionId.slice(0, 20),
-      ownerNodeId,
     });
   }
 

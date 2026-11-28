@@ -42,7 +42,7 @@ import {
   type ServerRequest,
 } from '../../common';
 import { toLegacyProtocolFlags } from '../../common/types/options/transport/schema';
-import { SessionOwnerUnreachableError, SessionVerificationFailedError } from '../../errors';
+import { SessionEndUnconfirmedError, SessionOwnerUnreachableError, SessionVerificationFailedError } from '../../errors';
 import { applyMachineIdHeader } from '../../ha/ha-headers';
 import { detectSkillsOnlyMode, SKILLS_ONLY_REQUEST } from '../../skill/skill-mode.utils';
 import { isProtocol20260728Request } from '../../transport/mcp-20260728';
@@ -1030,17 +1030,41 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
       this.scope.notifications.terminateSession(sessionId);
 
       // Destroy the transport and the stored session. Public and anonymous sessions carry an empty token (#713).
+      // Wherever the session is held, closing its transport stops its calls in flight; the DELETE answers 204
+      // only once every instance holding it confirmed that (#1446).
       const authorization = request[ServerRequestTokens.auth] as Authorization | undefined;
       const transportService = this.scope.transportService;
+      let unconfirmed: SessionEndUnconfirmedError | undefined;
       if (authorization && transportService) {
         for (const protocol of ['streamable-http', 'sse'] as const) {
           try {
             await transportService.destroyTransporter(protocol, authorization.token ?? '', sessionId);
-          } catch {
-            // Transport may already be evicted or not found — non-critical
+          } catch (error) {
+            // Otherwise the transport may already be evicted or not found — non-critical
+            if (error instanceof SessionEndUnconfirmedError) unconfirmed ??= error;
           }
         }
+        try {
+          await transportService.endSessionOnOtherInstances(sessionId);
+        } catch (error) {
+          if (!(error instanceof SessionEndUnconfirmedError)) throw error;
+          unconfirmed ??= error;
+        }
         await transportService.deleteStoredSession(sessionId);
+      }
+
+      if (unconfirmed) {
+        // Ended everywhere else, but an instance may still run the session's calls: retryable, never a 204
+        this.logger.warn(
+          `[${this.requestId}] Session ${sessionId.slice(0, 20)}... ended, unconfirmed by ${unconfirmed.holder}: ${unconfirmed.reason}`,
+        );
+        this.respond(
+          httpRespond.json(
+            { jsonrpc: '2.0', id: null, error: { code: -32000, message: unconfirmed.getPublicMessage() } },
+            { status: unconfirmed.statusCode, headers: { 'Retry-After': String(unconfirmed.retryAfterSeconds) } },
+          ),
+        );
+        return;
       }
 
       this.logger.info(`[${this.requestId}] Session terminated: ${sessionId.slice(0, 20)}...`);

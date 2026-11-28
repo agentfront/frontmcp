@@ -55,7 +55,10 @@ export interface TransportBus {
     response: ServerResponse,
   ): Promise<void>;
 
-  /** Ask the owning node to destroy its transport for the session; resolves once it did, or after a bounded wait. */
+  /**
+   * Ask the owning node to destroy its transport for the session; resolves once it confirmed it did.
+   * @throws SessionEndUnconfirmedError when the owner cannot be asked, or does not confirm within a bounded wait.
+   */
   destroyRemote(key: TransportKey, reason?: string): Promise<void>;
 }
 

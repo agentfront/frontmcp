@@ -122,6 +122,42 @@ export class SessionOwnerUnreachableError extends PublicMcpError {
   }
 }
 
+/** Why a session's end is unconfirmed; see {@link SessionEndUnconfirmedError.kind}. */
+export type SessionEndUnconfirmedKind = 'not-listening' | 'timed-out' | 'uncounted';
+
+/**
+ * Answer to a client's DELETE when an instance of the server that holds the session did not confirm in
+ * time that it closed the session's transport, which stops the session's calls in flight (#1446).
+ *
+ * The session is ended everywhere else (its stored record is deleted), but the DELETE does not answer
+ * `204` while that instance may still be running the session's calls. Public (503) and retryable: a
+ * DELETE sent again asks the instance again, and answers `204` once it has closed the session.
+ */
+export class SessionEndUnconfirmedError extends PublicMcpError {
+  /** Seconds after which a retried DELETE can succeed. */
+  readonly retryAfterSeconds: number;
+  /** The instance that did not confirm (a node id, or how many instances). Logged, never sent to the client. */
+  readonly holder: string;
+  /** Why it is unconfirmed. Logged, never sent to the client. */
+  readonly reason: string;
+  /** `not-listening`: none was asked; `timed-out`: one did not answer; `uncounted`: who to ask is unknown. */
+  readonly kind: SessionEndUnconfirmedKind;
+
+  constructor(holder: string, retryAfterSeconds: number, reason: string, kind: SessionEndUnconfirmedKind) {
+    const retryAfter = Math.max(1, Math.ceil(retryAfterSeconds));
+    super(
+      'This MCP session is ending, but an instance of the server that holds it did not confirm that it ' +
+        `stopped the session's requests in flight. Retry the DELETE after ${retryAfter}s.`,
+      'SESSION_END_UNCONFIRMED',
+      503,
+    );
+    this.retryAfterSeconds = retryAfter;
+    this.holder = holder;
+    this.reason = reason;
+    this.kind = kind;
+  }
+}
+
 function octalMode(mode: number): string {
   return `0${(mode & 0o7777).toString(8)}`;
 }

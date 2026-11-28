@@ -93,7 +93,7 @@ export class LocalTransporter implements Transporter {
     this.adapter.reregisterServer();
   }
 
-  async destroy(reason: string): Promise<void> {
+  async destroy(reason?: string): Promise<void> {
     try {
       await this.adapter.destroy(reason);
     } finally {

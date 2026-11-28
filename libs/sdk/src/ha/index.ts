@@ -18,6 +18,7 @@ export {
   type RelayResponseEvent,
   type RequestRelayMessage,
   type ResponseRelayMessage,
+  type SessionDestroyedRelayMessage,
 } from './relay-messages';
 export { resolveHaConfigFromEnv, HA_ENV } from './ha-config';
 export { createHaRedisClient } from './ha-redis-client';

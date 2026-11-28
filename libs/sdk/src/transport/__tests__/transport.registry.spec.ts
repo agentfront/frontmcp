@@ -10,8 +10,10 @@ import type { TransportPersistenceConfigInput } from '../../common';
 import { askPersistentQuestion } from '../../elicitation/questions/ask-question';
 import { createQuestionStore } from '../../elicitation/questions/question-store.factory';
 import { QuestionPendingError } from '../../elicitation/questions/question.errors';
+import { InvalidTransportSessionError } from '../../errors/transport.errors';
 import { loadSseTransport } from '../adapters/transport.sse.adapter';
 import { loadStreamableHttpTransport } from '../adapters/transport.streamable-http.adapter';
+import { LocalTransporter } from '../transport.local';
 import { TransportService } from '../transport.registry';
 
 // Mock dependencies
@@ -1038,6 +1040,214 @@ describe('TransportService', () => {
       await distributed.createTransporter('streamable-http', 'test-token', 'owned', mockResponse as never);
       expect(distributed.sessionEndCheck('owned')).toBeUndefined();
       await distributed.destroy();
+    });
+  });
+
+  // ============================================
+  // A DELETE through another instance sharing the session store (#1446)
+  // ============================================
+
+  describe('the instances sharing a Redis session store', () => {
+    let onMessage: (message: string) => void = () => undefined;
+    const stopListening = jest.fn().mockResolvedValue(undefined);
+    const pubsub = {
+      publish: jest.fn().mockResolvedValue(1),
+      subscribe: jest.fn(async (_channel: string, handler: (message: string) => void) => {
+        onMessage = handler;
+        return stopListening;
+      }),
+    };
+    const flush = () => new Promise((resolve) => setImmediate(resolve));
+    const published = () => pubsub.publish.mock.calls.map(([, message]) => JSON.parse(message as string));
+
+    beforeEach(async () => {
+      Object.assign(mockRedisSessionStore, pubsub);
+      service = createServiceWithEnabledFlag(mockScope, { enabled: true, redis: { host: 'localhost' } });
+      await service.ready;
+      await flush();
+    });
+
+    afterEach(() => {
+      delete (mockRedisSessionStore as Partial<typeof pubsub>).publish;
+      delete (mockRedisSessionStore as Partial<typeof pubsub>).subscribe;
+    });
+
+    it('closes a session deleted through another instance, which stops its calls, then answers', async () => {
+      const transport = await service.createTransporter('streamable-http', 'test-token', 'held', mockResponse as never);
+      expect(pubsub.subscribe).toHaveBeenCalledWith('session-end', expect.any(Function));
+
+      onMessage(JSON.stringify({ kind: 'end-session', requestId: 'r-1', sessionId: 'held', instanceId: 'other' }));
+      await flush();
+
+      // No reason: the client's DELETE, which closes the transport
+      expect(transport.destroy).toHaveBeenCalledWith(undefined);
+      expect(published()).toEqual([expect.objectContaining({ kind: 'session-ended', requestId: 'r-1', held: true })]);
+    });
+
+    it('asks the other instances to close a session deleted here, and waits for their answer', async () => {
+      pubsub.publish.mockResolvedValueOnce(2);
+      let resolved = false;
+      const ended = service.endSessionOnOtherInstances('gone').then(() => (resolved = true));
+      await flush();
+      const [{ requestId, kind }] = published();
+      expect(kind).toBe('end-session');
+      expect(resolved).toBe(false);
+
+      onMessage(
+        JSON.stringify({ kind: 'session-ended', requestId, sessionId: 'gone', instanceId: 'other', held: true }),
+      );
+      await ended;
+      expect(resolved).toBe(true);
+    });
+
+    it('stops listening when destroyed', async () => {
+      await service.destroy();
+      expect(stopListening).toHaveBeenCalled();
+    });
+  });
+
+  describe('a Redis session store whose channel cannot be subscribed', () => {
+    afterEach(() => {
+      delete (mockRedisSessionStore as { publish?: unknown }).publish;
+      delete (mockRedisSessionStore as { subscribe?: unknown }).subscribe;
+    });
+
+    it('answers a DELETE unconfirmed until a retry of the subscription succeeds, then asks the others', async () => {
+      jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] });
+      try {
+        const publish = jest.fn().mockResolvedValue(1);
+        const subscribe = jest.fn().mockRejectedValueOnce(new Error('NOPERM')).mockResolvedValue(jest.fn());
+        Object.assign(mockRedisSessionStore, { publish, subscribe });
+        service = createServiceWithEnabledFlag(mockScope, { enabled: true, redis: { host: 'localhost' } });
+        await service.ready;
+        await jest.advanceTimersByTimeAsync(0);
+
+        await expect(service.endSessionOnOtherInstances('gone')).rejects.toEqual(
+          expect.objectContaining({ kind: 'not-listening', statusCode: 503 }),
+        );
+        expect(publish).not.toHaveBeenCalled();
+        expect(mockScope.logger.warn).toHaveBeenCalledWith(
+          expect.stringContaining('Could not listen for sessions deleted through other instances — retrying in 1000ms'),
+          { error: 'NOPERM' },
+        );
+
+        await jest.advanceTimersByTimeAsync(1_000);
+        await service.endSessionOnOtherInstances('gone');
+        expect(subscribe).toHaveBeenCalledTimes(2);
+        expect(publish).toHaveBeenCalledWith('session-end', expect.stringContaining('"end-session"'));
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('waits for a subscription still being made before it asks the others', async () => {
+      let subscribed: (stop: () => Promise<void>) => void = () => undefined;
+      const publish = jest.fn().mockResolvedValue(1);
+      Object.assign(mockRedisSessionStore, {
+        publish,
+        subscribe: jest.fn(() => new Promise((resolve) => (subscribed = resolve))),
+      });
+      service = createServiceWithEnabledFlag(mockScope, { enabled: true, redis: { host: 'localhost' } });
+      await service.ready;
+
+      const ended = service.endSessionOnOtherInstances('gone');
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(publish).not.toHaveBeenCalled();
+      subscribed(jest.fn().mockResolvedValue(undefined));
+
+      await expect(ended).resolves.toBeUndefined();
+      expect(publish).toHaveBeenCalledTimes(1);
+    });
+
+    it('asks no one on a session store without a channel (SQLite, Vercel KV), as before', async () => {
+      service = createServiceWithEnabledFlag(mockScope, { enabled: true, redis: { host: 'localhost' } });
+      await service.ready;
+
+      await expect(service.endSessionOnOtherInstances('gone')).resolves.toBeUndefined();
+    });
+
+    it('stops listening when it was destroyed while subscribing', async () => {
+      let subscribed: (stop: () => Promise<void>) => void = () => undefined;
+      const stop = jest.fn().mockResolvedValue(undefined);
+      Object.assign(mockRedisSessionStore, {
+        publish: jest.fn(),
+        subscribe: jest.fn(() => new Promise((resolve) => (subscribed = resolve))),
+      });
+      service = createServiceWithEnabledFlag(mockScope, { enabled: true, redis: { host: 'localhost' } });
+      await service.ready;
+
+      await service.destroy();
+      subscribed(stop);
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(stop).toHaveBeenCalled();
+    });
+  });
+
+  describe('a DELETE while this instance recreates the session (#1446)', () => {
+    const stored = {
+      session: { id: 'busy', authorizationId: sha256Hex('test-token'), protocol: 'streamable-http', createdAt: 1 },
+      authorizationId: sha256Hex('test-token'),
+      createdAt: 1,
+      lastAccessedAt: 1,
+    };
+
+    beforeEach(async () => {
+      service = createServiceWithEnabledFlag(mockScope, { enabled: true, redis: { host: 'localhost' } });
+      await service.ready;
+    });
+
+    /** Recreate the session, with its new transport not ready until `ready()` is called. */
+    function recreateUntilReady() {
+      let ready: () => void = () => undefined;
+      const destroy = jest.fn().mockResolvedValue(undefined);
+      jest.mocked(LocalTransporter).mockImplementationOnce(
+        () =>
+          ({
+            ready: () => new Promise<void>((resolve) => (ready = resolve)),
+            destroy,
+            markAsInitialized: jest.fn(),
+          }) as never,
+      );
+      const recreation = service.recreateTransporter(
+        'streamable-http',
+        'test-token',
+        'busy',
+        stored as never,
+        mockResponse as never,
+      );
+      return { recreation, destroy, ready: () => ready() };
+    }
+
+    it.each([
+      ['asked by another instance or node', (sessionId: string) => service.destroyLocalSession(sessionId)],
+      [
+        'received here',
+        (sessionId: string) => service.destroyTransporter('streamable-http', 'test-token', sessionId).catch(() => true),
+      ],
+    ] as const)('does not let a recreation in flight restore a session ended by a DELETE %s', async (_where, end) => {
+      const { recreation, destroy, ready } = recreateUntilReady();
+      const failed = recreation.catch((error: unknown) => error);
+      await new Promise((resolve) => setImmediate(resolve));
+
+      await expect(end('busy')).resolves.toBe(true);
+      ready();
+
+      expect(await failed).toBeInstanceOf(InvalidTransportSessionError);
+      expect(destroy).toHaveBeenCalled();
+      expect(mockRedisSessionStore.set).not.toHaveBeenCalled();
+      mockRedisSessionStore.exists.mockResolvedValue(true);
+      expect(await service.getTransporter('streamable-http', 'test-token', 'busy')).toBeUndefined();
+    });
+
+    it('restores a session no DELETE ended while it was recreated, and forgets an end once done', async () => {
+      const { recreation, ready } = recreateUntilReady();
+      await new Promise((resolve) => setImmediate(resolve));
+      ready();
+      await recreation;
+      expect(mockRedisSessionStore.set).toHaveBeenCalledWith('busy', expect.any(Object), expect.any(Number));
+
+      await expect(service.destroyLocalSession('unknown')).resolves.toBe(false);
     });
   });
 
