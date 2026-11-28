@@ -215,8 +215,23 @@ export async function readSharedServerKey(
   try {
     answer = await source();
   } catch (error) {
-    return { error: `the key function failed (${error instanceof Error ? error.message : String(error)})` };
+    return { error: `the key function failed (${error instanceof Error ? error.message : describeValue(error)})` };
   }
   if (isSharedServerKey(answer)) return { key: answer };
-  return { error: `the key function answered ${JSON.stringify(answer) ?? String(answer)}, and ${KEY_FORMAT}` };
+  return { error: `the key function answered ${describeValue(answer)}, and ${KEY_FORMAT}` };
+}
+
+/** `value` as text for a message, whatever it is: a bigint, a circular object or a null-prototype one included. */
+function describeValue(value: unknown): string {
+  try {
+    const json = JSON.stringify(value);
+    if (json !== undefined) return json;
+  } catch {
+    // Not JSON: it is described as a string, or by its type
+  }
+  try {
+    return String(value);
+  } catch {
+    return `a value of type ${typeof value}`;
+  }
 }
