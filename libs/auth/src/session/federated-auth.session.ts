@@ -157,6 +157,9 @@ export interface FederatedAuthSession {
   /** How the client authenticates at the token endpoint, from its registration when the authorization started. */
   clientAuthMethod?: string;
 
+  /** The client's display name, from the pending authorization (see `PendingAuthorizationRecord.clientName`). */
+  clientName?: string;
+
   /** Session creation timestamp */
   createdAt: number;
 
@@ -194,6 +197,7 @@ export interface FederatedAuthSessionRecord {
   signinBinding?: string;
   authorizedAppIds?: string[];
   clientAuthMethod?: string;
+  clientName?: string;
   createdAt: number;
   expiresAt: number;
 }
@@ -254,6 +258,8 @@ export interface FederatedAuthSessionCreateParams {
   authorizedAppIds?: string[];
   /** How the client authenticates (see `FederatedAuthSession.clientAuthMethod`). */
   clientAuthMethod?: string;
+  /** The client's display name (see `FederatedAuthSession.clientName`). */
+  clientName?: string;
 }
 
 /**
@@ -353,6 +359,7 @@ export class InMemoryFederatedAuthSessionStore implements FederatedAuthSessionSt
       signinBinding: params.signinBinding,
       authorizedAppIds: params.authorizedAppIds,
       clientAuthMethod: params.clientAuthMethod,
+      clientName: params.clientName,
       createdAt: now,
       expiresAt: now + this.sessionTtlMs,
     };
@@ -403,6 +410,7 @@ export function createFederatedAuthSession(
     signinBinding: params.signinBinding,
     authorizedAppIds: params.authorizedAppIds,
     clientAuthMethod: params.clientAuthMethod,
+    clientName: params.clientName,
     createdAt: now,
     expiresAt: now + ttlMs,
   };

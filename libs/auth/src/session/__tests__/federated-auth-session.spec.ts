@@ -210,6 +210,16 @@ describe('federated-auth.session', () => {
       expect(session.clientAuthMethod).toBe('client_secret_post');
     });
 
+    it("should keep the client's display name (#1505)", () => {
+      expect(createFederatedAuthSession({ ...makeCreateParams(), clientName: 'ChatGPT' }).clientName).toBe('ChatGPT');
+      const store = new InMemoryFederatedAuthSessionStore();
+      try {
+        expect(store.createSession({ ...makeCreateParams(), clientName: 'ChatGPT' }).clientName).toBe('ChatGPT');
+      } finally {
+        store.dispose();
+      }
+    });
+
     it('should create a session with custom TTL', () => {
       const params = makeCreateParams();
       const ttlMs = 5 * 60 * 1000;
