@@ -1,6 +1,7 @@
 import { InternalMcpError } from './mcp.error';
 
 const NODE_ONLY_ENTRY_POINTS = {
+  bootstrap: 'a page cannot listen on an HTTP port',
   runShared: 'the shared local server needs stdio, a child process and a Unix socket or loopback port',
   runUnixSocket: 'a page cannot listen on a Unix socket',
 } as const;
