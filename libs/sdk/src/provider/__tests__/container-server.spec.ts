@@ -216,6 +216,25 @@ describe('a server started on an existing container', () => {
     await expect(FrontMcpInstance.createDirect(serverConfig(made))).rejects.toBeInstanceOf(ContainerDisposedError);
   });
 
+  it('refuses a container disposed while the server was building, and readies none of its providers', async () => {
+    const made = await container();
+    let openGate: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => (openGate = resolve));
+    // Built before the container's providers, and waits while the container is disposed
+    const slow = { name: 'slow', provide: Symbol('slow'), useFactory: async () => gate.then(() => ({})) };
+    const starting = FrontMcpInstance.createDirect(serverConfig(made, { providers: [slow, Settings] }));
+    const refused = expect(starting).rejects.toBeInstanceOf(ContainerDisposedError);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    await made.dispose();
+    containers.splice(containers.indexOf(made), 1);
+    openGate();
+
+    await refused;
+    expect(phases).toContain('shutdown:settings');
+    expect(phases).not.toContain('ready:settings');
+  });
+
   it('starts the duties of a container that did not, once; and never again those of one that did', async () => {
     const idle = await container({ apps: [SweeperApp], providers: [], info: { name: 'on-container' } });
     await serve({
