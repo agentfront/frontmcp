@@ -7,6 +7,7 @@
 
 import { getEnv } from '@frontmcp/utils';
 
+import { detectPrincipal, isAuthPrincipal, type PrincipalKind } from '../session/utils/principal';
 import type { AuthoritiesClaimsMapping } from './authorities.profiles';
 import type { AuthoritiesEvaluationContext, RelationshipResolver } from './authorities.types';
 
@@ -107,6 +108,20 @@ export function signedInSubject(rawSub: unknown, mappedSub?: unknown): string | 
   return [mappedSub, rawSub].find((candidate): candidate is string => !isAnonymousSubject(candidate));
 }
 
+/**
+ * The kind of principal a request speaks for: the one session verification resolved (`extra.principal`), else the one
+ * its claims name; `'anonymous'` for an anonymous caller.
+ */
+export function principalKindOf(
+  authInfo: Partial<AuthInfoLike> | undefined,
+  claims: Record<string, unknown>,
+): PrincipalKind {
+  const user = resolveAuthUser(authInfo);
+  if (signedInSubject(user.sub) === undefined) return 'anonymous';
+  const given = authInfo?.extra?.['principal'];
+  return isAuthPrincipal(given) ? given.kind : detectPrincipal(claims).kind;
+}
+
 /** The `env.*` of an evaluation context: the runtime's environment variables, read when a rule names one. */
 const runtimeEnv: Record<string, unknown> = new Proxy(
   {},
@@ -158,6 +173,7 @@ export class AuthoritiesContextBuilder {
           roles: resolved.roles,
           permissions: resolved.permissions,
           claims: resolved.claims,
+          principal: principalKindOf(authInfo, resolveAuthUser(authInfo)),
         },
         input,
         env,
@@ -214,6 +230,7 @@ export class AuthoritiesContextBuilder {
         permissions,
         claims: rawClaims,
         tenantId: typeof mappedTenantId === 'string' && mappedTenantId !== '' ? mappedTenantId : undefined,
+        principal: principalKindOf(authInfo, rawClaims),
       },
       input,
       env,

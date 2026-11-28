@@ -5,7 +5,7 @@ import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import type { RawZodShape } from '../common/zod-utils';
 import type { TransparentAuthOptionsInterface, TransparentResourceMetadataOptions } from './interfaces';
-import { flatRemoteProviderFields, publicAccessConfigSchema } from './shared.schemas';
+import { flatRemoteProviderFields, principalResolverSchema, publicAccessConfigSchema } from './shared.schemas';
 
 // ============================================
 // TRANSPARENT MODE
@@ -59,6 +59,11 @@ export const transparentAuthOptionsSchema = z.object({
    * @default []
    */
   requiredScopes: z.array(z.string()).default([]),
+
+  /**
+   * Decides who a verified token speaks for: a person, a machine or no one (#1363)
+   */
+  principal: principalResolverSchema.optional(),
 
   /**
    * Allow anonymous fallback when no token is provided

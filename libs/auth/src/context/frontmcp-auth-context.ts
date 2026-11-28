@@ -6,6 +6,8 @@
  * `@FrontMcp({ authorities: { pipes: [...] } })`.
  */
 
+import type { AuthPrincipal } from '../session/utils/principal';
+
 // ============================================
 // Extension Interface
 // ============================================
@@ -94,6 +96,14 @@ export interface FrontMcpAuthContext extends ExtendFrontMcpAuthContext {
 
   /** True when the user is anonymous (sub starts with `anon:` or is empty) */
   readonly isAnonymous: boolean;
+
+  /**
+   * Who the token speaks for: `kind` is `'person'` (someone signed in), `'machine'` (a client acting for itself, such
+   * as a client-credentials token) or `'anonymous'`, with the token's subject, its client, when the caller
+   * authenticated, and its grant type when the token says. The server's `auth.principal` resolver decides it where
+   * one is set.
+   */
+  readonly principal: AuthPrincipal;
 
   /** Authentication mode (e.g., 'public', 'transparent', 'orchestrated') */
   readonly mode: string;

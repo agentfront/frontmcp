@@ -13,6 +13,7 @@ import {
   type ClaimsResolverFn,
 } from '../authorities/authorities.context';
 import type { AuthoritiesClaimsMapping } from '../authorities/authorities.profiles';
+import { detectPrincipal, isAuthPrincipal, type AuthPrincipal } from '../session/utils/principal';
 import type { FrontMcpAuthContext, FrontMcpAuthUser } from './frontmcp-auth-context';
 
 /**
@@ -62,6 +63,20 @@ function toStringArray(value: unknown): readonly string[] {
 }
 
 /**
+ * The principal of a request: the one session verification resolved (`extra.principal`), else the one the claims
+ * name. An anonymous caller is always `'anonymous'`.
+ */
+function principalOf(
+  source: AuthContextSourceInfo,
+  rawClaims: Record<string, unknown>,
+  isAnonymous: boolean,
+): AuthPrincipal {
+  const given = source.extra?.['principal'];
+  const principal = isAuthPrincipal(given) ? given : detectPrincipal(rawClaims);
+  return Object.freeze(isAnonymous && principal.kind !== 'anonymous' ? { ...principal, kind: 'anonymous' } : principal);
+}
+
+/**
  * Concrete implementation of {@link FrontMcpAuthContext}.
  *
  * Constructed via {@link buildAuthContext} factory — not intended for direct instantiation
@@ -70,6 +85,7 @@ function toStringArray(value: unknown): readonly string[] {
 export class FrontMcpAuthContextImpl implements FrontMcpAuthContext {
   readonly user: FrontMcpAuthUser;
   readonly isAnonymous: boolean;
+  readonly principal: AuthPrincipal;
   readonly mode: string;
   readonly sessionId: string;
   readonly scopes: readonly string[];
@@ -100,6 +116,9 @@ export class FrontMcpAuthContextImpl implements FrontMcpAuthContext {
 
     // -- Anonymous detection -------------------------------------------
     this.isAnonymous = signedInSub === undefined;
+
+    // -- Principal: the one the request was verified with, else the one the claims name ----------
+    this.principal = principalOf(source, this.buildRawClaims(source), this.isAnonymous);
 
     // -- Mode ----------------------------------------------------------
     const extraAuth = source.extra?.['authorization'] as Record<string, unknown> | undefined;

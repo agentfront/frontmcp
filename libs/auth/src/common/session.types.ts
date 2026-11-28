@@ -51,6 +51,12 @@ export type UserClaim = {
   exp?: number;
   iat?: number;
   aud?: string | string[];
+  /** When the person signed in (OIDC `auth_time`), in epoch seconds; machine tokens have none. */
+  auth_time?: number;
+  /** The authorized party: the OAuth client the token was issued to (OIDC `azp`). */
+  azp?: string;
+  /** The OAuth client the token was issued to (RFC 9068 `client_id`). */
+  client_id?: string;
   email?: string;
   username?: string;
   preferred_username?: string;
@@ -65,6 +71,9 @@ export const userClaimSchema = z
     exp: z.number().optional(),
     iat: z.number().optional(),
     aud: z.union([z.string(), z.array(z.string())]).optional(),
+    auth_time: z.number().optional(),
+    azp: z.string().optional(),
+    client_id: z.string().optional(),
     email: z.string().optional(),
     username: z.string().optional(),
     preferred_username: z.string().optional(),

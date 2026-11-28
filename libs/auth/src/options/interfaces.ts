@@ -12,6 +12,7 @@ import type { CimdConfigInput } from '../cimd';
 import type { AuthLogger } from '../common';
 import { type JSONWebKeySet, type JWK } from '../common/jwt.types';
 import type { RedisConfig } from '../session/transport-session.types';
+import type { PrincipalResolver } from '../session/utils/principal';
 
 // ============================================
 // SHARED CONFIG INTERFACES
@@ -953,6 +954,15 @@ export interface TransparentAuthOptionsInterface {
    */
   resourceMetadata?: TransparentResourceMetadataOptions;
   requiredScopes?: string[];
+  /**
+   * Decides who a verified token speaks for, where the provider marks machines in a way FrontMCP does not detect
+   * (a Keycloak service account, say): it gets the token's claims and the detected principal, and returns the fields
+   * to change (`{ kind: 'machine' }`) or `undefined`. It may be async. One that throws, or answers a kind that is not
+   * `'person'`, `'machine'` or `'anonymous'`, leaves the detected principal and logs a warning.
+   * @default the detected principal: a machine for a client-credentials token (`gty`), an Entra app token
+   *   (`idtyp: 'app'`) or a token whose `sub` is its client (`client_id`, `azp`, `cid`, `appid`), else a person
+   */
+  principal?: PrincipalResolver;
   allowAnonymous?: boolean;
   anonymousScopes?: string[];
   publicAccess?: PublicAccessConfig;
@@ -998,6 +1008,15 @@ export interface LocalAuthOptionsInterface {
    * @default this server's resource URL, taken from the request
    */
   expectedAudience?: string | string[];
+  /**
+   * Decides who a verified token speaks for, where the provider marks machines in a way FrontMCP does not detect
+   * (a Keycloak service account, say): it gets the token's claims and the detected principal, and returns the fields
+   * to change (`{ kind: 'machine' }`) or `undefined`. It may be async. One that throws, or answers a kind that is not
+   * `'person'`, `'machine'` or `'anonymous'`, leaves the detected principal and logs a warning.
+   * @default the detected principal: a machine for a client-credentials token (`gty`), an Entra app token
+   *   (`idtyp: 'app'`) or a token whose `sub` is its client (`client_id`, `azp`, `cid`, `appid`), else a person
+   */
+  principal?: PrincipalResolver;
   incrementalAuth?: IncrementalAuthConfig;
   /**
    * Require the OAuth client to be registered (DCR / pre-registered) or a CIMD
@@ -1143,6 +1162,8 @@ export interface RemoteAuthOptionsInterface {
    * resource URL. See {@link LocalAuthOptionsInterface.expectedAudience}.
    */
   expectedAudience?: string | string[];
+  /** Decides who a verified token speaks for. See {@link LocalAuthOptionsInterface.principal}. */
+  principal?: PrincipalResolver;
   incrementalAuth?: IncrementalAuthConfig;
   /**
    * Require the OAuth client to be registered (DCR / pre-registered) or a CIMD

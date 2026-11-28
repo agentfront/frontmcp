@@ -6,6 +6,8 @@
  * (Tools, Resources, Prompts, Skills, Agents).
  */
 
+import type { PrincipalKind } from '../session/utils/principal';
+
 // ============================================
 // RBAC — Role-Based Access Control
 // ============================================
@@ -326,6 +328,12 @@ export interface AuthoritiesEvaluationContext {
     claims: Record<string, unknown>;
     /** Tenant or organization id, read from the claim `claimsMapping.tenantId` names; undefined without one */
     tenantId?: string;
+    /**
+     * Who the token speaks for: `'person'`, `'machine'` (a client acting for itself) or `'anonymous'`, as the
+     * request was verified (the server's `auth.principal` resolver decides it where one is set), else as the claims
+     * name it. A rule matches it as `user.principal`.
+     */
+    principal?: PrincipalKind;
   };
   /** Tool/prompt input arguments */
   input: Record<string, unknown>;

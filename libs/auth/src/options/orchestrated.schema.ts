@@ -19,6 +19,7 @@ import {
   incrementalAuthConfigSchema,
   localDcrConfigSchema,
   localSigningConfigSchema,
+  principalResolverSchema,
   publicAccessConfigSchema,
   secureStoreConfigSchema,
   tokenRefreshConfigSchema,
@@ -75,6 +76,8 @@ const sharedAuthFields = {
   federatedAuth: federatedAuthConfigSchema.optional(),
   refresh: tokenRefreshConfigSchema.optional(),
   expectedAudience: z.union([z.string(), z.array(z.string())]).optional(),
+  // Decides who a verified token speaks for: a person, a machine or no one (#1363)
+  principal: principalResolverSchema.optional(),
   incrementalAuth: incrementalAuthConfigSchema.optional(),
   /**
    * Require the OAuth client to be KNOWN (registered via DCR / pre-registered,
