@@ -230,7 +230,10 @@ export class StorageAuthorizationStore implements AuthorizationStore {
     // A row under its hashed name is the only one read, so a row under the old name is never claimed after it.
     const legacyKey = this.legacyKey(type, id);
     const legacy = await store.get(legacyKey);
-    return legacy !== null && isRecordOf(type, legacy, id) ? { key: legacyKey, record: legacy, legacy: true } : null;
+    if (legacy !== null) return isRecordOf(type, legacy, id) ? { key: legacyKey, record: legacy, legacy: true } : null;
+    // A move that ran between the two reads left the row under the hashed name: read it there once more.
+    const moved = await store.get(key);
+    return moved !== null && isRecordOf(type, moved, id) ? { key, record: moved, legacy: false } : null;
   }
 
   /** {@link find}, deleting an expired record and answering null for it. */
@@ -273,7 +276,8 @@ export class StorageAuthorizationStore implements AuthorizationStore {
    * Replace the record of `id` with `update(record)` while `isLive(record)`, under its hashed name. The
    * compare-and-delete lets one request win: false when the record is missing or not live, or another request
    * changed it first. A record under the old name is claimed there, by deleting that row, and moves to the hashed
-   * name; each step touches one key.
+   * name; each step touches one key. A row found under neither name is read under the hashed one once more, for a
+   * move that ran between the two reads.
    */
   private async claim<T extends { expiresAt: number }>(
     store: TypedStorage<T>,
@@ -288,8 +292,10 @@ export class StorageAuthorizationStore implements AuthorizationStore {
     if (raw !== null) return this.claimRow(store, key, key, raw, isClaimable, update);
     const legacyKey = this.legacyKey(type, id);
     const legacyRaw = await this.base.get(legacyKey);
-    if (legacyRaw === null) return false;
-    return this.claimRow(store, legacyKey, key, legacyRaw, isClaimable, update);
+    if (legacyRaw !== null) return this.claimRow(store, legacyKey, key, legacyRaw, isClaimable, update);
+    // A row moved between the two reads is under the hashed name now, and is claimed there.
+    const movedRaw = await this.base.get(key);
+    return movedRaw !== null && this.claimRow(store, key, key, movedRaw, isClaimable, update);
   }
 
   private async claimRow<T extends { expiresAt: number }>(

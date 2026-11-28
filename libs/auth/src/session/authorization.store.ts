@@ -809,7 +809,10 @@ export class RedisAuthorizationStore implements AuthorizationStore {
     if (data) return holdsRecordOf(type, data, id) ? { key, data, legacy: false } : null;
     const legacyKey = this.legacyKey(type, id);
     const legacy: string | null = await this.redis.get(legacyKey);
-    return legacy && holdsRecordOf(type, legacy, id) ? { key: legacyKey, data: legacy, legacy: true } : null;
+    if (legacy) return holdsRecordOf(type, legacy, id) ? { key: legacyKey, data: legacy, legacy: true } : null;
+    // A move that ran between the two reads left the row under the hashed name: read it there once more.
+    const moved: string | null = await this.redis.get(key);
+    return moved && holdsRecordOf(type, moved, id) ? { key, data: moved, legacy: false } : null;
   }
 
   /** Write `record` under the hashed name of `id`, and delete the row it was read from when that was the old name. */

@@ -620,6 +620,50 @@ describe('RedisAuthorizationStore', () => {
     });
   });
 
+  describe('a row moved between the two reads', () => {
+    /** A Redis stand-in holding a code under its old name, which moves under its hashed name when that name is first read. */
+    function movingCode() {
+      const redis = fakeRedis();
+      const redisStore = new RedisAuthorizationStore(redis);
+      const record = redisStore.createCodeRecord({
+        clientId: 'client-1',
+        redirectUri: 'https://example.com/cb',
+        scopes: [],
+        pkce: { challenge: 'abc', method: 'S256' },
+        userSub: 'user-1',
+      });
+      const legacyKey = `oauth:code:${record.code}`;
+      const get = redis.get;
+      let moved = false;
+      redis.get = async (key: string) => {
+        if (key === legacyKey && !moved) {
+          moved = true;
+          await redis.set(`oauth:code:${hashed(record.code)}`, JSON.stringify(record));
+          await redis.del(legacyKey);
+        }
+        return get(key);
+      };
+      return { redis, redisStore, record, legacyKey };
+    }
+
+    it('should read a code that moved under its hashed name after that name was read', async () => {
+      const { redis, redisStore, record, legacyKey } = movingCode();
+      await redis.set(legacyKey, JSON.stringify(record));
+
+      expect(await redisStore.getAuthorizationCode(record.code)).toEqual(record);
+    });
+
+    it('should redeem a code that moved under its hashed name after that name was read, once', async () => {
+      const { redis, redisStore, record, legacyKey } = movingCode();
+      await redis.set(legacyKey, JSON.stringify(record));
+
+      await redisStore.markCodeUsed(record.code);
+
+      await expectRefused(redisStore.markCodeUsed(record.code), 'AUTHORIZATION_CODE_REDEEMED');
+      expect((await redisStore.getAuthorizationCode(record.code))?.used).toBe(true);
+    });
+  });
+
   describe('rows named up to 1.13', () => {
     function legacyRefreshRow() {
       const redis = fakeRedis();
@@ -755,11 +799,15 @@ describe('RedisAuthorizationStore', () => {
       ['code', (id: string) => store.getAuthorizationCode(id)],
       ['pending', (id: string) => store.getPendingAuthorization(id)],
       ['refresh', (id: string) => store.getRefreshToken(id)],
-    ])('should read a %s row under its hashed name first, then under the name up to 1.13', async (type, read) => {
-      mockRedis.get.mockResolvedValue(null);
-      await read('my-value');
-      expect(mockRedis.get.mock.calls).toEqual([[`test:${type}:${hashed('my-value')}`], [`test:${type}:my-value`]]);
-    });
+    ])(
+      'should read a %s row under its hashed name, then under the name up to 1.13, then under the hashed name again',
+      async (type, read) => {
+        mockRedis.get.mockResolvedValue(null);
+        await read('my-value');
+        const hashedKey = `test:${type}:${hashed('my-value')}`;
+        expect(mockRedis.get.mock.calls).toEqual([[hashedKey], [`test:${type}:my-value`], [hashedKey]]);
+      },
+    );
 
     it('should name rows by a hash keyed with keyHashSecret', async () => {
       const keyed = new RedisAuthorizationStore(mockRedis, 'test:', {

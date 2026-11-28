@@ -467,6 +467,41 @@ describe('StorageAuthorizationStore rows named up to 1.13', () => {
       expect((await liveTokens([successor, late])).map((record) => record.token)).toEqual([successor.token]);
     });
 
+    it('a read that missed the hashed name finds a code another instance moved there before the old name was read', async () => {
+      const code = codeRecord();
+      await writeLegacy(adapter, `code:${code.code}`, code);
+      const [a, b] = [instance(), instance()];
+      // A has missed the hashed name and holds before reading the old one; B redeems the code, moving its row.
+      const held = a.holdAt('get', `oauth:code:${code.code}`);
+      const read = a.store.getAuthorizationCode(code.code);
+      await held.reached;
+
+      await b.store.markCodeUsed(code.code);
+      await b.store.markCodeUsed(code.code, 'issued-refresh-token');
+      held.release();
+
+      expect(await read).toMatchObject({ code: code.code, used: true, issuedRefreshToken: 'issued-refresh-token' });
+    });
+
+    it('a redemption that missed the hashed name redeems a code moved there before the old name was read, once', async () => {
+      const code = codeRecord();
+      await writeLegacy(adapter, `code:${code.code}`, code);
+      const [a, b] = [instance(), instance()];
+      // A has missed the hashed name and holds before reading the old one; meanwhile the live row is written under the
+      // hashed name, and then the old row is deleted.
+      const held = a.holdAt('get', `oauth:code:${code.code}`);
+      const redemption = a.store.markCodeUsed(code.code);
+      await held.reached;
+
+      await adapter.set(hashedName('code', code.code), JSON.stringify(code), { ttlSeconds: 60 });
+      await adapter.delete(`oauth:code:${code.code}`);
+      held.release();
+
+      await expect(redemption).resolves.toBeUndefined();
+      await expect(b.store.markCodeUsed(code.code)).rejects.toThrow('already redeemed');
+      expect((await b.store.getAuthorizationCode(code.code))?.used).toBe(true);
+    });
+
     it('a code redeemed while another instance moves it is redeemed once', async () => {
       const code = codeRecord();
       await writeLegacy(adapter, `code:${code.code}`, code);
