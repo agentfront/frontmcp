@@ -3836,11 +3836,12 @@
             },
             {
               "name": "encrypted-sqlite-storage",
-              "description": "Enable AES-256-GCM at-rest encryption for sensitive session data stored in SQLite.",
+              "description": "Enable AES-256-GCM at-rest encryption of the values stored in SQLite.",
               "level": "intermediate",
               "tags": ["setup", "sqlite", "session", "database", "encrypted", "storage"],
               "features": [
-                "`encryption.secret` enables AES-256-GCM encryption with HKDF-SHA256 key derivation",
+                "`encryption.secret` enables AES-256-GCM encryption of every value, with HKDF-SHA256 key derivation",
+                "Keys are stored as written: never put a secret in a key",
                 "The secret must be at least 32 characters and sourced from environment variables",
                 "The same secret must be used across server restarts to decrypt existing data",
                 "Never hardcode the encryption secret in source code"
