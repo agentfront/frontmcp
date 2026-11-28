@@ -148,14 +148,12 @@ export default class ProviderRegistry
   /** The registries built below this one (an app's, a plugin's, an agent's), disposed with it. */
   private readonly childRegistries = new Set<ProviderRegistry>();
 
-  /** The GLOBAL instances built here that declare a lifecycle hook and whose bootstrap and ready hooks run here. */
-  private readonly lifecycleEntries: LifecycleEntry[] = [];
   /** Every GLOBAL instance with a lifecycle hook this registry holds, one another registry also holds included. */
   private readonly heldEntries: LifecycleEntry[] = [];
   /** The `@Duty` and `@Worker` lifecycles whose ready hooks run here, with the token each was built for. */
   private readonly backgroundEntries: Array<{ token: Token; lifecycle: BackgroundLifecycle }> = [];
-  /** The instances of the container this server starts on, which it readies once, unless a server on it did. */
-  private readonly borrowedEntries: Array<{ entry: LifecycleEntry; background: boolean }> = [];
+  /** What `onReady()` runs on here, in build order: the instances built here, and the container's ones it borrows. */
+  private readonly readyEntries: Array<{ entry: LifecycleEntry; borrowed: boolean; background: boolean }> = [];
   /** The container a server of this tree starts on. */
   readonly container?: ContainerHandle;
   /** Each instance's shared lifecycle in this tree: the first holder bootstraps and readies it, the last shuts it down. */
@@ -384,9 +382,8 @@ export default class ProviderRegistry
     if (!shared) this.sharedLifecycles.set(instance, lifecycle);
     lifecycle.holders++;
     await lifecycle.bootstrapped;
-    if (!shared) this.lifecycleEntries.push(entry);
     if (!shared && background) this.backgroundEntries.push({ token, lifecycle: background });
-    if (borrowed) this.borrowedEntries.push({ entry, background: !!background });
+    if (!shared || borrowed) this.readyEntries.push({ entry, borrowed, background: !!background });
     this.heldEntries.push(entry);
   }
 
@@ -433,22 +430,25 @@ export default class ProviderRegistry
   }
 
   private async readyHereAndBelow(logger: LifecycleLogger): Promise<unknown[]> {
-    const failures = await readyProviders(this.lifecycleEntries, logger);
-    failures.push(...(await this.readyBorrowed(logger)));
+    const failures = await this.readyInBuildOrder(logger);
     for (const child of [...this.childRegistries]) failures.push(...(await child.runReadyHooks(logger)));
     return failures;
   }
 
   /**
-   * Ready the container's instances in build order: the first server on the container runs each `onReady()`, and the
-   * others wait for that run; resolves to what this server's runs threw. The `@Duty` and `@Worker` providers of a
-   * container that runs its background work itself are left as they are.
+   * Run `onReady()` on the providers held here in build order, so each after those it depends on. A container's
+   * instance is readied by the first server on it that serves, and the others wait for that run; the `@Duty` and
+   * `@Worker` providers of a container that runs its background work itself are left as they are. Resolves to what
+   * this server's runs threw.
    */
-  private async readyBorrowed(logger: LifecycleLogger): Promise<unknown[]> {
+  private async readyInBuildOrder(logger: LifecycleLogger): Promise<unknown[]> {
     const container = this.container;
-    if (!container) return [];
     const failures: unknown[] = [];
-    for (const { entry, background } of this.borrowedEntries) {
+    for (const { entry, borrowed, background } of this.readyEntries) {
+      if (!borrowed || !container) {
+        failures.push(...(await readyProviders([entry], logger)));
+        continue;
+      }
       if (background && container.backgroundStarted) continue;
       const running = container.readied.get(entry.instance);
       if (running) {

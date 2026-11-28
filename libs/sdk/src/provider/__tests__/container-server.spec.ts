@@ -77,6 +77,15 @@ class SlowReady implements OnReady {
   }
 }
 
+/** A provider of the server's own that depends on one the container built. */
+@Provider({ name: 'settings-reader' })
+class SettingsReader implements OnReady {
+  constructor(readonly settings: Settings) {}
+  onReady() {
+    phases.push('ready:settings-reader');
+  }
+}
+
 @Provider({ name: 'ledger' })
 class Ledger implements OnBootstrap, OnShutdown {
   constructor(readonly settings: Settings) {
@@ -221,6 +230,13 @@ describe('a server started on an existing container', () => {
 
     expect(readyAtStart).toEqual([true, true]);
     expect(phases.filter((phase) => phase === 'ready:settings')).toHaveLength(1);
+  });
+
+  it("readies the server's own providers after the container's providers they depend on", async () => {
+    const made = await container();
+    await serve(serverConfig(made, { providers: [Settings, SettingsReader] }));
+
+    expect(phases.filter((phase) => phase.startsWith('ready:'))).toEqual(['ready:settings', 'ready:settings-reader']);
   });
 
   it("leaves the container's providers running when a server on it shuts down; dispose() shuts them down once", async () => {
