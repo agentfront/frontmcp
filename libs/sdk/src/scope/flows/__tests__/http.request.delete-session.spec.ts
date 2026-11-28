@@ -8,9 +8,14 @@ import 'reflect-metadata';
 import { getMachineId, resetRuntimeContext } from '@frontmcp/utils';
 
 import { FlowControl, httpOutputSchema, ServerRequestTokens } from '../../../common';
+import { SessionEndUnconfirmedError } from '../../../errors';
 import HttpRequestFlow from '../http.request.flow';
 
-type TransportServiceStub = { destroyTransporter: jest.Mock; deleteStoredSession: jest.Mock };
+type TransportServiceStub = {
+  destroyTransporter: jest.Mock;
+  endSessionOnOtherInstances: jest.Mock;
+  deleteStoredSession: jest.Mock;
+};
 
 function createStage(
   authorization: { token: string } | undefined,
@@ -50,6 +55,7 @@ async function runStage(stage: HttpRequestFlow, stageName: string): Promise<Flow
 function transportServiceStub(): TransportServiceStub {
   return {
     destroyTransporter: jest.fn().mockResolvedValue(undefined),
+    endSessionOnOtherInstances: jest.fn().mockResolvedValue(undefined),
     deleteStoredSession: jest.fn().mockResolvedValue(undefined),
   };
 }
@@ -94,6 +100,50 @@ describe('http:request handleDeleteSession', () => {
     const logged = JSON.stringify((stage['logger'] as unknown as { info: jest.Mock }).info.mock.calls);
     expect(logged).toContain(`${sessionId.slice(0, 20)}...`);
     expect(logged).not.toContain(sessionId);
+  });
+
+  it('asks the other instances sharing the session store to close the session before it answers (#1446)', async () => {
+    const transportService = transportServiceStub();
+    const { stage } = createStage({ token: '' }, transportService);
+
+    const control = await runStage(stage, 'handleDeleteSession');
+
+    expect(transportService.endSessionOnOtherInstances).toHaveBeenCalledWith('sess-1');
+    expect(control?.output).toMatchObject({ status: 204 });
+  });
+
+  it.each([
+    ['the owner over the bus', 'destroyTransporter'],
+    ['another instance sharing the session store', 'endSessionOnOtherInstances'],
+  ] as const)(
+    'answers a retryable 503, not 204, when %s does not confirm it closed the session (#1446)',
+    async (_holder, method) => {
+      const transportService = transportServiceStub();
+      transportService[method].mockRejectedValue(new SessionEndUnconfirmedError('node-2', 7, 'no answer', 'timed-out'));
+      const { stage } = createStage({ token: '' }, transportService);
+
+      const control = await runStage(stage, 'handleDeleteSession');
+
+      expect(control?.output).toMatchObject({
+        status: 503,
+        headers: expect.objectContaining({ 'Retry-After': '7' }),
+        body: {
+          jsonrpc: '2.0',
+          id: null,
+          error: { code: -32000, message: expect.stringContaining('Retry the DELETE') },
+        },
+      });
+      // The session is ended everywhere else: a retried DELETE asks the holder again
+      expect(transportService.deleteStoredSession).toHaveBeenCalledWith('sess-1');
+    },
+  );
+
+  it('fails the DELETE when asking the other instances fails otherwise', async () => {
+    const transportService = transportServiceStub();
+    transportService.endSessionOnOtherInstances.mockRejectedValue(new Error('Redis down'));
+    const { stage } = createStage({ token: '' }, transportService);
+
+    await expect(runStage(stage, 'handleDeleteSession')).rejects.toThrow('Redis down');
   });
 
   it('touches no transport when the request carries no verified authorization', async () => {

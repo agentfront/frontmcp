@@ -26,7 +26,11 @@ function setup(options: { relay?: boolean; subscribe?: jest.Mock } = {}) {
       return subscribe(h);
     }),
   };
-  const bus = { attachRelay: jest.fn() };
+  const bus = {
+    attachRelay: jest.fn(),
+    revokeSession: jest.fn().mockResolvedValue(undefined),
+    handleSessionDestroyed: jest.fn(),
+  };
   const transportService = { destroyLocalSession: jest.fn().mockResolvedValue(true) };
   const notifications = { deliverRelayedNotification: jest.fn().mockReturnValue(true) };
   const flows = { runFlow: jest.fn() };
@@ -120,6 +124,98 @@ describe('wireSessionRelay', () => {
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Failed to destroy'), {
       sessionId: 'sess-1',
       error: 'gone',
+    });
+  });
+
+  describe('a destroy asked by another node (#1446)', () => {
+    const flush = () => new Promise((resolve) => setImmediate(resolve));
+
+    it('answers the asking node once the transport is closed', async () => {
+      const { handle, deliver, transportService, haManager } = setup();
+      await handle?.ready;
+      let close: (held: boolean) => void = () => undefined;
+      transportService.destroyLocalSession.mockReturnValueOnce(new Promise((resolve) => (close = resolve)));
+
+      deliver({ kind: 'destroy-session', sessionId: 'sess-1', sourceNodeId: 'node-b', timestamp: 0, requestId: 'd-1' });
+      await flush();
+      expect(transportService.destroyLocalSession).toHaveBeenCalledWith('sess-1', undefined);
+      expect(haManager.publishToNode).not.toHaveBeenCalled();
+
+      close(true);
+      await flush();
+      expect(haManager.publishToNode).toHaveBeenCalledWith('node-b', {
+        kind: 'session-destroyed',
+        requestId: 'd-1',
+        sessionId: 'sess-1',
+        held: true,
+        sourceNodeId: 'node-a',
+      });
+    });
+
+    it('revokes its stale entry for a session it holds no transport for, then answers', async () => {
+      const { handle, deliver, transportService, haManager, bus } = setup();
+      await handle?.ready;
+      transportService.destroyLocalSession.mockResolvedValueOnce(false);
+
+      deliver({ kind: 'destroy-session', sessionId: 'sess-1', sourceNodeId: 'node-b', timestamp: 0, requestId: 'd-2' });
+      await flush();
+
+      expect(bus.revokeSession).toHaveBeenCalledWith('sess-1');
+      expect(haManager.publishToNode).toHaveBeenCalledWith(
+        'node-b',
+        expect.objectContaining({ kind: 'session-destroyed', requestId: 'd-2', held: false }),
+      );
+    });
+
+    it('does not answer a node that waits for no answer (before 1.14)', async () => {
+      const { handle, deliver, haManager } = setup();
+      await handle?.ready;
+
+      deliver({ kind: 'destroy-session', sessionId: 'sess-1', sourceNodeId: 'node-b', timestamp: 0 });
+      await flush();
+
+      expect(haManager.publishToNode).not.toHaveBeenCalled();
+    });
+
+    it('does not answer when the session could not be closed, so the asking node does not report it closed', async () => {
+      const { handle, deliver, transportService, haManager } = setup();
+      await handle?.ready;
+      transportService.destroyLocalSession.mockRejectedValueOnce(new Error('gone'));
+
+      deliver({ kind: 'destroy-session', sessionId: 'sess-1', sourceNodeId: 'node-b', timestamp: 0, requestId: 'd-3' });
+      await flush();
+
+      expect(haManager.publishToNode).not.toHaveBeenCalled();
+    });
+
+    it('logs an answer it could not publish', async () => {
+      const { handle, deliver, haManager, logger } = setup();
+      await handle?.ready;
+      haManager.publishToNode.mockRejectedValueOnce(new Error('Redis down'));
+
+      deliver({ kind: 'destroy-session', sessionId: 'sess-1', sourceNodeId: 'node-b', timestamp: 0, requestId: 'd-4' });
+      await flush();
+
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('is closed'), {
+        sessionId: 'sess-1',
+        error: 'Redis down',
+      });
+    });
+
+    it('hands the answer to a destroy this node sent to the bus', async () => {
+      const { handle, deliver, bus } = setup();
+      await handle?.ready;
+      const answer = {
+        kind: 'session-destroyed' as const,
+        requestId: 'd-5',
+        sessionId: 'sess-1',
+        held: true,
+        sourceNodeId: 'node-b',
+      };
+
+      deliver(answer);
+
+      expect(bus.handleSessionDestroyed).toHaveBeenCalledWith(answer);
     });
   });
 

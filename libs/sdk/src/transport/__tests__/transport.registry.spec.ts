@@ -1042,6 +1042,109 @@ describe('TransportService', () => {
   });
 
   // ============================================
+  // A DELETE through another instance sharing the session store (#1446)
+  // ============================================
+
+  describe('the instances sharing a Redis session store', () => {
+    let onMessage: (message: string) => void = () => undefined;
+    const stopListening = jest.fn().mockResolvedValue(undefined);
+    const pubsub = {
+      publish: jest.fn().mockResolvedValue(1),
+      subscribe: jest.fn(async (_channel: string, handler: (message: string) => void) => {
+        onMessage = handler;
+        return stopListening;
+      }),
+    };
+    const flush = () => new Promise((resolve) => setImmediate(resolve));
+    const published = () => pubsub.publish.mock.calls.map(([, message]) => JSON.parse(message as string));
+
+    beforeEach(async () => {
+      Object.assign(mockRedisSessionStore, pubsub);
+      service = createServiceWithEnabledFlag(mockScope, { enabled: true, redis: { host: 'localhost' } });
+      await service.ready;
+      await flush();
+    });
+
+    afterEach(() => {
+      delete (mockRedisSessionStore as Partial<typeof pubsub>).publish;
+      delete (mockRedisSessionStore as Partial<typeof pubsub>).subscribe;
+    });
+
+    it('closes a session deleted through another instance, which stops its calls, then answers', async () => {
+      const transport = await service.createTransporter('streamable-http', 'test-token', 'held', mockResponse as never);
+      expect(pubsub.subscribe).toHaveBeenCalledWith('session-end', expect.any(Function));
+
+      onMessage(JSON.stringify({ kind: 'end-session', requestId: 'r-1', sessionId: 'held', instanceId: 'other' }));
+      await flush();
+
+      // No reason: the client's DELETE, which closes the transport
+      expect(transport.destroy).toHaveBeenCalledWith(undefined);
+      expect(published()).toEqual([expect.objectContaining({ kind: 'session-ended', requestId: 'r-1', held: true })]);
+    });
+
+    it('asks the other instances to close a session deleted here, and waits for their answer', async () => {
+      pubsub.publish.mockResolvedValueOnce(2);
+      let resolved = false;
+      const ended = service.endSessionOnOtherInstances('gone').then(() => (resolved = true));
+      await flush();
+      const [{ requestId, kind }] = published();
+      expect(kind).toBe('end-session');
+      expect(resolved).toBe(false);
+
+      onMessage(
+        JSON.stringify({ kind: 'session-ended', requestId, sessionId: 'gone', instanceId: 'other', held: true }),
+      );
+      await ended;
+      expect(resolved).toBe(true);
+    });
+
+    it('stops listening when destroyed', async () => {
+      await service.destroy();
+      expect(stopListening).toHaveBeenCalled();
+    });
+  });
+
+  describe('a Redis session store whose channel cannot be subscribed', () => {
+    afterEach(() => {
+      delete (mockRedisSessionStore as { publish?: unknown }).publish;
+      delete (mockRedisSessionStore as { subscribe?: unknown }).subscribe;
+    });
+
+    it('serves on, and a DELETE asks no other instance (they end the session on their next request)', async () => {
+      const publish = jest.fn();
+      Object.assign(mockRedisSessionStore, { publish, subscribe: jest.fn().mockRejectedValue(new Error('NOPERM')) });
+      service = createServiceWithEnabledFlag(mockScope, { enabled: true, redis: { host: 'localhost' } });
+      await service.ready;
+      await new Promise((resolve) => setImmediate(resolve));
+
+      await service.endSessionOnOtherInstances('gone');
+
+      expect(publish).not.toHaveBeenCalled();
+      expect(mockScope.logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Could not listen for sessions deleted through other instances'),
+        { error: 'NOPERM' },
+      );
+    });
+
+    it('stops listening when it was destroyed while subscribing', async () => {
+      let subscribed: (stop: () => Promise<void>) => void = () => undefined;
+      const stop = jest.fn().mockResolvedValue(undefined);
+      Object.assign(mockRedisSessionStore, {
+        publish: jest.fn(),
+        subscribe: jest.fn(() => new Promise((resolve) => (subscribed = resolve))),
+      });
+      service = createServiceWithEnabledFlag(mockScope, { enabled: true, redis: { host: 'localhost' } });
+      await service.ready;
+
+      await service.destroy();
+      subscribed(stop);
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(stop).toHaveBeenCalled();
+    });
+  });
+
+  // ============================================
   // A session store that stops answering (#804)
   // ============================================
 

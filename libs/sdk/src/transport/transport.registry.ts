@@ -7,7 +7,11 @@ import { isDeploymentSessionId } from '../auth/session/utils/session-id.utils';
 import type { ServerRequest, ServerResponse, TransportPersistenceConfigInput } from '../common';
 import type { RedisOptions } from '../common/types/options/redis';
 import { sessionIdPresentedBy } from '../common/utils/auth-info.utils';
-import { InvalidTransportSessionError, SessionClaimConflictError } from '../errors/transport.errors';
+import {
+  InvalidTransportSessionError,
+  SessionClaimConflictError,
+  SessionEndUnconfirmedError,
+} from '../errors/transport.errors';
 import type { ClaimedSessionInfo } from '../ha';
 import type { ClientCapabilities } from '../notification/notification.service';
 import type { Scope } from '../scope';
@@ -18,6 +22,7 @@ import HandleSseFlow from './flows/handle.sse.flow';
 import HandleStatelessHttpFlow from './flows/handle.stateless-http.flow';
 import HandleStreamableHttpFlow from './flows/handle.streamable-http.flow';
 import { isRelayedRequest } from './relay/relay-http';
+import { isSessionEndPubSub, SessionEndChannel } from './session-end-channel';
 import { LocalTransporter } from './transport.local';
 import { RemoteTransporter } from './transport.remote';
 import {
@@ -179,6 +184,12 @@ export class TransportService {
   private readonly silentHandoverReads = new Map<string, number>();
 
   /**
+   * Outside distributed mode, with a Redis session store: the channel on which a DELETE asks the other
+   * instances sharing the store to close the session, and waits for them (#1446).
+   */
+  private sessionEndChannel?: SessionEndChannel;
+
+  /**
    * Redis key prefix under which session records are stored.
    * The session store appends `session:` to the transport key prefix.
    */
@@ -248,6 +259,8 @@ export class TransportService {
       const connected = await this.connectSessionStore();
       // SQLite is a local file: a failure there does not heal by waiting.
       if (!connected && this.backendKind !== 'sqlite') this.scheduleSessionStoreRetry();
+      // Not awaited: a subscription that hangs must not hold the server's start
+      if (connected) void this.startSessionEndChannel();
     }
 
     await this.scope.registryFlows(
@@ -326,9 +339,40 @@ export class TransportService {
     if (connected) {
       this.storeRetryAttempt = 0;
       this.scope.logger.info('[TransportService] Session store recovered after startup failure');
+      void this.startSessionEndChannel();
       return;
     }
     this.scheduleSessionStoreRetry();
+  }
+
+  /**
+   * Listen for DELETEs of sessions this instance may hold too: outside distributed mode (where the
+   * transport bus reaches a session's owner instead), on a session store with pub/sub (Redis). When the
+   * subscription fails, a DELETE through another instance ends the session here only on its next request,
+   * and a persistent question checks the store before it hands an answer over (`sessionEndCheck`).
+   */
+  private async startSessionEndChannel(): Promise<void> {
+    const store = this.sessionStore;
+    if (this.distributed || this.sessionEndChannel || !isSessionEndPubSub(store)) return;
+    const channel = new SessionEndChannel({
+      pubsub: store,
+      endLocal: (sessionId) => this.destroyLocalSession(sessionId),
+      logger: this.scope.logger,
+    });
+    try {
+      await channel.start();
+    } catch (error) {
+      this.scope.logger.warn(
+        '[TransportService] Could not listen for sessions deleted through other instances — they end here on their next request',
+        { error: error instanceof Error ? error.message : String(error) },
+      );
+      return;
+    }
+    if (this.destroyed) {
+      await channel.close().catch(() => void 0);
+      return;
+    }
+    this.sessionEndChannel = channel;
   }
 
   async destroy() {
@@ -337,6 +381,9 @@ export class TransportService {
       clearTimeout(this.storeRetryTimer);
       this.storeRetryTimer = undefined;
     }
+    const channel = this.sessionEndChannel;
+    this.sessionEndChannel = undefined;
+    await channel?.close().catch(() => void 0);
     this.lastTtlRefreshAt.clear();
     this.lastBusRefreshAt.clear();
     this.ownershipGeneration.clear();
@@ -1058,12 +1105,32 @@ export class TransportService {
     if (this.distributed && this.bus) {
       const location = await this.bus.lookup(key);
       if (location) {
-        await this.bus.destroyRemote(key, reason);
+        try {
+          await this.bus.destroyRemote(key, reason);
+        } catch (error) {
+          // Nothing listens on the owner's channel and its heartbeat is gone: it stopped, and no call of the session runs
+          const ownerStopped =
+            error instanceof SessionEndUnconfirmedError &&
+            error.kind === 'not-listening' &&
+            !(await this.isNodeAlive(location.nodeId));
+          if (!ownerStopped) throw error;
+        }
         return;
       }
     }
 
     throw new InvalidTransportSessionError('Invalid session: cannot destroy non-existent transporter.');
+  }
+
+  /**
+   * Outside distributed mode, ask the other instances sharing the session store to close a session a
+   * client deleted here, and wait until they did (#1446). Does nothing in distributed mode (the transport
+   * bus reaches the owner), or without a channel to the other instances.
+   *
+   * @throws SessionEndUnconfirmedError when an instance did not confirm within the bounded wait.
+   */
+  async endSessionOnOtherInstances(sessionId: string): Promise<void> {
+    await this.sessionEndChannel?.endElsewhere(sessionId);
   }
 
   /**

@@ -284,6 +284,7 @@ export {
   TransportServiceNotAvailableError,
   SessionClaimConflictError,
   SessionOwnerUnreachableError,
+  SessionEndUnconfirmedError,
   UnsafeSocketDirectoryError,
   SocketInUseError,
   SocketPathConflictError,

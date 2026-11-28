@@ -8,7 +8,11 @@ import { sha256Hex } from '@frontmcp/utils';
 
 import type { ServerRequest, ServerResponse } from '../../common';
 import { ServerRequestTokens } from '../../common/tokens/server.tokens';
-import { InvalidTransportSessionError, SessionClaimConflictError } from '../../errors/transport.errors';
+import {
+  InvalidTransportSessionError,
+  SessionClaimConflictError,
+  SessionEndUnconfirmedError,
+} from '../../errors/transport.errors';
 import { TransportService } from '../transport.registry';
 import { RemoteTransporter } from '../transport.remote';
 import type { RemoteLocation, TransportBus } from '../transport.types';
@@ -593,6 +597,74 @@ describe('TransportService — distributed sessions (#680)', () => {
         noBus.service.adoptClaimedSession('sess-1', 'node-dead', { protocol: 'sse', authorizationId: 'h' }),
       ).resolves.toBeUndefined();
       await noBus.service.destroy();
+    });
+  });
+
+  describe('destroyTransporter of a session another node owns (a DELETE, #1446)', () => {
+    const owner: RemoteLocation = { nodeId: 'node-owner', channel: 'mcp:ha:notify:node-owner' };
+
+    it('resolves once the owner confirmed it closed the session', async () => {
+      const bus = createBus({ lookup: jest.fn().mockResolvedValue(owner) });
+      const { service } = await createService({ haManager: createHaManager({ 'node-owner': true }), bus });
+
+      await service.destroyTransporter('streamable-http', TOKEN, SESSION_ID);
+
+      expect(bus.destroyRemote).toHaveBeenCalledWith(expect.objectContaining({ sessionId: SESSION_ID }), undefined);
+    });
+
+    it('fails with the unconfirmed end when the live owner did not confirm in time', async () => {
+      const unconfirmed = new SessionEndUnconfirmedError('node-owner', 30, 'no answer', 'timed-out');
+      const bus = createBus({
+        lookup: jest.fn().mockResolvedValue(owner),
+        destroyRemote: jest.fn().mockRejectedValue(unconfirmed),
+      });
+      const { service } = await createService({ haManager: createHaManager({ 'node-owner': true }), bus });
+
+      await expect(service.destroyTransporter('streamable-http', TOKEN, SESSION_ID)).rejects.toBe(unconfirmed);
+    });
+
+    it('fails when the owner is alive but does not listen on its channel', async () => {
+      const bus = createBus({
+        lookup: jest.fn().mockResolvedValue(owner),
+        destroyRemote: jest
+          .fn()
+          .mockRejectedValue(new SessionEndUnconfirmedError('node-owner', 30, 'nobody listens', 'not-listening')),
+      });
+      const { service } = await createService({ haManager: createHaManager({ 'node-owner': true }), bus });
+
+      await expect(service.destroyTransporter('streamable-http', TOKEN, SESSION_ID)).rejects.toBeInstanceOf(
+        SessionEndUnconfirmedError,
+      );
+    });
+
+    it('resolves when nothing listens on the channel of an owner whose heartbeat is gone: it stopped', async () => {
+      const bus = createBus({
+        lookup: jest.fn().mockResolvedValue(owner),
+        destroyRemote: jest
+          .fn()
+          .mockRejectedValue(new SessionEndUnconfirmedError('node-owner', 30, 'nobody listens', 'not-listening')),
+      });
+      const haManager = createHaManager({ 'node-owner': false });
+      const { service } = await createService({ haManager, bus });
+
+      await expect(service.destroyTransporter('streamable-http', TOKEN, SESSION_ID)).resolves.toBeUndefined();
+      expect(haManager.isNodeAlive).toHaveBeenCalledWith('node-owner');
+    });
+
+    it('listens on no session store channel: the bus reaches the owner', async () => {
+      const pubsub = { publish: jest.fn().mockResolvedValue(1), subscribe: jest.fn().mockResolvedValue(jest.fn()) };
+      Object.assign(mockStore, pubsub);
+      try {
+        const { service } = await createService({ haManager: createHaManager(), bus: createBus() });
+        await new Promise((resolve) => setImmediate(resolve));
+
+        await expect(service.endSessionOnOtherInstances(SESSION_ID)).resolves.toBeUndefined();
+        expect(pubsub.subscribe).not.toHaveBeenCalled();
+        expect(pubsub.publish).not.toHaveBeenCalled();
+      } finally {
+        delete (mockStore as Partial<typeof pubsub>).publish;
+        delete (mockStore as Partial<typeof pubsub>).subscribe;
+      }
     });
   });
 

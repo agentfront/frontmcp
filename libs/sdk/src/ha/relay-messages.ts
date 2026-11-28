@@ -2,9 +2,9 @@
  * Messages carried on a node's HA relay channel (`{redisKeyPrefix}notify:{nodeId}`).
  *
  * Every node subscribes to its own channel. Other nodes publish to it to deliver
- * a notification to a session it owns, ask it to destroy one, or relay an HTTP
- * request for one of its sessions and receive the response back on their own
- * channel.
+ * a notification to a session it owns, ask it to destroy one (and hear back on
+ * their own channel once it did), or relay an HTTP request for one of its
+ * sessions and receive the response back on their own channel.
  */
 
 /** A notification for a session owned by the receiving node. */
@@ -31,6 +31,26 @@ export interface DestroySessionRelayMessage {
   reason?: string;
   sourceNodeId: string;
   timestamp: number;
+  /**
+   * Set when the sender waits for the answer (#1446): the receiving node then publishes a
+   * `session-destroyed` message with this id to the sender's channel once it has closed the transport.
+   * Absent on messages from nodes before 1.14.
+   */
+  requestId?: string;
+}
+
+/**
+ * The answer to a `destroy-session` that carried a `requestId`: the node closed its transports for the
+ * session, which stopped the session's calls in flight (`held`), or held none.
+ */
+export interface SessionDestroyedRelayMessage {
+  kind: 'session-destroyed';
+  requestId: string;
+  sessionId: string;
+  /** Whether the node held a transport for the session (and closed it). */
+  held: boolean;
+  /** The node that closed the session. */
+  sourceNodeId: string;
 }
 
 /** The parts of an HTTP request a relayed request carries to the session owner. */
@@ -100,6 +120,7 @@ export interface CancelRelayMessage {
 export type HaRelayMessage =
   | NotificationRelayMessage
   | DestroySessionRelayMessage
+  | SessionDestroyedRelayMessage
   | RequestRelayMessage
   | ResponseRelayMessage
   | CancelRelayMessage;
