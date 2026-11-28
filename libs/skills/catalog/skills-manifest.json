@@ -1897,7 +1897,7 @@
         },
         {
           "name": "create-duty",
-          "description": "Run recurring work in exactly one process of the machine, the project or the cluster with @Duty, every interval or on a cron schedule, under a lease that one process holds and another takes over when the holder dies",
+          "description": "Run recurring work in exactly one process of the machine, the project, the cluster or a key the app names with @Duty, every interval or on a cron schedule, under a lease that one process holds and another takes over when the holder dies, or a preferred process takes over",
           "examples": []
         },
         {
