@@ -479,6 +479,19 @@
           "description": "Replace FrontMCP's built-in OAuth pages with custom React components using the auth.ui slot→file map and auth.extras name→handler map (no decorator, no class) plus the @frontmcp/ui/auth hooks.",
           "examples": [
             {
+              "name": "federated-steps",
+              "description": "Walk the provider picker one provider per page with incrementalAuth.showAllAppsAtOnce: false and a custom federated slot that reads extras.step and answers continue, skip or back.",
+              "level": "advanced",
+              "tags": ["auth", "auth-ui", "federated", "incremental-auth", "multi-step", "react"],
+              "features": [
+                "Turning on the step-by-step provider picker with `incrementalAuth: { showAllAppsAtOnce: false }`",
+                "Reading the step a page answers from `extras.step` (`index`, `count`, `providerId`, `last`, `canGoBack`, `canSkip`)",
+                "Answering it with `submitFinish({ federated, federated_step, action })`, where `action` is `continue`, `skip` or `back`",
+                "Sending the sign-in fields (`email`) with the answer to the last step, which finishes the sign-in",
+                "Hiding Skip for a provider the sign-in must link, which the server refuses to skip anyway"
+              ]
+            },
+            {
               "name": "login-slot",
               "description": "Replace the built-in login page with a custom React component via auth.ui: { login: './login.tsx' } and useAuthFlow, while the framework keeps owning CSRF and CSP.",
               "level": "intermediate",
@@ -502,19 +515,6 @@
                 "Binding the add-row form to `useExtraField('envs:add').onSubmit` (POSTs to `/oauth/ui/extra` with `pending_auth_id` + `csrf` attached)",
                 "Reflecting the server-side accumulator reactively with `useAddedItems('envs:add')` after each successful add",
                 "Declaring both the `auth.ui` slot and the `auth.extras` handler under `auth`: `@FrontMcp({ auth: { mode, ui, extras } })`"
-              ]
-            },
-            {
-              "name": "federated-steps",
-              "description": "Walk the provider picker one provider per page with incrementalAuth.showAllAppsAtOnce: false and a custom federated slot that reads extras.step and answers continue, skip or back.",
-              "level": "advanced",
-              "tags": ["auth", "auth-ui", "federated", "incremental-auth", "multi-step", "react"],
-              "features": [
-                "Turning on the step-by-step provider picker with `incrementalAuth: { showAllAppsAtOnce: false }`",
-                "Reading the step a page answers from `extras.step` (`index`, `count`, `providerId`, `last`, `canGoBack`, `canSkip`)",
-                "Answering it with `submitFinish({ federated, federated_step, action })`, where `action` is `continue`, `skip` or `back`",
-                "Sending the sign-in fields (`email`) with the answer to the last step, which finishes the sign-in",
-                "Hiding Skip for a provider the sign-in must link, which the server refuses to skip anyway"
               ]
             }
           ]
@@ -1943,11 +1943,6 @@
           ]
         },
         {
-          "name": "create-worker",
-          "description": "Keep a long-running background process alive with @Worker, a supervised run() that stays connected or keeps watching, restarts with backoff, and runs in every process or in exactly one under a lease",
-          "examples": []
-        },
-        {
           "name": "create-http-route",
           "description": "Serve pages, APIs and live SSE views beside the MCP endpoint with @HttpRoute classes that share the app's providers, behind people auth or the server's bearer auth and authorities, and a same-origin check",
           "examples": []
@@ -2325,6 +2320,11 @@
               ]
             }
           ]
+        },
+        {
+          "name": "create-worker",
+          "description": "Keep a long-running background process alive with @Worker, a supervised run() that stays connected or keeps watching, restarts with backoff, and runs in every process or in exactly one under a lease",
+          "examples": []
         },
         {
           "name": "create-workflow",
@@ -3757,6 +3757,18 @@
           "description": "Provision and configure Redis or Vercel KV for session storage and distributed state",
           "examples": [
             {
+              "name": "bring-your-own-redis-client",
+              "description": "Hand FrontMCP an ioredis or node-redis client you built, and keep its lifecycle.",
+              "level": "advanced",
+              "tags": ["setup", "redis", "cluster", "ioredis", "node-redis", "client", "lifecycle"],
+              "features": [
+                "`redis: { client }` takes an ioredis `Redis`/`Cluster`, a node-redis client/cluster, or a `FrontMcpRedisClient`",
+                "FrontMCP never closes a client you passed; it closes only the copies it opens with `duplicate()` for pub/sub",
+                "Nothing about the connection goes beside `client`",
+                "You close the client after the server stops"
+              ]
+            },
+            {
               "name": "docker-redis-local-dev",
               "description": "Provision Redis with Docker Compose and connect a FrontMCP server for local session storage.",
               "level": "basic",
@@ -3790,18 +3802,6 @@
                 "The AUTH token and TLS apply to every node, and hostnames are kept for the TLS certificate",
                 "One `redis` value shared by `redis` and `transport.persistence.redis`, so a session opened on one instance is served by the others",
                 "Every instance shares `MCP_SESSION_SECRET`, or a session id minted by one is a 404 on the others"
-              ]
-            },
-            {
-              "name": "bring-your-own-redis-client",
-              "description": "Hand FrontMCP an ioredis or node-redis client you built, and keep its lifecycle.",
-              "level": "advanced",
-              "tags": ["setup", "redis", "cluster", "ioredis", "node-redis", "client", "lifecycle"],
-              "features": [
-                "`redis: { client }` takes an ioredis `Redis`/`Cluster`, a node-redis client/cluster, or a `FrontMcpRedisClient`",
-                "FrontMCP never closes a client you passed; it closes only the copies it opens with `duplicate()` for pub/sub",
-                "Nothing about the connection goes beside `client`",
-                "You close the client after the server stops"
               ]
             },
             {
