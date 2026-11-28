@@ -56,7 +56,7 @@ In production, set `JWT_SECRET`: FrontMCP signs its tokens with it. [Remote and 
 
 ### Importing from the package directly
 
-In `local` mode, `login.render` replaces the sign-in page. FrontMCP doesn't escape what you print, so pass every value through `escapeHtml`. FrontMCP sends no Content-Security-Policy with your page. If you write one, put `ctx.formTargets` in its `form-action` beside `'self'`: browsers apply `form-action` to the callback's redirect back to the client, so with `'self'` alone the sign-in stops at the callback. Keep the page's `Referrer-Policy` at `same-origin`, which FrontMCP sends: under `no-referrer` the form posts `Origin: null`, and the callback refuses it.
+In `local` mode, `login.render` replaces the sign-in page. FrontMCP doesn't escape what you print, so pass every value through `escapeHtml`. That includes `ctx.clientName`: the client's CIMD `client_name`, else the `client_name` it registered (through DCR, or `clientName` in `dcr.clients`), else its `client_id`, which the client sends itself. FrontMCP sends no Content-Security-Policy with your page. If you write one, put `ctx.formTargets` in its `form-action` beside `'self'`: browsers apply `form-action` to the callback's redirect back to the client, so with `'self'` alone the sign-in stops at the callback. Keep the page's `Referrer-Policy` at `same-origin`, which FrontMCP sends: under `no-referrer` the form posts `Origin: null`, and the callback refuses it.
 
 ```ts
 import { escapeHtml } from '@frontmcp/auth';

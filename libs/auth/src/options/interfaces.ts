@@ -642,7 +642,12 @@ export interface LoginConfig {
 export interface LoginRenderContext {
   /** OAuth client_id (or CIMD URL) of the requesting client. */
   clientId: string;
-  /** Human-readable client name (CIMD `client_name` when available, else clientId). */
+  /**
+   * The client's name: its CIMD document's `client_name`, else the `client_name` it registered (DCR, or `clientName`
+   * in `dcr.clients`), else `clientId`. The same on the page shown again after a failed `authenticate()`. The client
+   * sends it itself, so print it escaped (`escapeHtml`). Cut to 64 characters for display, without control or
+   * invisible formatting characters.
+   */
   clientName: string;
   /** CIMD `logo_uri` when available. */
   logoUri?: string;
@@ -714,7 +719,7 @@ export interface AuthenticateContext {
   logger: AuthLogger;
   /** OAuth client_id (or CIMD URL) of the requesting client, when known. */
   clientId?: string;
-  /** Human-readable client name (CIMD `client_name`), when known. */
+  /** The client's name, as the sign-in page shows it (see {@link LoginRenderContext.clientName}). */
   clientName?: string;
 }
 
