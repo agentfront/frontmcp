@@ -12,8 +12,10 @@ import {
   type PluginStoreInBrowser,
   type PluginStoreServer,
   type ProviderType,
+  type RedisProviderOptions,
   type ToolType,
 } from '@frontmcp/sdk';
+import type { RedisClientInput } from '@frontmcp/utils';
 
 import { createRememberAccessor } from './providers/remember-accessor.provider';
 import RememberMemoryProvider from './providers/remember-memory.provider';
@@ -168,15 +170,28 @@ export default class RememberPlugin extends DynamicPlugin<RememberPluginOptions,
                 });
               }
 
-              // Redis provider
+              // The server's own client (`redis: { client }`): used, never closed
+              const { client } = storeConfig as { client?: RedisClientInput };
+              if (client !== undefined) {
+                return new RememberRedisProvider({
+                  type: 'redis-client',
+                  client,
+                  keyPrefix: config.keyPrefix,
+                  defaultTTL: config.defaultTTL,
+                });
+              }
+
+              // Redis provider, on a single node or a cluster
+              const redis = storeConfig as RedisProviderOptions;
               return new RememberRedisProvider({
                 type: 'redis',
                 config: {
-                  host: storeConfig.host ?? 'localhost',
-                  port: storeConfig.port ?? 6379,
-                  password: storeConfig.password,
-                  db: storeConfig.db,
-                  tls: storeConfig.tls ? {} : undefined,
+                  host: redis.host ?? 'localhost',
+                  port: redis.port ?? 6379,
+                  password: redis.password,
+                  db: redis.db,
+                  tls: redis.tls ? {} : undefined,
+                  ...(redis.cluster !== undefined ? { cluster: redis.cluster } : {}),
                 },
                 keyPrefix: config.keyPrefix,
                 defaultTTL: config.defaultTTL,

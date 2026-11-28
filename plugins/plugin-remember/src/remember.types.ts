@@ -1,6 +1,7 @@
 import { type Redis as RedisClient, type RedisOptions } from 'ioredis';
 
 import { z } from '@frontmcp/lazy-zod';
+import type { RedisClientInput, RedisClusterOption } from '@frontmcp/utils';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Memory Scopes
@@ -185,6 +186,11 @@ export interface RedisRememberPluginOptions extends BaseRememberPluginOptions {
     db?: number;
     /** TLS options for the connection; `{}` connects over TLS with the default certificate checks. */
     tls?: RedisOptions['tls'];
+    /**
+     * The host is a Redis Cluster endpoint (`true`, e.g. an AWS ElastiCache configuration endpoint),
+     * or `{ nodes, options }` with seed nodes and ioredis ClusterOptions. A cluster has database 0 only.
+     */
+    cluster?: RedisClusterOption;
   };
 }
 
@@ -193,7 +199,11 @@ export interface RedisRememberPluginOptions extends BaseRememberPluginOptions {
  */
 export interface RedisClientRememberPluginOptions extends BaseRememberPluginOptions {
   type: 'redis-client';
-  client: RedisClient;
+  /**
+   * A Redis client you made: an ioredis `Redis` or `Cluster`, a node-redis client or cluster, or a
+   * FrontMcpRedisClient. The plugin never closes it; you do, after the server stops.
+   */
+  client: RedisClient | RedisClientInput;
 }
 
 /**

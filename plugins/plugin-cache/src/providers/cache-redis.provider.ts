@@ -1,17 +1,7 @@
-import type { Redis as RedisClient, RedisOptions } from 'ioredis';
-
 import { Provider, ProviderScope } from '@frontmcp/sdk';
+import { adoptRedisClient, createRedisConnection, type FrontMcpRedisClient } from '@frontmcp/utils';
 
 import { type CacheStoreInterface, type RedisCacheOptions } from '../cache.types';
-
-type RedisConstructor = typeof import('ioredis').default;
-
-/** ioredis, loaded when a cache on Redis is built, so a page that never builds one does not bundle it. */
-function createRedisClient(options: RedisOptions): RedisClient {
-  const ioredis = require('ioredis') as RedisConstructor & { default?: RedisConstructor };
-  const Redis = ioredis.default ?? ioredis;
-  return new Redis(options);
-}
 
 @Provider({
   name: 'provider:cache:redis',
@@ -19,7 +9,7 @@ function createRedisClient(options: RedisOptions): RedisClient {
   scope: ProviderScope.GLOBAL,
 })
 export default class CacheRedisProvider implements CacheStoreInterface {
-  private readonly client: RedisClient;
+  private readonly client: FrontMcpRedisClient;
 
   constructor(options: RedisCacheOptions) {
     if (options.type !== 'redis' && options.type !== 'redis-client') {
@@ -27,14 +17,22 @@ export default class CacheRedisProvider implements CacheStoreInterface {
     }
 
     if (options.type === 'redis-client') {
-      this.client = options.client;
+      // The app's client (ioredis or node-redis), behind a guard: close() leaves it open
+      this.client = adoptRedisClient(options.client as object).client;
       return;
     }
-    this.client = createRedisClient({
-      lazyConnect: false,
-      maxRetriesPerRequest: 3,
-      ...options.config,
-    });
+    // ioredis is loaded when a cache on Redis is built, so a page that never builds one does not bundle it.
+    // Every config field goes to ioredis as given (a TLS object, keyPrefix); `cluster` opens a Cluster.
+    const { host, port, password, db, cluster, ...ioredisOptions } = options.config;
+    this.client = createRedisConnection({
+      host,
+      port,
+      password,
+      db,
+      cluster,
+      ioredisOptions,
+      noErrorListener: true,
+    }).client;
 
     // TODO: migrate to the storage utils
     this.client.on('connect', () => console.log('[Redis] Connected'));
@@ -74,7 +72,7 @@ export default class CacheRedisProvider implements CacheStoreInterface {
     return (await this.client.exists(key)) === 1;
   }
 
-  /** Gracefully close the Redis connection */
+  /** Gracefully close the Redis connection (a client you passed in stays open: it is yours) */
   async close(): Promise<void> {
     await this.client.quit();
   }
