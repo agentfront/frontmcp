@@ -132,6 +132,13 @@ describe('FrontMcpAuthContextImpl', () => {
       expect(ctx.principal).toMatchObject({ kind: 'machine', grantType: 'client_credentials' });
     });
 
+    it('follows the subject claimsMapping.userId resolves when the claims carry no sub', () => {
+      const ctx = new FrontMcpAuthContextImpl({ user: { uid: 'user-1' } }, { userId: 'uid' });
+
+      expect([ctx.isAnonymous, ctx.user.sub]).toEqual([false, 'user-1']);
+      expect(ctx.principal).toEqual({ kind: 'person', sub: 'user-1' });
+    });
+
     it('is anonymous for an anonymous caller, whatever the request carries', () => {
       const anonymous = new FrontMcpAuthContextImpl({ user: { sub: 'anon:guest-42' } });
       const claimed = new FrontMcpAuthContextImpl({
