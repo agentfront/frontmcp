@@ -1,7 +1,9 @@
 /**
  * A live tool surface: a tool whose `enabled` is a `fileSignal()` leaves tools/list and comes back as the file
  * flips, connected sessions get `notifications/tools/list_changed`, a call to it while it is off is refused with
- * FEATURE_OFF and a remedy, and a call made from a stale list gets STALE_TOOL_LIST.
+ * FEATURE_OFF and a remedy, and a call made from a stale list gets STALE_TOOL_LIST. The server's `enabled` maps
+ * `invoice_list` to a feature in one place, and a call that sends back the surface hash of the list it was made
+ * from gets STALE_TOOL_LIST from a session that never listed.
  */
 import * as os from 'node:os';
 
@@ -13,10 +15,15 @@ const LIST_CHANGED = 'notifications/tools/list_changed';
 
 /** What the features file says now. */
 let reviewsOn = true;
+let invoicesOn = true;
+
+async function writeFeatures(): Promise<void> {
+  await writeFile(featuresFile, JSON.stringify({ reviews: reviewsOn, invoices: invoicesOn }));
+}
 
 async function setReviews(on: boolean): Promise<void> {
   reviewsOn = on;
-  await writeFile(featuresFile, JSON.stringify({ reviews: on }));
+  await writeFeatures();
 }
 
 function listChangedCount(mcp: McpTestClient): number {
@@ -43,6 +50,32 @@ async function flipReviews(mcp: McpTestClient, on: boolean): Promise<void> {
   await nextListChanged(mcp, seen);
 }
 
+/** Turn invoices on or off, and wait for the session to be told its tool list changed when that changed it. */
+async function flipInvoices(mcp: McpTestClient, on: boolean): Promise<void> {
+  if (invoicesOn === on) return;
+  const seen = listChangedCount(mcp);
+  invoicesOn = on;
+  await writeFeatures();
+  await nextListChanged(mcp, seen);
+}
+
+/** The surface hash of the tool list a session is shown now. */
+async function listedSurface(mcp: McpTestClient): Promise<string> {
+  const response = await mcp.raw.request({ jsonrpc: '2.0', id: 'surface', method: 'tools/list', params: {} });
+  return (response as { result?: { _meta?: Record<string, string> } }).result?._meta?.['frontmcp/surface'] ?? '';
+}
+
+/** A tools/call that sends back the surface hash of the list it was made from; resolves to its error code. */
+async function codeOfCallFrom(mcp: McpTestClient, name: string, surface: string): Promise<unknown> {
+  const response = await mcp.raw.request({
+    jsonrpc: '2.0',
+    id: `call-${name}`,
+    method: 'tools/call',
+    params: { name, arguments: {}, _meta: { 'frontmcp/surface': surface } },
+  });
+  return (response as { result?: { _meta?: Record<string, unknown> } }).result?._meta?.['code'];
+}
+
 async function until(condition: () => Promise<boolean>, timeoutMs = 10_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (!(await condition())) {
@@ -60,7 +93,7 @@ test.describe('Live tool surface E2E', () => {
   });
 
   test.beforeAll(async () => {
-    await setReviews(true);
+    await writeFeatures();
   });
 
   test.afterAll(async () => {
@@ -124,5 +157,41 @@ test.describe('Live tool surface E2E', () => {
     expect(stale).toHaveTextContent('To fix: Call tools/list again, then call a tool from the new list.');
     await nextListChanged(mcp, seen);
     expect(await mcp.tools.call('review_list', {})).toBeError('FEATURE_OFF');
+  });
+
+  test("the server's enabled takes invoice_list off and back with the invoices feature", async ({ mcp }) => {
+    await until(async () => (await toolNames(mcp)).includes('invoice_list'));
+
+    await flipInvoices(mcp, false);
+    expect(await toolNames(mcp)).not.toContain('invoice_list');
+    const refused = await mcp.tools.call('invoice_list', {});
+    expect(refused).toBeError('FEATURE_OFF');
+    expect(refused).toHaveTextContent(
+      'To fix: Turn on Invoices in Settings (call settings_set with {"feature":"invoices","on":true})',
+    );
+
+    await flipInvoices(mcp, true);
+    expect(await toolNames(mcp)).toContain('invoice_list');
+    expect(await mcp.tools.call('invoice_list', {})).toBeSuccessful();
+  });
+
+  test('a session that never listed gets STALE_TOOL_LIST for a call that sends back an older list', async ({
+    mcp,
+    server,
+  }) => {
+    await flipReviews(mcp, true);
+    await until(async () => (await toolNames(mcp)).includes('review_list'));
+    const before = await listedSurface(mcp);
+    await flipReviews(mcp, false);
+    const current = await listedSurface(mcp);
+    expect(current).not.toBe(before);
+
+    const fresh = await server.createClient();
+    try {
+      expect(await codeOfCallFrom(fresh, 'review_list', before)).toBe('STALE_TOOL_LIST');
+      expect(await codeOfCallFrom(fresh, 'review_list', current)).toBe('FEATURE_OFF');
+    } finally {
+      await fresh.disconnect();
+    }
   });
 });
