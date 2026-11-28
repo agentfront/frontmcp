@@ -350,6 +350,41 @@ posixOnly('a shared local server that hosts more than MCP', () => {
       expect(counts).toEqual({ boots: 1, starts: 0, closes: 1 });
     });
 
+    it('shuts down, never started, a spare it fell back to that was still booting when the session stopped', async () => {
+      let finishBoot: () => void = () => undefined;
+      const bootGate = new Promise<void>((resolve) => (finishBoot = resolve));
+      const counts = { starts: 0, closes: 0 };
+      const bootEmbedded = async (): Promise<BootedEmbeddedServer> => {
+        await bootGate;
+        const booted = await bootEmbeddedServer(plainConfig, options('unix'), create);
+        return {
+          start: () => {
+            counts.starts++;
+            return booted.start();
+          },
+          close: () => {
+            counts.closes++;
+            return booted.close();
+          },
+        };
+      };
+      const { session } = attach('unix', {
+        spare: true,
+        bootEmbedded,
+        attachBudgetMs: 200,
+        spawnServer: () => ({ exitReason: undefined }),
+      });
+      // Past the attach budget, the session falls back to the spare, which is still booting
+      await new Promise((resolve) => setTimeout(resolve, 600));
+
+      const stopped = session.stop();
+      finishBoot();
+      await stopped;
+      await session.attached.catch(() => undefined);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(counts).toEqual({ starts: 0, closes: 1 });
+    });
+
     it('stops only once a spare still booting when the session stopped has shut down', async () => {
       let finishBoot: () => void = () => undefined;
       const bootGate = new Promise<void>((resolve) => (finishBoot = resolve));

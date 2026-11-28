@@ -274,9 +274,12 @@ export function attachSharedSession(options: AttachSharedSessionOptions): Shared
       return { url, headers: { authorization: `Bearer ${token}` }, fetch: send, pid };
     }
     log.warn(`running the shared server "${options.key}" in this process: ${attachment.embedded}`);
-    const booting = spare ?? options.bootEmbedded();
+    // Kept as the spare until it booted, so a stop meanwhile shuts it down instead of starting it
+    spare ??= options.bootEmbedded();
+    const booted = await spare;
+    if (stopping) return undefined;
     spare = undefined;
-    embedded = await (await booting).start();
+    embedded = await booted.start();
     return embedded;
   }
 
