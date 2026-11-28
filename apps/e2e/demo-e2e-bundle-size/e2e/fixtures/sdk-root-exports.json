@@ -524,6 +524,7 @@
   "ServerResponse": "class",
   "ServerlessHandlerNotInitializedError": "class",
   "SessionClaimConflictError": "class",
+  "SessionEndUnconfirmedError": "class",
   "SessionHookStage": "object",
   "SessionIdEmptyError": "class",
   "SessionIdentityRequiredError": "class",
