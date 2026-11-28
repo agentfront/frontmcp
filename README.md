@@ -18,7 +18,7 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset=".github/assets/readme/terminal.svg">
-  <img src=".github/assets/readme/terminal.light.svg" alt="npx frontmcp create my-app, then npm run dev: an MCP server running on localhost:3000" width="760">
+  <img src=".github/assets/readme/terminal.light.svg" alt="npx frontmcp create my-app, then cd my-app &amp;&amp; npm install and npm run dev: an MCP server running on localhost:3000" width="760">
 </picture>
 
 </div>
@@ -78,7 +78,19 @@ Then follow **[Learn][docs-learn]** on [frontmcp.dev](https://frontmcp.dev), or 
 
 ## How it compares
 
-[TypeScript MCP server frameworks for production][docs-compare] puts FrontMCP next to [the official TypeScript SDK][compare-sdk], [FastMCP for TypeScript][compare-fastmcp], [Prefect's FastMCP TypeScript][compare-fastmcp-ts], [mcp-framework][compare-mcp-framework], [mcp-use][compare-mcp-use], [ViteMCP][compare-vitemcp] and [xmcp][compare-xmcp], on auth, testing, protocol support and deployment. Each library's hello world was run and asked which MCP revisions it serves. [Why FrontMCP][compare-why] says when the official SDK alone is enough, and [The Best TypeScript MCP Server Frameworks in 2026][blog-best-frameworks] sums up the field. Moving a server over? See [Migrate from the TypeScript SDK][migrate-sdk] and [Migrate from FastMCP][migrate-fastmcp].
+FrontMCP's maintainers compared eight TypeScript options on auth, testing, protocol support and deployment. Each library's hello world was run, and every fact links to its source and check date in **[the full comparison][docs-compare]**.
+
+| If your server needs | Start with |
+| --- | --- |
+| Shared services, authenticated tools and background work in a modular server | FrontMCP ([why FrontMCP][compare-why]) |
+| A small tool server, or an MCP route inside an existing backend | [The official TypeScript SDK][compare-sdk] |
+| React views in an MCP App, with a development inspector | [mcp-use][compare-mcp-use], [xmcp][compare-xmcp], or [FrontMCP's tool UI][learn-tool-ui] |
+| File-based tool discovery inside a web application | [xmcp][compare-xmcp] |
+| A small stateless server on an edge runtime | [ViteMCP][compare-vitemcp] or [the official SDK][compare-sdk] |
+| Server composition, middleware and a general-purpose client | [Prefect's FastMCP TypeScript][compare-fastmcp-ts] |
+| An existing app built on a session-based framework | [FastMCP][compare-fastmcp] or [mcp-framework][compare-mcp-framework] |
+
+**Moving a server over?** [From the TypeScript SDK][migrate-sdk] &nbsp;&middot;&nbsp; [From FastMCP][migrate-fastmcp] &nbsp;&middot;&nbsp; [The best TypeScript MCP frameworks in 2026][blog-best-frameworks]
 
 ## Packages
 
@@ -150,6 +162,7 @@ PRs welcome: see [CONTRIBUTING](./CONTRIBUTING.md). Released under the [Apache-2
 [compare-vitemcp]: https://frontmcp.dev/compare/vitemcp 'FrontMCP vs ViteMCP'
 [compare-xmcp]: https://frontmcp.dev/compare/xmcp 'FrontMCP vs xmcp'
 [compare-why]: https://frontmcp.dev/compare/why-frontmcp 'Why FrontMCP'
+[learn-tool-ui]: https://frontmcp.dev/learn/tools-with-a-ui 'Tools with a UI'
 [blog-best-frameworks]: https://frontmcp.dev/blog/best-typescript-mcp-frameworks 'The Best TypeScript MCP Server Frameworks in 2026'
 [migrate-sdk]: https://frontmcp.dev/learn/migrating-from-the-typescript-sdk 'Migrate from the TypeScript SDK'
 [migrate-fastmcp]: https://frontmcp.dev/learn/migrating-from-fastmcp 'Migrate from FastMCP'
