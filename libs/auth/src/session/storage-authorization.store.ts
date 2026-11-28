@@ -10,7 +10,9 @@
  * `expiresAt`. Each row is named by its type and a keyed hash of the value a
  * client presents (`oauth:refresh:<HMAC-SHA256(k, token)>`), never by the value
  * itself; see `authorization-row-names.ts`. A row named by the value, as up to
- * 1.13, is still read, and moves under its hashed name when it is used. The pure
+ * 1.13, is still read, and moves under its hashed name when it is used. A row is
+ * read for a value only when the record in it is that value's own, so the name of
+ * one row never stands in for the value it holds. The pure
  * record-builder helpers (`createCodeRecord`, etc.) are inherited from the shared
  * `authorization.store` functions, so the minted records are byte-for-byte
  * identical to the in-memory store's.
@@ -70,8 +72,13 @@ interface FoundRecord<T> {
   legacy: boolean;
 }
 
-/** The value each record type is named after. */
+/** The field holding the value each record type is named after. */
 const NAMED_BY: Record<RecordType, 'code' | 'id' | 'token'> = { code: 'code', pending: 'id', refresh: 'token' };
+
+/** Whether `record` is the record of `id`: the one a row for `id` may hold. */
+function isRecordOf(type: RecordType, record: unknown, id: string): boolean {
+  return typeof record === 'object' && record !== null && (record as Record<string, unknown>)[NAMED_BY[type]] === id;
+}
 
 export class StorageAuthorizationStore implements AuthorizationStore {
   private readonly codeStore: TypedStorage<AuthorizationCodeRecord>;
@@ -235,15 +242,19 @@ export class StorageAuthorizationStore implements AuthorizationStore {
   // Internals
   // ============================================
 
-  /** The record under the hashed name of `id`, else under its name up to 1.13; null when neither holds one. */
+  /**
+   * The record of `id` under its hashed name, else under its name up to 1.13; null when neither holds it. A row
+   * counts only when its record is the record of `id`: a hashed name presented as a value names that row under the
+   * old scheme, and must not find it.
+   */
   private async find<T>(store: TypedStorage<T>, type: RecordType, id: string): Promise<FoundRecord<T> | null> {
     const key = this.key(type, id);
     const record = await store.get(key);
-    if (record !== null) return { key, record, legacy: false };
+    if (record !== null) return isRecordOf(type, record, id) ? { key, record, legacy: false } : null;
     // A row under its hashed name is the only one read, so a row under the old name is never claimed after it.
     const legacyKey = this.legacyKey(type, id);
     const legacy = await store.get(legacyKey);
-    return legacy === null ? null : { key: legacyKey, record: legacy, legacy: true };
+    return legacy !== null && isRecordOf(type, legacy, id) ? { key: legacyKey, record: legacy, legacy: true } : null;
   }
 
   /** {@link find}, deleting an expired record and answering null for it. */
@@ -270,9 +281,16 @@ export class StorageAuthorizationStore implements AuthorizationStore {
     if (found.legacy) await store.delete(found.key);
   }
 
-  /** Delete the rows of `id` under both names, one key per call (a Redis Cluster may keep them on different nodes). */
+  /**
+   * Delete the rows of `id` under both names, one key per call (a Redis Cluster may keep them on different nodes).
+   * The row under the old name is deleted only when it holds the record of `id`.
+   */
   private async deleteBoth<T>(store: TypedStorage<T>, type: RecordType, id: string): Promise<void> {
-    await Promise.all([store.delete(this.key(type, id)), store.delete(this.legacyKey(type, id))]);
+    const legacyKey = this.legacyKey(type, id);
+    const deleteLegacy = async (): Promise<void> => {
+      if (isRecordOf(type, await store.get(legacyKey), id)) await store.delete(legacyKey);
+    };
+    await Promise.all([store.delete(this.key(type, id)), deleteLegacy()]);
   }
 
   /**
@@ -290,11 +308,12 @@ export class StorageAuthorizationStore implements AuthorizationStore {
   ): Promise<boolean> {
     const key = this.key(type, id);
     const raw = await this.base.get(key);
-    if (raw !== null) return this.claimRow(store, key, key, raw, isLive, update);
+    const isClaimable = (record: T) => isRecordOf(type, record, id) && isLive(record);
+    if (raw !== null) return this.claimRow(store, key, key, raw, isClaimable, update);
     const legacyKey = this.legacyKey(type, id);
     const legacyRaw = await this.base.get(legacyKey);
     if (legacyRaw === null) return false;
-    return this.claimRow(store, legacyKey, key, legacyRaw, isLive, update);
+    return this.claimRow(store, legacyKey, key, legacyRaw, isClaimable, update);
   }
 
   private async claimRow<T extends { expiresAt: number }>(
@@ -302,11 +321,11 @@ export class StorageAuthorizationStore implements AuthorizationStore {
     from: string,
     to: string,
     raw: string,
-    isLive: (record: T) => boolean,
+    isClaimable: (record: T) => boolean,
     update: (record: T) => T,
   ): Promise<boolean> {
     const record = JSON.parse(raw) as T;
-    if (!isLive(record) || !(await this.deleteIfEquals(from, raw))) return false;
+    if (!isClaimable(record) || !(await this.deleteIfEquals(from, raw))) return false;
     await store.set(to, update(record), this.ttl(record.expiresAt));
     return true;
   }
