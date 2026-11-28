@@ -35,6 +35,7 @@ export { ErrorCode, McpError } from './compat-errors';
 export {
   CallToolResultSchema,
   JSONRPCErrorSchema,
+  ToolSchema,
   type CallToolResult,
   type JSONRPCError,
   type MessageExtraInfo,

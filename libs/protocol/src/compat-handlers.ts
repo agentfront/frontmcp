@@ -9,7 +9,7 @@
  */
 import type { BaseContext, StandardSchemaV1 } from '@modelcontextprotocol/server';
 
-import { ErrorCode, McpError } from './compat-errors';
+import { ErrorCode, McpError, toV1RequestError } from './compat-errors';
 import type { MessageExtraInfo, RequestHandlerExtra, RequestInfo } from './compat-types';
 
 /** The zod object shape FrontMCP's request and notification schemas have. */
@@ -80,7 +80,9 @@ export function toV1Extra(ctx: BaseContext): RequestHandlerExtra {
     },
     sendRequest: async (request, resultSchema, options) => {
       if (signal.aborted) throw new McpError(ErrorCode.ConnectionClosed, 'Request was cancelled');
-      return ctx.mcpReq.send(request, resultSchema, options);
+      return ctx.mcpReq.send(request, resultSchema, options).catch((error: unknown) => {
+        throw toV1RequestError(error);
+      });
     },
   };
 }

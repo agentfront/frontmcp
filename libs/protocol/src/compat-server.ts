@@ -24,7 +24,7 @@ import {
   type MessageExtraInfo as V2MessageExtraInfo,
 } from '@modelcontextprotocol/server';
 
-import { ErrorCode, McpError } from './compat-errors';
+import { ErrorCode, McpError, toV1RequestError } from './compat-errors';
 import {
   adaptNotificationHandler,
   adaptRequestHandler,
@@ -57,6 +57,12 @@ function messageOf(error: unknown): string {
 export class Server extends V2Server {
   constructor(serverInfo: Implementation, options?: ServerOptions) {
     super(serverInfo, options);
+    // A request this server sends fails on a timeout or a closed connection as on v1 (see `toV1RequestError`)
+    const request = this.request.bind(this) as (...args: unknown[]) => Promise<unknown>;
+    this.request = ((...args: unknown[]) =>
+      request(...args).catch((error: unknown) => {
+        throw toV1RequestError(error);
+      })) as V2Server['request'];
   }
 
   protected override buildContext(ctx: BaseContext, transportInfo?: V2MessageExtraInfo): ServerContext {

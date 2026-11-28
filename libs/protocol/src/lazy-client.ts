@@ -6,7 +6,7 @@ Object.defineProperties(exports, {
   },
   StreamableHTTPClientTransport: {
     enumerable: true,
-    get: () => require('@modelcontextprotocol/client').StreamableHTTPClientTransport,
+    get: () => require('./compat-client').StreamableHTTPClientTransport,
   },
   SSEClientTransport: {
     enumerable: true,

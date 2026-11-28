@@ -1,7 +1,11 @@
 /**
  * Types of the MCP SDK v1 that v2 renamed or reshaped, kept for `@frontmcp/sdk`.
  */
-import { JSONRPCErrorResponseSchema, CallToolResultSchema as V2CallToolResultSchema } from '@modelcontextprotocol/core';
+import {
+  JSONRPCErrorResponseSchema,
+  CallToolResultSchema as V2CallToolResultSchema,
+  ToolSchema as V2ToolSchema,
+} from '@modelcontextprotocol/core';
 import type {
   AuthInfo,
   JSONRPCErrorResponse,
@@ -30,6 +34,21 @@ export type CallToolResult = V2CallToolResult & { structuredContent?: Record<str
 /** v2's `CallToolResultSchema` with v1's object `structuredContent`, so the schema and {@link CallToolResult} agree. */
 export const CallToolResultSchema = V2CallToolResultSchema.extend({
   structuredContent: z.record(z.string(), z.unknown()).optional(),
+});
+
+/**
+ * v2's `ToolSchema`, but an input schema's `properties` must be schemas (objects), as on v1: v2 accepts any JSON value
+ * there, so a tool whose properties are not schemas (`{ name: 'string' }`) would pass `DirectMcpServer.registerTool()`.
+ */
+export const ToolSchema = V2ToolSchema.extend({
+  inputSchema: V2ToolSchema.shape.inputSchema.extend({
+    properties: z
+      .record(
+        z.string(),
+        z.custom<object>((value) => value !== null && (typeof value === 'object' || typeof value === 'function')),
+      )
+      .optional(),
+  }),
 });
 
 /** Headers and URL of the HTTP request a message came in on (v1 `RequestInfo`). */

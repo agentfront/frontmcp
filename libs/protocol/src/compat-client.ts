@@ -7,7 +7,9 @@
  *   validates the result itself, so a result schema passed as the second argument is dropped.
  */
 import {
+  SdkHttpError,
   Client as V2Client,
+  StreamableHTTPClientTransport as V2StreamableHTTPClientTransport,
   type BaseContext,
   type CallToolRequest,
   type CallToolResult,
@@ -99,5 +101,29 @@ export class Client extends V2Client {
         ? options
         : (resultSchemaOrOptions as RequestOptions);
     return super.callTool(params, v2Options);
+  }
+}
+
+/**
+ * v1's Streamable HTTP client failed a request the server refused with an error whose numeric `code` was the HTTP
+ * status. v2's `SdkHttpError` keeps the status in `status` (its `code` is a string), so this transport also records it
+ * as `http.status`, where FrontMCP's remote client reads it to retry (408, 429, 5xx) or fail with `RemoteAuthError`
+ * (401).
+ */
+export class StreamableHTTPClientTransport extends V2StreamableHTTPClientTransport {
+  override async send(...args: Parameters<V2StreamableHTTPClientTransport['send']>): Promise<void> {
+    try {
+      await super.send(...args);
+    } catch (error) {
+      if (SdkHttpError.isInstance(error) && typeof error.status === 'number' && !('http' in error)) {
+        Object.defineProperty(error, 'http', {
+          value: { status: error.status },
+          enumerable: false,
+          writable: true,
+          configurable: true,
+        });
+      }
+      throw error;
+    }
   }
 }

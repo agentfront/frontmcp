@@ -4,13 +4,15 @@ import { ProtocolError, ProtocolErrorCode } from '@modelcontextprotocol/server';
 
 import { internalZ as z } from '@frontmcp/lazy-zod';
 
-import { Client } from '../compat-client';
+import { Client, StreamableHTTPClientTransport } from '../compat-client';
 import { ErrorCode, McpError } from '../compat-errors';
 import { Server } from '../compat-server';
-import { CallToolResultSchema } from '../compat-types';
+import { CallToolResultSchema, ToolSchema } from '../compat-types';
 import { InMemoryTransport } from '../in-memory';
 import {
   CallToolRequestSchema,
+  ElicitRequestSchema,
+  ElicitResultSchema,
   InitializeRequestSchema,
   ListToolsRequestSchema,
   type InitializeResult,
@@ -118,5 +120,49 @@ describe('StdioServerTransport', () => {
     await expect(transport.send({ jsonrpc: '2.0', id: 1, result: {} })).resolves.toBeUndefined();
     await transport.close();
     expect(onclose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('v1 request errors', () => {
+  it('fails a server request that times out with McpError(RequestTimeout)', async () => {
+    const server = new Server({ name: 'test', version: '1.0.0' });
+    const client = new Client({ name: 'c', version: '1' }, { capabilities: { elicitation: { form: {} } } });
+    client.setRequestHandler(ElicitRequestSchema, () => new Promise(() => undefined));
+    await connected(server, client);
+
+    const failure = await server
+      .request(
+        {
+          method: 'elicitation/create',
+          params: { message: 'Age?', requestedSchema: { type: 'object', properties: {} } },
+        },
+        ElicitResultSchema,
+        { timeout: 20 },
+      )
+      .catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(McpError);
+    expect((failure as McpError).code).toBe(ErrorCode.RequestTimeout);
+  });
+
+  it('records the HTTP status of a refused Streamable HTTP request as http.status', async () => {
+    const transport = new StreamableHTTPClientTransport(new URL('http://127.0.0.1:1/mcp'), {
+      fetch: async () => new Response('busy', { status: 503, statusText: 'Service Unavailable' }),
+    });
+    await transport.start();
+
+    const failure = await transport
+      .send({ jsonrpc: '2.0', id: 1, method: 'ping' })
+      .catch((error: unknown) => error as { http?: { status: number } });
+
+    expect(failure).toMatchObject({ http: { status: 503 } });
+  });
+});
+
+describe('ToolSchema', () => {
+  it('requires the properties of an input schema to be schemas, as on v1', () => {
+    const tool = (properties: Record<string, unknown>) => ({ name: 't', inputSchema: { type: 'object', properties } });
+    expect(ToolSchema.safeParse(tool({ a: { type: 'string' } })).success).toBe(true);
+    expect(ToolSchema.safeParse(tool({ a: 'string' })).success).toBe(false);
   });
 });
