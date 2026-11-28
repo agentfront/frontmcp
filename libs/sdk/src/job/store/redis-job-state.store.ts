@@ -193,6 +193,32 @@ export class RedisJobStateStore implements JobStateStore {
     return (await this.client.set(`${this.keyPrefix}claim:${runId}`, '1', 'NX', 'EX', this.ttlSeconds)) === 'OK';
   }
 
+  async holdLease(key: string, value: string, ttlSeconds: number): Promise<boolean> {
+    if ((await this.client.set(this.leaseKey(key), value, 'EX', ttlSeconds, 'NX')) === 'OK') return true;
+    return (await this.client.get(this.leaseKey(key))) === value;
+  }
+
+  /** A lease ends by its TTL; renewing reads it first, so a renew that races its expiry and a new holder may extend it. */
+  async renewLease(key: string, value: string, ttlSeconds: number): Promise<boolean> {
+    if ((await this.client.get(this.leaseKey(key))) !== value) return false;
+    await this.client.expire?.(this.leaseKey(key), ttlSeconds);
+    return true;
+  }
+
+  async releaseLease(key: string, value: string): Promise<void> {
+    if ((await this.client.get(this.leaseKey(key))) === value) await this.client.del(this.leaseKey(key));
+  }
+
+  async listLeases(prefix: string): Promise<string[]> {
+    const keys = await scanRedisKeys(this.client, `${this.leaseKey(prefix)}*`);
+    const values = await Promise.all(keys.map((key) => this.client.get(key)));
+    return values.filter((value): value is string => value !== null);
+  }
+
+  private leaseKey(key: string): string {
+    return `${this.keyPrefix}lease:${key}`;
+  }
+
   async dispose(): Promise<void> {
     // A client passed in is shared and outlives the store
     if (!this.ownsClient) return;

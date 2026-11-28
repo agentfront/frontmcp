@@ -78,6 +78,11 @@ function fakeRedis(): RedisStateStoreLike {
       return 'OK';
     },
     del: async (key) => (values.delete(String(key)) ? 1 : 0),
+    expire: async (key, seconds) => {
+      if (live(key) === undefined) return 0;
+      expiries.set(key, Date.now() + seconds * 1000);
+      return 1;
+    },
     sadd: async (key, ...members) => {
       members.forEach((member) => setOf(key).add(member));
       return members.length;
@@ -185,6 +190,25 @@ describe.each(stateBackends)('%s job state store', (_backend, open) => {
     expect(await store.isRunnerAlive?.('runner-2')).toBe(false);
     await new Promise((resolve) => setTimeout(resolve, 1_100));
     expect(await store.isRunnerAlive?.('runner-1')).toBe(false);
+  });
+
+  it('holds a lease for one value, renews and releases it only for that value, and lists the live ones', async () => {
+    expect(await store.holdLease?.('admission:box:slot:a', 'mine', 1)).toBe(true);
+    expect(await store.holdLease?.('admission:box:slot:a', 'theirs', 1)).toBe(false);
+    expect(await store.holdLease?.('admission:box:slot:b', 'other', 30)).toBe(true);
+    expect(await store.holdLease?.('admission:elsewhere:slot:c', 'far', 30)).toBe(true);
+
+    expect(await store.renewLease?.('admission:box:slot:a', 'theirs', 30)).toBe(false);
+    expect((await store.listLeases?.('admission:box:slot:'))?.sort()).toEqual(['mine', 'other']);
+    await store.releaseLease?.('admission:box:slot:b', 'theirs');
+    expect((await store.listLeases?.('admission:box:slot:'))?.sort()).toEqual(['mine', 'other']);
+    await store.releaseLease?.('admission:box:slot:b', 'other');
+    expect(await store.listLeases?.('admission:box:slot:')).toEqual(['mine']);
+
+    await new Promise((resolve) => setTimeout(resolve, 1_100));
+    expect(await store.listLeases?.('admission:box:slot:')).toEqual([]);
+    expect(await store.renewLease?.('admission:box:slot:a', 'mine', 30)).toBe(false);
+    expect(await store.holdLease?.('admission:box:slot:a', 'theirs', 30)).toBe(true);
   });
 
   it('lets one caller claim a run', async () => {

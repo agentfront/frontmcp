@@ -14,6 +14,7 @@ export class MemoryJobStateStore implements JobStateStore {
   private readonly cancelRequests = new Set<string>();
   private readonly runnerExpiries = new Map<string, number>();
   private readonly claims = new Set<string>();
+  private readonly leases = new Map<string, { value: string; expiresAt: number }>();
 
   async createRun(record: JobRunRecord | WorkflowRunRecord): Promise<void> {
     this.runs.set(record.runId, { ...record, revision: 1, updatedAt: Date.now() });
@@ -100,7 +101,42 @@ export class MemoryJobStateStore implements JobStateStore {
     return true;
   }
 
+  async holdLease(key: string, value: string, ttlSeconds: number): Promise<boolean> {
+    const held = this.liveLease(key);
+    if (held && held.value !== value) return false;
+    this.leases.set(key, { value, expiresAt: Date.now() + ttlSeconds * 1000 });
+    return true;
+  }
+
+  async renewLease(key: string, value: string, ttlSeconds: number): Promise<boolean> {
+    if (this.liveLease(key)?.value !== value) return false;
+    this.leases.set(key, { value, expiresAt: Date.now() + ttlSeconds * 1000 });
+    return true;
+  }
+
+  async releaseLease(key: string, value: string): Promise<void> {
+    if (this.liveLease(key)?.value === value) this.leases.delete(key);
+  }
+
+  async listLeases(prefix: string): Promise<string[]> {
+    return [...this.leases.keys()]
+      .filter((key) => key.startsWith(prefix))
+      .map((key) => this.liveLease(key)?.value)
+      .filter((value): value is string => value !== undefined);
+  }
+
+  /** The lease `key`, unless it expired, which removes it. */
+  private liveLease(key: string): { value: string; expiresAt: number } | undefined {
+    const lease = this.leases.get(key);
+    if (lease && lease.expiresAt <= Date.now()) {
+      this.leases.delete(key);
+      return undefined;
+    }
+    return lease;
+  }
+
   async dispose(): Promise<void> {
+    this.leases.clear();
     this.runs.clear();
     this.cancelRequests.clear();
     this.runnerExpiries.clear();
