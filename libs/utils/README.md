@@ -12,11 +12,11 @@ npm install @frontmcp/utils
 
 It needs Node.js 24 or later. The crypto, async context, event emitter, environment and path helpers also have browser builds, picked through the package's `imports` map. `@frontmcp/lazy-zod` is a required peer dependency (it needs `zod` 4). The others are optional, one per storage backend:
 
-| Optional peer    | Enables                                                      |
-| ---------------- | ------------------------------------------------------------ |
-| `ioredis`        | `createStorage({ type: 'redis' })` and `RedisStorageAdapter` |
-| `@vercel/kv`     | `createStorage({ type: 'vercel-kv' })`                       |
-| `@upstash/redis` | `createStorage({ type: 'upstash' })`                         |
+| Optional peer    | Enables                                                                                                                |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `ioredis`        | `createStorage({ type: 'redis' })`, `RedisStorageAdapter` and `createRedisConnection()` (single node or Redis Cluster) |
+| `@vercel/kv`     | `createStorage({ type: 'vercel-kv' })`                                                                                 |
+| `@upstash/redis` | `createStorage({ type: 'upstash' })`                                                                                   |
 
 ## Usage
 
@@ -59,6 +59,29 @@ await storage.get('ticket:T-1'); // 'open'
 | Safe regex       | `isPatternSafe`, `createSafeRegExp`, `safeTest`, `safeMatch`, `safeReplace`, against ReDoS (regular expression denial of service)                                         |
 | Model tool calls | `processPlatformToolCalls`, which passes OpenAI, Claude or Vercel AI tool calls to your `callTool` function and returns the results in that platform's format             |
 | Machine ID       | `getMachineId`, `setMachineIdOverride`, `getHostname`                                                                                                                     |
+
+## Redis connections
+
+`createRedisConnection()` opens (or adopts) every Redis client FrontMCP uses, and returns `{ client, owned, kind, isCluster }`:
+
+```ts
+import { createRedisConnection } from '@frontmcp/utils';
+
+// A single node, as before: host/port, or a redis:// / rediss:// url
+createRedisConnection({ host: 'localhost', port: 6379 });
+
+// A Redis Cluster from its endpoint (AWS ElastiCache with cluster mode on): password and TLS go to every
+// node, and hostnames are kept for the TLS certificate
+createRedisConnection({ host: 'my-cluster.xxxxxx.clustercfg.use2.cache.amazonaws.com', tls: true, cluster: true });
+
+// Seed nodes and ioredis ClusterOptions of your own
+createRedisConnection({ cluster: { nodes: ['10.0.0.1:7000'], options: { scaleReads: 'slave' } } });
+
+// A client you made: an ioredis Redis or Cluster, a node-redis client or cluster, or a FrontMcpRedisClient
+const { client, owned } = createRedisConnection({ client: myClient }); // owned === false
+```
+
+The client answers the `FrontMcpRedisClient` commands (ioredis's arguments and replies). An ioredis client is used as it is; a node-redis one goes through a `sendCommand` adapter. A client you passed in is never closed: its `quit()` and `disconnect()` do nothing, while `duplicate()` opens a copy that belongs to its caller. `RedisStorageAdapter` and `createStorage({ type: 'redis', redis: { config: { host, cluster: true } } })` (or `redis: { client }`) take the same forms. On a cluster, `mget`/`mset`/`mdelete` go one key at a time, `keys()` scans every master, and keys keep their single-node names. `createRedisClient()` is deprecated: it still opens a single-node ioredis `Redis`.
 
 ## Related packages
 

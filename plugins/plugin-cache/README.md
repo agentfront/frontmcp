@@ -86,8 +86,8 @@ subject, so one user never gets another user's cached answer.
 | `keyByIdentity` | `true`                       | Keep separate entries per caller. See [Who gets which entry](#who-gets-which-entry).                                                                                                         |
 | `toolPatterns`  | `[]`                         | Cache these tools too, without `cache` in their metadata. A tool name or `<app id>:<tool name>`, where `*` matches anything: `'catalog:*'`, `'get_*'`.                                       |
 | `bypassHeader`  | `'x-frontmcp-disable-cache'` | A request header that skips the cache for that call when its value is `true` or `1`. It must start with `x-frontmcp-`, or `init()` throws a `CachePluginConfigurationError`.                 |
-| `config`        |                              | With `type: 'redis'`: `{ host, port, password?, db? }`.                                                                                                                                      |
-| `client`        |                              | With `type: 'redis-client'`: an `ioredis` client you created.                                                                                                                                |
+| `config`        |                              | With `type: 'redis'`: `{ host, port, password?, db?, tls?, keyPrefix?, cluster? }`. `cluster: true` makes the host a Redis Cluster endpoint.                                                 |
+| `client`        |                              | With `type: 'redis-client'`: a client you created: ioredis `Redis` or `Cluster`, or a node-redis client or cluster. The plugin never closes it.                                              |
 
 ## Stores
 
@@ -102,7 +102,17 @@ CachePlugin.init({
 });
 ```
 
-Or pass a client you already have:
+On a Redis Cluster (AWS ElastiCache with cluster mode on), add `cluster: true`:
+
+```ts
+CachePlugin.init({
+  type: 'redis',
+  config: { host: process.env.REDIS_HOST, port: 6379, password: process.env.REDIS_AUTH_TOKEN, tls: {}, cluster: true },
+});
+```
+
+Or pass a client you already have (ioredis or node-redis, single node or cluster). It stays yours: `close()` leaves it
+open, so close it yourself after the server stops.
 
 ```ts
 import { Redis } from 'ioredis';

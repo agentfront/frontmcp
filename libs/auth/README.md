@@ -14,12 +14,12 @@ npm install @frontmcp/auth
 
 Use the same version as `@frontmcp/sdk`. It needs Node.js 24 or later.
 
-| Peer dependency            | Required | What it's for                                                                                                  |
-| -------------------------- | -------- | -------------------------------------------------------------------------------------------------------------- |
-| `@frontmcp/lazy-zod`       | Yes      | The option schemas. `@frontmcp/sdk` already brings it; it needs `zod` 4.                                       |
-| `ioredis`                  | No       | Redis-backed stores: `tokenStorage: { redis }` in `local` and `remote` modes, `RedisSessionStore`, and others. |
-| `@vercel/kv`               | No       | `VercelKvSessionStore`.                                                                                        |
-| `@frontmcp/storage-sqlite` | No       | `tokenStorage: { sqlite }`.                                                                                    |
+| Peer dependency            | Required | What it's for                                                                                                                                                                                                                                                                                           |
+| -------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@frontmcp/lazy-zod`       | Yes      | The option schemas. `@frontmcp/sdk` already brings it; it needs `zod` 4.                                                                                                                                                                                                                                |
+| `ioredis`                  | No       | Redis-backed stores: `tokenStorage: { redis }` in `local` and `remote` modes, `RedisSessionStore`, and others. The `redis` block takes `host`/`port`, a `url`, a Redis Cluster (`cluster: true`, or `cluster: { nodes }`), or a `client` you made (ioredis or node-redis), which FrontMCP never closes. |
+| `@vercel/kv`               | No       | `VercelKvSessionStore`.                                                                                                                                                                                                                                                                                 |
+| `@frontmcp/storage-sqlite` | No       | `tokenStorage: { sqlite }`.                                                                                                                                                                                                                                                                             |
 
 ## Usage
 
