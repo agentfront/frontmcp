@@ -2328,7 +2328,7 @@
         },
         {
           "name": "create-workflow",
-          "description": "Connect multiple jobs into managed DAG pipelines with dependencies, conditions, and triggers",
+          "description": "Connect multiple jobs into managed DAG pipelines with dependencies, conditions, triggers, cancel and detached runs",
           "examples": [
             {
               "name": "basic-deploy-pipeline",
