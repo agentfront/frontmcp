@@ -49,6 +49,8 @@ export {
   type ListChangeBatch,
   type LiveSurface,
 } from './surface';
+// Work spans: what a stall names besides MCP calls (#1357)
+export { registerWorkTracker, trackWork, type WorkKind, type WorkSpan, type WorkTracker } from './work';
 export {
   MATERIALIZED_META_KEY,
   MaterializedResourceContext,
