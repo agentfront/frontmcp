@@ -39,9 +39,12 @@ interface Run {
 
 const runs: Run[] = [];
 const ended: object[] = [];
+/** Wakes the waits of `runsStarted()` when a run starts. */
+const runWaiters: Array<() => void> = [];
 
 function untilAborted(worker: object, { signal }: WorkerRunContext): Promise<void> {
   runs.push({ worker, signal });
+  for (const wake of runWaiters.splice(0)) wake();
   return new Promise((resolve) =>
     signal.addEventListener('abort', () => {
       ended.push(worker);
@@ -76,6 +79,17 @@ class ClusterWorker {
   run(context: WorkerRunContext): Promise<void> {
     return untilAborted(this, context);
   }
+}
+
+/** Resolves once `count` runs have started: a wait for the event, not for a time. */
+function runsStarted(count: number): Promise<void> {
+  return new Promise((resolve) => {
+    const check = (): void => {
+      if (runs.length >= count) resolve();
+      else runWaiters.push(check);
+    };
+    check();
+  });
 }
 
 function runsOf(worker: object): Run[] {
@@ -411,6 +425,8 @@ describe('workers in createContainer(), over a store the processes share', () =>
 
 describe('workers in a server', () => {
   const failing = { times: 0 };
+  /** Run a worker's restart waits and lease checks on fake timers: no wall-clock wait, however loaded the runner. */
+  const useWorkerTimers = () => jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] });
 
   @Worker({ name: 'flaky', scope: 'process', restart: { minDelayMs: 20, maxDelayMs: 40 } })
   class FlakyWorker {
@@ -436,48 +452,62 @@ describe('workers in a server', () => {
   @App({ name: 'OneShot', providers: [OneShotWorker] })
   class OneShotApp {}
 
-  let instance: FrontMcpInstance | undefined;
+  /** The servers the running test started. A test shuts down only its own, never one another test started. */
+  let servers: FrontMcpInstance[] = [];
+
+  // The first server a test file starts loads the modules a server needs, which coverage instruments as they load:
+  // about 20 s under coverage on a loaded machine, against 7 ms for each server after it. One server started here
+  // pays for that with the time it needs, so no test pays for it within its own timeout.
+  beforeAll(async () => {
+    const first = await FrontMcpInstance.createForGraph({
+      info: { name: 'worker-spec-first', version: '1.0.0' },
+      apps: [FlakyApp],
+      logging: quiet,
+    });
+    await first.shutdown();
+  }, 120_000);
 
   beforeEach(() => {
     runs.length = 0;
     ended.length = 0;
     failing.times = 0;
+    servers = [];
   });
 
   afterEach(async () => {
-    await instance?.shutdown();
-    instance = undefined;
+    jest.useRealTimers();
+    const started = servers;
+    servers = [];
+    await Promise.all(started.map((server) => server.shutdown()));
   });
 
-  async function serve(apps: Array<typeof FlakyApp>): Promise<Scope> {
-    instance = await FrontMcpInstance.createForGraph({
+  async function serve(apps: Array<typeof FlakyApp>): Promise<{ server: FrontMcpInstance; scope: Scope }> {
+    const server = await FrontMcpInstance.createForGraph({
       info: { name: 'worker-spec', version: '1.0.0' },
       apps,
       logging: quiet,
     });
-    return instance.getPrimaryScope() as Scope;
+    servers.push(server);
+    return { server, scope: server.getPrimaryScope() as Scope };
   }
 
-  async function until(condition: () => boolean): Promise<void> {
-    const deadline = Date.now() + 8_000;
-    while (!condition()) {
-      if (Date.now() > deadline) throw new Error('condition not met in time');
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    }
+  async function shutDown(server: FrontMcpInstance): Promise<void> {
+    servers = servers.filter((started) => started !== server);
+    await server.shutdown();
   }
 
   it('starts a worker once the server serves, not before, and aborts it at shutdown', async () => {
-    const scope = await serve([FlakyApp]);
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    const { server, scope } = await serve([FlakyApp]);
+    // What the server's start left pending has run, and started nothing
+    await new Promise((resolve) => setImmediate(resolve));
     expect(runs).toEqual([]);
     expect((await scope.healthService?.getReadyz())?.probes).not.toHaveProperty('worker:flaky');
 
-    await instance?.emitProvidersReady();
-    await until(() => runs.length === 1);
+    await server.emitProvidersReady();
+    await runsStarted(1);
     expect(runs[0].signal.aborted).toBe(false);
 
-    await instance?.shutdown();
-    instance = undefined;
+    await shutDown(server);
     expect(runs[0].signal.aborted).toBe(true);
     expect(ended).toHaveLength(1);
   });
@@ -492,20 +522,26 @@ describe('workers in a server', () => {
     @App({ name: 'Twins', providers: [FlakyWorker, SecondFlaky] })
     class TwinsApp {}
 
-    const scope = await serve([TwinsApp]);
-    await instance?.emitProvidersReady();
+    const { server, scope } = await serve([TwinsApp]);
+    await server.emitProvidersReady();
     const failures = await scope.providers.runReadyHooks(scope.logger);
 
     expect(failures).toEqual([expect.any(WorkerNameConflictError)]);
+    await runsStarted(1);
     expect(runs.map((run) => run.worker.constructor.name)).toEqual(['FlakyWorker']);
   });
 
   it('shows a running worker in /readyz as healthy, with its restarts and last error', async () => {
     failing.times = 2;
-    const scope = await serve([FlakyApp]);
-    await instance?.emitProvidersReady();
-    await until(() => runs.length === 1);
+    const { server, scope } = await serve([FlakyApp]);
+    useWorkerTimers();
+    await server.emitProvidersReady();
 
+    // Two failed runs, each run again after its restart wait (20 ms, then 40 ms)
+    await jest.advanceTimersByTimeAsync(20);
+    expect(runs).toEqual([]);
+    await jest.advanceTimersByTimeAsync(40);
+    await runsStarted(1);
     const readyz = await scope.healthService?.getReadyz();
 
     expect(readyz?.status).toBe('ready');
@@ -516,7 +552,8 @@ describe('workers in a server', () => {
   });
 
   it('shows a leased worker as unhealthy while its lease store cannot be opened, and runs it once the store opens', async () => {
-    @Worker({ name: 'leased', scope: 'machine', leaseMs: 1_000 })
+    const leaseMs = 1_000;
+    @Worker({ name: 'leased', scope: 'machine', leaseMs })
     class LeasedWorker {
       run(context: WorkerRunContext): Promise<void> {
         return untilAborted(this, context);
@@ -537,8 +574,9 @@ describe('workers in a server', () => {
       return store;
     });
     try {
-      const scope = await serve([LeasedApp]);
-      await instance?.emitProvidersReady();
+      const { server, scope } = await serve([LeasedApp]);
+      useWorkerTimers();
+      await server.emitProvidersReady();
 
       expect((await scope.healthService?.getReadyz())?.probes?.['worker:leased']).toEqual({
         status: 'unhealthy',
@@ -546,15 +584,18 @@ describe('workers in a server', () => {
         error: 'the lease store cannot be opened: database is locked',
       });
 
-      await until(() => runs.length === 1);
+      // The next lease check, a third of the lease later, opens the store and takes the lease
+      await jest.advanceTimersByTimeAsync(leaseMs / 3);
+      await runsStarted(1);
       expect((await scope.healthService?.getReadyz())?.probes?.['worker:leased']).toEqual({
         status: 'healthy',
         details: { state: 'running', restarts: 0 },
       });
       expect(leaseStoreOpens).toBe(2);
+
+      jest.useRealTimers();
+      await shutDown(server);
     } finally {
-      await instance?.shutdown();
-      instance = undefined;
       jest.mocked(createStorage).mockReset().mockImplementation(openRealStorage);
       if (previousHome === undefined) delete process.env['FRONTMCP_HOME'];
       else process.env['FRONTMCP_HOME'] = previousHome;
@@ -563,8 +604,8 @@ describe('workers in a server', () => {
   });
 
   it('answers not ready once a restart: false worker ended on an error, and takes the check away at shutdown', async () => {
-    const scope = await serve([OneShotApp]);
-    await instance?.emitProvidersReady();
+    const { server, scope } = await serve([OneShotApp]);
+    await server.emitProvidersReady();
 
     const readyz = await scope.healthService?.getReadyz();
 
@@ -575,8 +616,7 @@ describe('workers in a server', () => {
       error: 'no such mailbox',
     });
 
-    await instance?.shutdown();
-    instance = undefined;
+    await shutDown(server);
     expect(scope.healthProbes).toEqual([]);
   });
 });
