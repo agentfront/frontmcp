@@ -45,16 +45,31 @@ function numberClaim(claims: Readonly<Record<string, unknown>>, key: string): nu
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
-/** Whether `value` is a principal: a known kind and a string subject. */
+/** A value as a message shows it: a string quoted, anything else as `String()` gives it. */
+function shown(value: unknown): string {
+  return typeof value === 'string' ? `"${value}"` : String(value);
+}
+
+/** The first field that keeps `value` from being a principal, as `field value`; undefined for a principal. */
+function invalidPrincipalField(value: unknown): string | undefined {
+  if (typeof value !== 'object' || value === null) return `value ${shown(value)}`;
+  const { kind, sub, clientId, authTime, grantType } = value as Record<string, unknown>;
+  if (typeof kind !== 'string' || !PRINCIPAL_KINDS.has(kind)) return `kind ${shown(kind)}`;
+  if (typeof sub !== 'string') return `sub ${shown(sub)}`;
+  if (clientId !== undefined && typeof clientId !== 'string') return `clientId ${shown(clientId)}`;
+  if (authTime !== undefined && !(typeof authTime === 'number' && Number.isFinite(authTime))) {
+    return `authTime ${shown(authTime)}`;
+  }
+  if (grantType !== undefined && typeof grantType !== 'string') return `grantType ${shown(grantType)}`;
+  return undefined;
+}
+
+/**
+ * Whether `value` is a principal: a known kind, a string subject, and, when present, a string `clientId` and
+ * `grantType` and a finite `authTime`.
+ */
 export function isAuthPrincipal(value: unknown): value is AuthPrincipal {
-  const candidate = value as Partial<AuthPrincipal> | null | undefined;
-  return (
-    typeof candidate === 'object' &&
-    candidate !== null &&
-    typeof candidate.kind === 'string' &&
-    PRINCIPAL_KINDS.has(candidate.kind) &&
-    typeof candidate.sub === 'string'
-  );
+  return invalidPrincipalField(value) === undefined;
 }
 
 /** The fields of a principal, without anything else a resolver answered. */
@@ -109,8 +124,9 @@ export async function resolvePrincipal(
     const changes = await resolver(claims, detected);
     if (changes === undefined) return detected;
     const resolved = principalFields({ ...detected, ...changes });
-    if (isAuthPrincipal(resolved)) return resolved;
-    onError?.(`The principal resolver answered a principal FrontMCP cannot use (kind "${String(resolved.kind)}")`);
+    const invalid = invalidPrincipalField(resolved);
+    if (invalid === undefined) return resolved as AuthPrincipal;
+    onError?.(`The principal resolver answered a principal FrontMCP cannot use (${invalid})`);
   } catch (error) {
     onError?.(`The principal resolver failed: ${error instanceof Error ? error.message : String(error)}`);
   }

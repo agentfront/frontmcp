@@ -81,6 +81,9 @@ describe('resolvePrincipal', () => {
       sub: 'hub:user-42',
     });
     expect(await resolvePrincipal({ sub: 'user-42' }, () => undefined)).toEqual({ kind: 'person', sub: 'user-42' });
+    expect(
+      await resolvePrincipal({ sub: 'svc', iat: 5 }, () => ({ kind: 'machine', grantType: 'client_credentials' })),
+    ).toEqual({ kind: 'machine', sub: 'svc', authTime: 5, grantType: 'client_credentials' });
   });
 
   it('gets the claims and the detected principal', async () => {
@@ -108,14 +111,20 @@ describe('resolvePrincipal', () => {
       onError,
     );
     const unknownKind = await resolvePrincipal({ sub: 'user-42' }, () => ({ kind: 'robot' }) as never, onError);
+    const badAuthTime = await resolvePrincipal({ sub: 'user-42' }, () => ({ authTime: 'yesterday' }) as never, onError);
+    const badClient = await resolvePrincipal({ sub: 'user-42' }, () => ({ clientId: 7 }) as never, onError);
 
-    expect([thrown, unknownKind]).toEqual([
+    expect([thrown, unknownKind, badAuthTime, badClient]).toEqual([
+      { kind: 'person', sub: 'user-42' },
+      { kind: 'person', sub: 'user-42' },
       { kind: 'person', sub: 'user-42' },
       { kind: 'person', sub: 'user-42' },
     ]);
     expect(reported).toEqual([
       'The principal resolver failed: directory unreachable',
       'The principal resolver answered a principal FrontMCP cannot use (kind "robot")',
+      'The principal resolver answered a principal FrontMCP cannot use (authTime "yesterday")',
+      'The principal resolver answered a principal FrontMCP cannot use (clientId 7)',
     ]);
   });
 });
@@ -126,6 +135,20 @@ describe('isAuthPrincipal', () => {
 
     expect(
       [principal, { kind: 'person', sub: 1 }, { kind: 'robot', sub: 'x' }, null, 'person'].map(isAuthPrincipal),
+    ).toEqual([true, false, false, false, false]);
+  });
+
+  it('checks every optional field that is present', () => {
+    const full: AuthPrincipal = { kind: 'person', sub: 'u', clientId: 'c', authTime: 1, grantType: 'password' };
+
+    expect(
+      [
+        full,
+        { kind: 'person', sub: 'u', authTime: 'yesterday' },
+        { kind: 'person', sub: 'u', authTime: Number.NaN },
+        { kind: 'person', sub: 'u', clientId: 7 },
+        { kind: 'person', sub: 'u', grantType: false },
+      ].map(isAuthPrincipal),
     ).toEqual([true, false, false, false, false]);
   });
 });
