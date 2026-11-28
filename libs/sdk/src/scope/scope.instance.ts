@@ -741,8 +741,13 @@ export class Scope extends ScopeEntry {
       );
       if (closeVaultStorage) this.onDispose(closeVaultStorage);
     }
-    // Hooks declared on `@FrontMcp({ providers })` run for every app's entries, like an app's provider hooks do for its own.
-    const serverHooks = serverProviderHooks(this.scopeProviders, this.metadata.providers, scopeRef);
+    // Hooks on `@FrontMcp({ providers })`, and on a container's other server-level ones, run for every app's entries
+    const serverProviders = borrowProviders(
+      this.metadata.providers ?? [],
+      this.globalProviders.container?.server,
+      true,
+    );
+    const serverHooks = serverProviderHooks(this.scopeProviders, serverProviders, scopeRef);
     if (serverHooks.length > 0) await this.scopeHooks.registerHooks(false, ...serverHooks);
     this.logger.verbose('HookRegistry initialized');
     this.logger.verbose('FlowRegistry initialized');

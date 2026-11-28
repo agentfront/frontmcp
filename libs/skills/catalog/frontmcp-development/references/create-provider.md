@@ -427,8 +427,9 @@ const direct = await FrontMcpInstance.createDirect({ ...serverConfig, container 
 
 - Each GLOBAL provider the container built is used as it is: the server-level ones, and the own providers of the apps
   it was given (matched by app class). None is built, or bootstrapped, again. The container's other server-level
-  providers are added to the server's `providers`, so `{ info, apps, container }` sees them all. A provider or app the
-  container did not build is built by the server as usual, and CONTEXT-scoped providers are built per request.
+  providers are added to the server's `providers`, so `{ info, apps, container }` sees them all, and their hooks run
+  for every app's entries, as a declared server-level provider's do. A provider or app the container did not build is
+  built by the server as usual, and CONTEXT-scoped providers are built per request.
 - The first server that serves runs their `onReady()` once, however many start on the container, and starts their
   `@Duty` and `@Worker` work, unless the container started it (`runBackground: true`).
 - A server's shutdown leaves them running. `dispose()` runs their `onShutdown()` once no server on the container still

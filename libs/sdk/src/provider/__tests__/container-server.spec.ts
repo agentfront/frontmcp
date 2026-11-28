@@ -12,11 +12,13 @@ import * as path from 'node:path';
 import {
   App,
   Duty,
+  FlowHooksOf,
   frontMcpMetadataSchema,
   LogLevel,
   Provider,
   Tool,
   ToolContext,
+  type FlowCtxOf,
   type FrontMcpConfigInput,
   type OnBootstrap,
   type OnReady,
@@ -48,11 +50,19 @@ class Settings implements OnBootstrap, OnReady, OnShutdown {
   }
 }
 
+const audited: string[] = [];
+const ToolHook = FlowHooksOf('tools:call-tool');
+
 /** A server-level provider the server's config does not list: the server finds it on its container. */
 @Provider({ name: 'only-in-container' })
 class OnlyInContainer {
   constructor() {
     built.only++;
+  }
+
+  @ToolHook.Will('execute')
+  audit(ctx: FlowCtxOf<'tools:call-tool'>) {
+    audited.push(String(ctx.state.tool?.name));
   }
 }
 
@@ -124,6 +134,7 @@ describe('a server started on an existing container', () => {
 
   beforeEach(() => {
     phases.length = 0;
+    audited.length = 0;
     built = { settings: 0, ledger: 0, only: 0 };
     dutyReady = 0;
     home = fs.mkdtempSync(path.join(os.tmpdir(), 'sdk-container-'));
@@ -167,6 +178,14 @@ describe('a server started on an existing container', () => {
       only: true,
     });
     expect(made.get(Ledger).settings).toBe(made.get(Settings));
+  });
+
+  it("runs the hooks of the container's server-level providers that the server's config does not list", async () => {
+    const made = await container();
+    const server = await serve(serverConfig(made));
+
+    await instancesOf(server);
+    expect(audited).toEqual(['instances']);
   });
 
   it('shares one container between two servers, and readies its providers once, in the first that serves', async () => {
