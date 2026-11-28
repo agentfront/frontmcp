@@ -52,6 +52,18 @@ export interface AttachSharedSessionOptions extends ResolvedSharedServerOptions 
   bootEmbedded(key: string): Promise<BootedEmbeddedServer>;
   /** Start the server of `key`: one the session's own config names (see {@link mayStartServerOf}). */
   spawnServer?: (startLockHolder: string, key: string) => SpawnedServer;
+  /** What `keyFileSignature()` said of `rereadKey.file` before the first key read: a change since moves the session. */
+  keySignature?: string;
+}
+
+/** What tells a change of the key file: its size and time, or that it is missing. */
+export async function keyFileSignature(file: string): Promise<string> {
+  try {
+    const { size, mtimeMs } = await stat(file);
+    return `${size}:${mtimeMs}`;
+  } catch {
+    return 'missing';
+  }
 }
 
 /** Whether a session may start the server of `key`: its first key's, with its own entry, or one its `entries` name. */
@@ -253,22 +265,11 @@ export function attachSharedSession(options: AttachSharedSessionOptions): Shared
   async function watchKey(): Promise<void> {
     const { rereadKey, keySource } = options;
     if (!rereadKey || !keySource) return;
-    const signatureOf = async (): Promise<string> => {
-      try {
-        const { size, mtimeMs } = await stat(rereadKey.file);
-        return `${size}:${mtimeMs}`;
-      } catch {
-        return 'missing';
-      }
-    };
-    let last = await signatureOf();
+    // Without the signature from before the first read, one read now catches a change made since
+    let last = options.keySignature ?? (await keyFileSignature(rereadKey.file));
     let checking = false;
     let again = false;
-    keyWatch = setInterval(async () => {
-      if (stopping) return;
-      const now = await signatureOf();
-      if (now === last) return;
-      last = now;
+    const check = async (): Promise<void> => {
       if (checking) {
         again = true;
         return;
@@ -277,13 +278,23 @@ export function attachSharedSession(options: AttachSharedSessionOptions): Shared
       try {
         do {
           again = false;
-          await checkKey();
+          await checkKey().catch((error: unknown) =>
+            log.warn('the key was not read again', { error: messageOf(error) }),
+          );
         } while (again && !stopping);
       } finally {
         checking = false;
       }
+    };
+    keyWatch = setInterval(async () => {
+      if (stopping) return;
+      const now = await keyFileSignature(rereadKey.file);
+      if (now === last) return;
+      last = now;
+      await check();
     }, rereadKey.intervalMs);
     keyWatch.unref();
+    if (options.keySignature === undefined) await check();
   }
 
   /** Read the key again; a new one moves the session, and one that can't be read keeps the current key. */

@@ -5,7 +5,7 @@ import { InvalidSharedServerOptionsError } from '../errors/shared-server.errors'
 import { exitOnShutdownSignals, STDIO_SHUTDOWN_DEADLINE_MS } from '../front-mcp/shutdown-signals';
 import { redirectConsoleToStderr } from '../front-mcp/stdio-console';
 import { SHARED_SERVE_ENV, SHARED_START_LOCK_ENV } from './ensure-shared-server';
-import { attachSharedSession } from './shared-attach';
+import { attachSharedSession, keyFileSignature } from './shared-attach';
 import { bootEmbeddedServer } from './shared-embedded';
 import { isSharedVersion, MAX_SHARED_VERSION_LENGTH } from './shared-endpoint';
 import { serveShared, type SharedServerInstance } from './shared-serve';
@@ -54,17 +54,22 @@ export async function runShared(
     exitOnShutdownSignals(() => server.close());
     return;
   }
+  // From here stdout carries the client's frames: a key function that logs writes to stderr
+  redirectConsoleToStderr();
   let options: ResolvedSharedServerOptions;
+  let keySignature: string | undefined;
   if (typeof key === 'string') {
     options = { ...validated, key };
   } else {
+    // Taken before the first read, so a change while the session starts still moves it
+    if (validated.rereadKey) keySignature = await keyFileSignature(validated.rereadKey.file);
     const read = await readSharedServerKey(key);
     if ('error' in read) throw new InvalidSharedServerOptionsError(`key: ${read.error}`);
     options = { ...validated, key: read.key, keySource: key };
   }
-  redirectConsoleToStderr();
   const session = attachSharedSession({
     ...options,
+    ...(keySignature === undefined ? {} : { keySignature }),
     name: config.info.name,
     version,
     input: process.stdin,
