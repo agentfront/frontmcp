@@ -3,6 +3,7 @@
  *
  * Additional edge case tests for base layout functionality.
  */
+import { AUTH_PAGE_CSS } from '../auth-page-styles';
 import {
   authLayout,
   baseLayout,
@@ -98,6 +99,7 @@ describe('baseLayout edge cases', () => {
   it('should exclude both Tailwind and fonts when requested', () => {
     const html = baseLayout('<div>Content</div>', {
       title: 'Test',
+      inlineStyles: false,
       includeTailwind: false,
       includeFonts: false,
     });
@@ -126,10 +128,17 @@ describe('theme configuration', () => {
   it('should handle empty theme object', () => {
     const html = baseLayout('<div>Content</div>', {
       title: 'Test',
+      inlineStyles: false,
       theme: {},
     });
     // Should still have default theme colors
-    expect(html).toContain('--color-primary');
+    expect(html).toContain(`--color-primary: ${DEFAULT_THEME.colors?.primary}`);
+  });
+
+  it('should keep the default colors in the inline stylesheet with an empty theme', () => {
+    const html = baseLayout('<div>Content</div>', { title: 'Test', theme: {} });
+    expect(html).toContain(`<style>${AUTH_PAGE_CSS}</style>`);
+    expect(AUTH_PAGE_CSS).toContain(`var(--color-primary, ${DEFAULT_THEME.colors?.primary})`);
   });
 
   it('should handle theme with only colors', () => {
