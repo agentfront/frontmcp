@@ -8,6 +8,7 @@ import Redis, { Cluster } from 'ioredis';
 import { createCluster } from 'redis';
 import { createCluster as createClusterV4 } from 'redis-v4';
 
+import { readFileBuffer } from '../../fs';
 import { RedisStorageAdapter } from '../adapters/redis';
 
 const NODES = (process.env['REDIS_CLUSTER_NODES'] ?? '')
@@ -180,8 +181,11 @@ const describeTls = TLS_SEED && TLS_CA ? describe : describe.skip;
 describeTls('RedisStorageAdapter on a TLS cluster that announces hostnames (ElastiCache)', () => {
   const [host, port] = (TLS_SEED ?? 'localhost:7111').split(':');
   const password = process.env['REDIS_CLUSTER_TLS_PASSWORD'];
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const ca = TLS_CA ? (require('node:fs') as typeof import('node:fs')).readFileSync(TLS_CA) : undefined;
+  let ca: Buffer | undefined;
+
+  beforeAll(async () => {
+    ca = TLS_CA ? await readFileBuffer(TLS_CA) : undefined;
+  });
 
   it('connects with cluster: true, tls and the password, keeping the hostname for the certificate', async () => {
     const adapter = new RedisStorageAdapter({
