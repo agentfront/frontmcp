@@ -40,6 +40,19 @@ describe('the Node-only entry points in a browser', () => {
     });
   });
 
+  it('bootstrap() refuses before it builds an HTTP server', async () => {
+    const refusal = FrontMcpInstance.bootstrap(config).catch((error: unknown) => error);
+
+    await expect(refusal).resolves.toBeInstanceOf(BrowserEntryPointUnavailableError);
+    await expect(refusal).resolves.toMatchObject({
+      code: 'BROWSER_ENTRY_POINT_UNAVAILABLE',
+      entryPoint: 'bootstrap',
+      message:
+        'A browser cannot run bootstrap(): a page cannot listen on an HTTP port. Call it from a Node entry, and use ' +
+        'create() in a page',
+    });
+  });
+
   it('runUnixSocket() refuses before it builds a server', async () => {
     const refusal = FrontMcpInstance.runUnixSocket({ ...config, socketPath: '/tmp/page.sock' }).catch(
       (error: unknown) => error,

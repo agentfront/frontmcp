@@ -432,6 +432,10 @@ export class FrontMcpInstance implements FrontMcpInterface {
     options: FrontMcpConfigInput | FrontMcpConfigType,
   ): Promise<FrontMcpInstance | undefined> {
     if (isSchemaExtraction()) return undefined;
+    if (getRuntimeContext().runtime === 'browser') {
+      const { BrowserEntryPointUnavailableError } = await import('../errors/browser-entry-point.errors.js');
+      throw new BrowserEntryPointUnavailableError('bootstrap');
+    }
     // `frontmcp start --db`, `frontmcp socket --db` and the generated installer
     // hand the database location over as FRONTMCP_SQLITE_PATH.
     const sqlitePath = process.env['FRONTMCP_SQLITE_PATH'];

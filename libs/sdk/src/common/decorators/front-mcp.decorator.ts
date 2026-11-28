@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 
-import { getEnvFlag } from '@frontmcp/utils';
+import { getEnvFlag, getRuntimeContext } from '@frontmcp/utils';
 
 import { InvalidDecoratorMetadataError } from '../../errors/decorator.errors';
 import { InternalMcpError } from '../../errors/mcp.error';
@@ -162,6 +162,8 @@ export function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator {
         setServerlessHandlerError(e);
         console.error('[FrontMCP] Serverless initialization failed:', e);
       });
+    } else if (metadata.serve && getRuntimeContext().runtime === 'browser') {
+      // A page or web worker can't listen: create(), connect() or createFetchHandler() serve the server there
     } else if (metadata.serve) {
       // Normal mode: bootstrap and start server
       loadFrontMcpInstance()
