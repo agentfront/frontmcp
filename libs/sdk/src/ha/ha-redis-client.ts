@@ -4,6 +4,7 @@
  * distributed deployment loads, so a browser bundle doesn't carry the connection factory.
  */
 import {
+  attachRedisErrorListener,
   createRedisConnection,
   isRedisConnection,
   redisConnectionOf,
@@ -29,7 +30,11 @@ export function createHaRedisClient(
   }
   const connection = redisConnectionOf(redis);
   if (connection.client !== undefined && label === 'ha-subscriber') {
-    return createRedisConnection({ client: connection.client }).client.duplicate();
+    const copy = createRedisConnection({ client: connection.client }).client.duplicate();
+    // The copy starts with no listeners. node-redis throws an 'error' event nobody listens to, which
+    // would end the process on a Redis outage; give it the listener every client FrontMCP opens has.
+    attachRedisErrorListener(copy, { label, logger });
+    return copy;
   }
   return createRedisConnection({ ...connection, label, logger }).client;
 }
