@@ -24,6 +24,17 @@ function missing(module: string): Error {
   });
 }
 
+/** The error Yarn PnP throws when a package requires a peer that nobody provides, or one it doesn't declare. */
+function pnpNotProvided(dependencyName: string, pnpCode = 'MISSING_PEER_DEPENDENCY'): Error {
+  return Object.assign(
+    new Error(
+      `@frontmcp/storage-sqlite tried to access ${dependencyName} (a peer dependency) but it isn't provided by your ` +
+        'application; this makes the require call ambiguous and unsound.',
+    ),
+    { code: 'MODULE_NOT_FOUND', pnpCode, data: { request: dependencyName, dependencyName } },
+  );
+}
+
 function withoutBetterSqlite3(): void {
   jest.mocked(loadBetterSqlite3).mockImplementation(() => {
     throw missing('better-sqlite3');
@@ -71,6 +82,40 @@ describe('the default SQLite driver', () => {
     expect(builtIn).toHaveBeenCalledWith('node:sqlite');
     await adapter.disconnect();
     expect(fs.readFileSync(dbPath).subarray(0, 15).toString()).toBe('SQLite format 3');
+  });
+
+  it.each(['MISSING_PEER_DEPENDENCY', 'UNDECLARED_DEPENDENCY'])(
+    'is node:sqlite when Yarn PnP reports better-sqlite3 not provided (%s), whose message does not quote it',
+    (pnpCode) => {
+      jest.mocked(loadBetterSqlite3).mockImplementation(() => {
+        throw pnpNotProvided('better-sqlite3', pnpCode);
+      });
+
+      const db = openDatabase(dbPath, 'TestStore');
+
+      expect(db).not.toBeInstanceOf(BetterSqlite3);
+      db.close();
+    },
+  );
+
+  it('says how to install better-sqlite3 when Yarn PnP reports it missing and FRONTMCP_SQLITE_DRIVER asks for it', () => {
+    process.env['FRONTMCP_SQLITE_DRIVER'] = 'better-sqlite3';
+    jest.mocked(loadBetterSqlite3).mockImplementation(() => {
+      throw pnpNotProvided('better-sqlite3');
+    });
+
+    expect(() => openDatabase(dbPath, 'TestStore')).toThrow(
+      'TestStore: FRONTMCP_SQLITE_DRIVER=better-sqlite3 asks for it, but better-sqlite3 is not installed.',
+    );
+  });
+
+  it('reports a package better-sqlite3 needs that Yarn PnP does not provide, instead of switching to node:sqlite', () => {
+    const missingBindings = pnpNotProvided('bindings', 'UNDECLARED_DEPENDENCY');
+    jest.mocked(loadBetterSqlite3).mockImplementation(() => {
+      throw missingBindings;
+    });
+
+    expect(() => openDatabase(dbPath, 'TestStore')).toThrow(missingBindings);
   });
 
   it('reports a broken better-sqlite3 install instead of switching to node:sqlite', () => {

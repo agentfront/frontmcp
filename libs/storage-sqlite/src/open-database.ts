@@ -75,12 +75,22 @@ export function withBusyRetry<T>(operation: () => T, options: BusyRetryOptions =
   }
 }
 
-/** Whether `error` is better-sqlite3 itself missing, not a broken install of it. */
+/** Yarn PnP's codes for a package the requiring one can't see: a peer nobody provides, or one it doesn't declare. */
+const PNP_NOT_PROVIDED = new Set(['MISSING_PEER_DEPENDENCY', 'UNDECLARED_DEPENDENCY']);
+
+/** Whether `error` is better-sqlite3 itself missing (Node's quoted name, or Yarn PnP's fields), not a broken install of it. */
 function isBetterSqlite3Missing(error: unknown): boolean {
-  return (
-    (error as { code?: unknown } | null)?.code === 'MODULE_NOT_FOUND' &&
-    String((error as Error).message).includes("'better-sqlite3'")
-  );
+  const { code, message, pnpCode, data } = (error ?? {}) as {
+    code?: unknown;
+    message?: unknown;
+    pnpCode?: unknown;
+    data?: { dependencyName?: unknown } | null;
+  };
+  if (code !== 'MODULE_NOT_FOUND') return false;
+  if (typeof pnpCode === 'string' && PNP_NOT_PROVIDED.has(pnpCode) && data?.dependencyName === 'better-sqlite3') {
+    return true;
+  }
+  return String(message).includes("'better-sqlite3'");
 }
 
 /** Why better-sqlite3 had to be installed here, with how to install it, keeping the module error as the cause. */
