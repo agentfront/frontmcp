@@ -65,6 +65,7 @@ export default class Server {}
 - **Logs**: each line of the server's log becomes one JSON object with the request's trace and request ids, sent to every sink in `logging.sinks`.
 - **Request logs**: `onRequestComplete` gets one object per HTTP request, with its timing, what it called, its status and error, and the log lines written during it.
 - **Metrics**: `/metrics` serves process gauges (memory, CPU, event-loop lag) and every counter, in the Prometheus text format, or JSON with `format: 'json'`.
+- **Stalls**: with `stalls: { thresholdMs: 200 }`, each event-loop stall is logged with what ran during it: the `tools/call`, `resources/read` and `prompts/get` calls in flight, the `@HttpRoute` requests and `@Duty` and `@Worker` runs, and work you mark with `trackWork(label)` from `@frontmcp/sdk` (since 1.14).
 
 `@FrontMcp({ observability: true })` turns on tracing alone. Without the package installed, a server with `observability` starts anyway and logs one warning; a server with `metrics.enabled` doesn't start.
 

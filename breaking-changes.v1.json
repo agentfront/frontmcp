@@ -647,5 +647,16 @@
     "new": "const double: DirectMcpServer = { ready, listTools, callTool, /* ... */ dispose, scope };\nserver.scope.events?.listSubscriptions();",
     "migration": "`DirectMcpServer.scope`, the read-only `ScopeEntry` a server from `create()` serves, is required on the type; 1.13.2 declared it optional so that test doubles implementing `DirectMcpServer` kept compiling. An object typed as `DirectMcpServer` without one no longer compiles (TS2741). Give a test double a `scope` (a stub such as `{} as unknown as DirectMcpServer['scope']` when the test never reads it), and have a wrapper return its base server's (`get scope() { return base.scope; }`). A double built with a cast (`as unknown as DirectMcpServer`) is unaffected, and `server.scope?.` can become `server.scope.`. `createWrappedServer()` in `@frontmcp/react` now forwards the base server's `scope`; up to 1.13 a wrapped server had none. Every server `create()` returns already had a scope, so nothing changes at runtime for it.",
     "codemod": "no"
+  },
+  {
+    "id": "BC-065",
+    "title": "1.14: a stall names the HTTP routes, duties and workers in flight",
+    "package": "@frontmcp/observability",
+    "category": "change",
+    "severity": "low",
+    "old": "// Event loop stalled for 450 ms with no call in flight\n// frontmcp_event_loop_stall_seconds_total{cause=\"unknown\",entry=\"\"} 0.45",
+    "new": "// Event loop stalled for 450 ms while running duty nightly-ingest (448 ms)\n// frontmcp_event_loop_stall_seconds_total{cause=\"duty\",entry=\"nightly-ingest\"} 0.45",
+    "migration": "With `observability.stalls` on, a stall names the `@HttpRoute` requests (`http GET /board/:id`, the declared path), `@Duty` runs (`duty <name>`) and `@Worker` runs (`worker <name>`) in flight, and the work `trackWork(label)` marks (`work <label>`), as it names calls. Up to 1.13 a stall during them read `with no call in flight` and counted under `cause=\"unknown\"`; it now counts under `cause=\"http\"`, `\"duty\"`, `\"worker\"` or `\"work\"`, with the name as `entry`, and a dev events `stall` lists them in `calls` with that kind as `method`. A worker is in flight for its whole `run()`, so it is named in every stall while it runs. Alerts or dashboards on `cause=\"unknown\"` see only the stalls nothing explains. `CallIdentity.method` is typed `CallMethod | WorkMethod`.",
+    "codemod": "no"
   }
 ]
