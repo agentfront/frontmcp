@@ -1,11 +1,11 @@
 import { z } from '@frontmcp/lazy-zod';
 
-import { looseObjectSchema, pausedRunSchema } from './execute.schema';
+import { looseObjectSchema, type pausedRunSchema } from './execute.schema';
 
 const runIdSchema = z.string().length(36).describe('The runId of a codecall:execute result');
 
 export const resumeToolDescription = `Resume a run whose codecall:execute result has "paused": it stopped before a call that did not run.
-The calls before it get their recorded results without running again; the paused call runs now, then the rest of the script.
+The calls that ran (before it, and beside it in a parallel()) get their recorded results without running again; the paused call runs now, then the rest of the script.
 Fix the cause first: a person approves it, or send corrected "arguments" for that call only.
 The answer is a codecall:execute result, which may pause again. A run resumes once; after "expiresAt" it is not found.`;
 

@@ -89,6 +89,43 @@ describe('reviewOutcomeOf', () => {
     expect(reviewOutcomeOf(decisions, { name: 'Error' })).toBeUndefined();
     expect(reviewOutcomeOf(decisions)).toBeUndefined();
   });
+
+  it('reports the refused call whose message the ReviewError has, of several refused in a parallel()', () => {
+    const decisions = [
+      record({ phase: 'call', toolName: 'orders.void', callIndex: 1, decision: 'denied', reason: 'first' }),
+      record({ phase: 'call', toolName: 'orders.void', callIndex: 3, decision: 'denied', reason: 'second' }),
+    ];
+
+    expect(
+      reviewOutcomeOf(decisions, { name: 'ReviewError', message: 'Review denied the call to orders.void: first' }),
+    ).toEqual({ status: 'denied', reason: 'first', callIndex: 1 });
+  });
+
+  it('reports the first refused call a failed parallel() listed, and none the list leaves out', () => {
+    const decisions = [
+      record({ phase: 'call', toolName: 'orders.note', callIndex: 0, decision: 'denied', reason: 'caught' }),
+      record({
+        phase: 'call',
+        toolName: 'orders.void',
+        callIndex: 3,
+        decision: 'needs_changes',
+        findings: [{ rule: 'input-schema', message: 'orders.void: id must be a string', suggestion: 'Quote it' }],
+      }),
+      record({ phase: 'call', toolName: 'orders.void', callIndex: 2, decision: 'denied', reason: 'refused' }),
+    ];
+    const message =
+      '2 of 4 parallel operations failed:\nReview asks for changes to the call to orders.void: orders.void: id must ' +
+      'be a string (Quote it)\nReview denied the call to orders.void: refused';
+
+    expect(reviewOutcomeOf(decisions, { name: 'Error', message })).toEqual({
+      status: 'denied',
+      reason: 'refused',
+      callIndex: 2,
+    });
+    expect(reviewOutcomeOf(decisions, { name: 'Error', message: '1 of 4 parallel operations failed:\nboom' })).toBe(
+      undefined,
+    );
+  });
 });
 
 describe('RunReview', () => {

@@ -88,7 +88,7 @@ interface ReviewedAttempt {
 function pendingApprovalOf({ result, review, budgets }: ReviewedAttempt): PendingApproval | undefined {
   const approvalId = result.status === 'needs_approval' ? result.approval?.id : undefined;
   if (!approvalId) return undefined;
-  const pendings = [...(budgets?.pendingApprovals ?? []), review?.pendingApproval];
+  const pendings = [...(budgets?.pendingApprovals ?? []), ...(review?.pendingApprovals ?? [])];
   return pendings.find((pending) => pending?.reference.id === approvalId);
 }
 
@@ -605,7 +605,8 @@ export abstract class CodeCallScriptTool extends ToolContext {
           : undefined;
       if (reviewOutcome) {
         audit?.logExecutionFailure(executionId, script, durationMs, `review: ${reviewOutcome.status}`);
-        const pending = budgets?.pendingApprovalAt(reviewOutcome.callIndex) ?? review?.pendingApproval;
+        const pending =
+          budgets?.pendingApprovalAt(reviewOutcome.callIndex) ?? review?.pendingApprovalAt(reviewOutcome.callIndex);
         return reviewResultOf(reviewOutcome, pending);
       }
 

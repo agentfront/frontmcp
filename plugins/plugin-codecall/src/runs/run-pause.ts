@@ -4,7 +4,7 @@ import type { CodeCallRunsOptions } from '../codecall.types';
 import { reachedTool, type RunJournal } from './run-journal';
 import type { CodeCallRunInput } from './run-record.store';
 import type { CodeCallJournalEntry, CodeCallRunPause, CodeCallRunStatus } from './run-record.types';
-import { isReplayable, type RunReplayPending, type RunReplaySource } from './run-replay';
+import { isReplayable, type RunReplay, type RunReplayPending, type RunReplaySource } from './run-replay';
 
 /** What the agent is told about a paused run, besides its `runId`. */
 export interface CodeCallPausedAnswer {
@@ -22,47 +22,105 @@ export interface PausedRun {
 /** The statuses of a call-phase decision that stops a run before its call: the review's, or a budget's. */
 const DECISION_STATUSES: ReadonlySet<string> = new Set(['needs_approval', 'needs_changes', 'denied']);
 
-/** Whether `entries` are the run's calls from its first, in order, each answerable again on replay. */
-function replayableInOrder(entries: readonly CodeCallJournalEntry[]): boolean {
-  return entries.every((entry, index) => entry.position === index + 1 && isReplayable(entry));
+/** The statuses of a run a failure it did not catch ended: the failure itself, or the failed `parallel()` it was in. */
+const FAILURE_STATUSES: ReadonlySet<string> = new Set(['tool_error', 'runtime_error']);
+
+/**
+ * The call the run stopped at, before it ran: the first `needs_approval` (Enclave stops the run there); or the first
+ * refusal the run ended with, uncaught: a call-phase `needs_changes` or `denied`, or a call the call flow refused before
+ * its tool ran (its input, or a budget as it entered the tool), whose failure the script threw, alone or in a failed
+ * `parallel()`. A refusal after which another call reached the host was caught: the run did not stop there.
+ */
+function stoppedAtOf(
+  status: CodeCallRunStatus,
+  journal: RunJournal,
+  replay: RunReplay,
+): CodeCallJournalEntry | undefined {
+  const entries = journal.entriesSoFar();
+  if (status === 'needs_approval') return entries.find((entry) => entry.decision?.decision === status);
+  const refusedThere = (entry: CodeCallJournalEntry): boolean => {
+    const callIndex = entry.position - 1;
+    if (DECISION_STATUSES.has(status)) return entry.decision?.decision === status;
+    if (!FAILURE_STATUSES.has(status) || entry.decision) return false;
+    return replay.refusedBeforeToolAt(callIndex) && replay.endedWithCallAt(callIndex);
+  };
+  return entries.find((entry) => refusedThere(entry) && replay.releasedLast(entry.position - 1));
 }
 
 /**
- * The call a run stopped before, when the run can pause there: a call-phase decision (`needs_approval`, or an uncaught
- * `needs_changes` or `denied`) refused it, or the call flow refused it uncaught before its tool ran (its input, or a
- * budget as it entered the tool); it is the run's last call; every call before it is recorded and settled, none of them
- * another `needs_approval` (a `parallel()` that asked for two); and replaying them stays clear of Enclave's detectors.
- * Nothing the tool or its error says decides it.
+ * Whether a call beside the paused one leaves the run pausable: it settled, and a resume can answer it from the
+ * record or ask it again. One before the paused call is answered from the record, as the script got it, so it must be
+ * replayable; one after it that ran is answered from the record, and one that did not run, or a moot one, is asked
+ * again (the script never went on from its answer).
+ */
+function pausableBeside(entry: CodeCallJournalEntry, pending: CodeCallJournalEntry, journal: RunJournal): boolean {
+  if (entry.outcome === 'unfinished') return false;
+  if (journal.isMoot(entry.position)) return true;
+  if (entry.position > pending.position) return !reachedTool(entry) || isReplayable(entry);
+  return isReplayable(entry);
+}
+
+/** The calls beside `pending` a resume answers from the record: the others did not run, and are asked again. */
+function keptBeside(journal: RunJournal, pending: CodeCallJournalEntry): CodeCallJournalEntry[] {
+  return journal
+    .entriesSoFar()
+    .filter(
+      (entry) =>
+        entry !== pending &&
+        !journal.isMoot(entry.position) &&
+        (entry.position < pending.position || reachedTool(entry)),
+    );
+}
+
+/** Where a resume of the run paused at `pending` replays: up to the call, or the last call after it the record keeps. */
+interface ReplayExtent {
+  kept: CodeCallJournalEntry[];
+  /** The last call a resume answers from the record, or the paused call. */
+  lastIndex: number;
+  /** Whether the record is every call before the paused one and none after it, which Enclave judges by their times. */
+  prefix: boolean;
+}
+
+function replayExtentOf(journal: RunJournal, pending: CodeCallJournalEntry): ReplayExtent {
+  const kept = keptBeside(journal, pending);
+  const lastIndex = Math.max(pending.position, ...kept.map((entry) => entry.position)) - 1;
+  const prefix = kept.length === pending.position - 1 && kept.every((entry, index) => entry.position === index + 1);
+  return { kept, lastIndex, prefix };
+}
+
+/**
+ * The call a run stopped before, when the run can pause there (see {@link stoppedAtOf}): every call of the run settled
+ * (a `parallel()`'s calls beside it too), the calls before it are answered again as the script got them (none of them
+ * another `needs_approval`), and replaying the calls a resume answers from the record stays clear of Enclave's
+ * detectors. Nothing the tool or its error says decides it.
  */
 export function pendingCallOf(status: CodeCallRunStatus, journal: RunJournal): CodeCallJournalEntry | undefined {
   const { replay } = journal;
-  const entries = journal.entriesSoFar();
-  const last = entries.at(-1);
-  if (!replay?.recordsReads || !last) return undefined;
-  const refused = DECISION_STATUSES.has(status) && last.decision?.decision === status;
-  const refusedBeforeTool = status === 'tool_error' && !last.decision && replay.refusedBeforeToolAt(last.position - 1);
-  if (!refused && !refusedBeforeTool) return undefined;
-  const before = entries.slice(0, -1);
-  const pausable = last.position === entries.length && replayableInOrder(before);
-  return pausable && replay.replaysWithinDetectors(last.position - 1) ? last : undefined;
+  if (!replay?.recordsReads) return undefined;
+  const pending = stoppedAtOf(status, journal, replay);
+  if (!pending) return undefined;
+  const beside = journal.entriesSoFar().filter((entry) => entry !== pending);
+  if (!beside.every((entry) => pausableBeside(entry, pending, journal))) return undefined;
+  const { lastIndex, prefix } = replayExtentOf(journal, pending);
+  return replay.replaysWithinDetectors(lastIndex, prefix) ? pending : undefined;
 }
 
 /**
- * Whether the run could pause at the call its call-phase hooks are asked about now, after every call so far; given its
- * `callIndex`, after the calls before it only, as when the call is stopped as it enters its tool, and never while a
- * later call already started, which would make it no longer the run's last.
+ * Whether the run could still pause at the call its call-phase hooks are asked about now, or at the call at
+ * `callIndex` stopped as it enters its tool: it keeps what a replay needs, and its calls so far stay clear of Enclave's
+ * detectors. Calls still running count for it: the run waits for them before it stops (see `RunStops`), and only a
+ * call that never settles keeps it from pausing.
  */
 export function pausableSoFar(journal: RunJournal, callIndex?: number): boolean {
   const { replay } = journal;
-  const entries = journal.entriesSoFar();
-  if (callIndex !== undefined && entries.some((entry) => entry.position > callIndex + 1)) return false;
-  const before = entries.filter((entry) => callIndex === undefined || entry.position <= callIndex);
-  return replay?.recordsReads === true && replayableInOrder(before) && replay.replaysWithinDetectors(before.length);
+  if (replay?.recordsReads !== true) return false;
+  return replay.replaysWithinDetectors(Math.max(callIndex ?? -1, replay.lastCallIndex));
 }
 
 /**
- * What replays a run up to `pending`, the call it stopped before: its calls before it, with their results, and what it
- * read before it. The corrected arguments `previous` had for that same call stay with it.
+ * What replays a run up to `pending`, the call it stopped before: the calls a resume answers from the record (those
+ * before it, and those after it that ran, a `parallel()`'s), with their results, and what it read before the last of
+ * them reached the host. The corrected arguments `previous` had for that same call stay with it.
  */
 export function resumeSourceOf(
   journal: RunJournal,
@@ -74,12 +132,10 @@ export function resumeSourceOf(
   const call = { position, tool, argumentsHash, arrivedAtMs: arrivalOf(position) };
   const sameCall = previous?.pending?.call.position === pending.position;
   const corrected = sameCall ? previous?.pending?.arguments : undefined;
+  const { kept, lastIndex } = replayExtentOf(journal, pending);
   return {
-    journal: journal
-      .entriesSoFar()
-      .filter((entry) => entry.position < pending.position)
-      .map((entry) => ({ ...entry, arrivedAtMs: arrivalOf(entry.position) })),
-    ...journal.replay?.readsBefore(pending.position - 1),
+    journal: kept.map((entry) => ({ ...entry, arrivedAtMs: arrivalOf(entry.position) })),
+    ...journal.replay?.readsBefore(lastIndex),
     pending: { call, ...(corrected && { arguments: corrected }) },
   };
 }
@@ -96,8 +152,8 @@ export function retrySourceOf(
 ): { source?: RunReplaySource } | undefined {
   const pending = pendingCallOf(status, journal);
   if (pending) return { source: resumeSourceOf(journal, pending, previous) };
-  const replayed = previous?.journal.length ?? 0;
-  const ranLive = journal.entriesSoFar().some((entry) => entry.position > replayed && reachedTool(entry));
+  const { replay } = journal;
+  const ranLive = journal.entriesSoFar().some((entry) => !replay?.replays(entry.position - 1) && reachedTool(entry));
   return ranLive ? undefined : { source: previous };
 }
 
@@ -131,12 +187,18 @@ export function pausedRunOf(
     script: script.script,
     ...(script.allowedTools && { allowedTools: script.allowedTools }),
     ...(resumed.arguments && { arguments: resumed.arguments }),
-    ...(journal.replay?.needsCallTimes(pending.position - 1) && { needsReplayedCalls: true }),
+    ...(needsReplayedCalls(journal, pending) && { needsReplayedCalls: true }),
   };
   return {
     run: { ...run, status: 'paused', journal: [...entries], clock, random, outputs, pause },
     ttlSeconds: Math.ceil((expiresAt - now) / 1000),
   };
+}
+
+/** Whether replaying the run up to its last recorded call needs a runtime that judges replayed calls by their times. */
+function needsReplayedCalls(journal: RunJournal, pending: CodeCallJournalEntry): boolean {
+  const { lastIndex, prefix } = replayExtentOf(journal, pending);
+  return journal.replay?.needsCallTimes(lastIndex, prefix) === true;
 }
 
 /** What the agent is told about a paused run. */

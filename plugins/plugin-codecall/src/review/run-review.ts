@@ -6,6 +6,7 @@ import type {
   ReviewRecord,
 } from '@enclave-vm/core/worker';
 
+import { parallelFailuresOf } from '../utils/parallel-failure';
 import type { CodeCallApprovalReference, ReviewApprovals } from './review-approvals';
 import { NO_APPROVAL_CHANNEL, type ApprovalCall, type ReviewRules, type RulesVerdict } from './review-rules';
 
@@ -54,22 +55,52 @@ function isCallRefusal(record: ReviewRecord): boolean {
   return record.phase === 'call' && (record.decision === 'denied' || record.decision === 'needs_changes');
 }
 
+/** The message Enclave throws into the script for a refused call (its `refusalMessage`), to tell which one it ended with. */
+function refusalMessageOf(record: ReviewRecord): string {
+  const subject = `the call to ${record.toolName ?? ''}`;
+  if (record.decision === 'needs_changes') {
+    const findings = (record.findings ?? [])
+      .map((finding) => (finding.suggestion ? `${finding.message} (${finding.suggestion})` : finding.message))
+      .join('; ');
+    return `Review asks for changes to ${subject}: ${findings}`;
+  }
+  return `Review denied ${subject}: ${record.reason ?? ''}`;
+}
+
+/**
+ * The call refusal a run ended with, uncaught: the one it threw (its message names it; else the last refusal), or the
+ * first in call order a failed `parallel()` it threw listed.
+ */
+function uncaughtRefusalOf(
+  decisions: readonly ReviewRecord[],
+  runError?: { name?: string; message?: string },
+): ReviewRecord | undefined {
+  const refusals = decisions.filter(isCallRefusal);
+  if (runError?.name === REVIEW_ERROR_NAME) {
+    return [...refusals].reverse().find((record) => refusalMessageOf(record) === runError.message) ?? refusals.at(-1);
+  }
+  const listed = parallelFailuresOf(runError?.message);
+  if (!listed) return undefined;
+  return refusals
+    .filter((record) => listed(refusalMessageOf(record)))
+    .sort((left, right) => (left.callIndex ?? 0) - (right.callIndex ?? 0))[0];
+}
+
 /**
  * How the review ended a run, from Enclave's record of its decisions: a failed review, a refused script, a call that
- * needs approval (which stops the run), or a refused call the script did not catch. Undefined when the review let the
- * run end on its own.
+ * needs approval (which stops the run), or a refused call the script did not catch, alone or in a `parallel()`.
+ * Undefined when the review let the run end on its own.
  */
 export function reviewOutcomeOf(
   decisions: readonly ReviewRecord[],
-  runError?: { name?: string },
+  runError?: { name?: string; message?: string },
 ): CodeCallReviewOutcome | undefined {
   const failed = decisions.find((record) => record.decision === 'review_failed');
   if (failed) return { status: 'review_failed', reason: failed.reason, phase: failed.phase };
   const stopping = decisions.find(
     (record) => record.decision === 'needs_approval' || (record.phase === 'script' && record.decision !== 'allow'),
   );
-  const uncaught = runError?.name === REVIEW_ERROR_NAME ? [...decisions].reverse().find(isCallRefusal) : undefined;
-  const refusal = stopping ?? uncaught;
+  const refusal = stopping ?? uncaughtRefusalOf(decisions, runError);
   if (!refusal) return undefined;
   return {
     status: refusal.decision as CodeCallReviewStatus,
@@ -87,14 +118,26 @@ export interface PendingApproval {
 
 /** The review of one run: the built-in rules, then the server's reviewers, with the approvals people granted. */
 export class RunReview {
-  /** The approval a `needs_approval` of this run refers to, with the call it covers. */
+  /** The approval the last `needs_approval` of this run refers to, with the call it covers. */
   pendingApproval?: PendingApproval;
+  /** The approval each call that needs one waits for, by its place in the run: a `parallel()` may ask for several. */
+  private readonly pendingByCallIndex = new Map<number | undefined, PendingApproval>();
 
   constructor(private readonly options: RunReviewOptions) {}
 
   /** How long one review hook may take, in ms. */
   get timeoutMs(): number {
     return this.options.timeoutMs ?? DEFAULT_REVIEW_TIMEOUT_MS;
+  }
+
+  /** The approvals this run's calls wait for. */
+  get pendingApprovals(): Iterable<PendingApproval> {
+    return this.pendingByCallIndex.values();
+  }
+
+  /** The approval the call at `callIndex` waits for (the script's, without one), else the last one asked for. */
+  pendingApprovalAt(callIndex: number | undefined): PendingApproval | undefined {
+    return this.pendingByCallIndex.get(callIndex) ?? this.pendingApproval;
   }
 
   /** Enclave's `review` option for the run. */
@@ -107,8 +150,9 @@ export class RunReview {
     const verdict = this.rulesVerdictOf(input);
     if (verdict?.refusal) return verdict.refusal;
     const asksApprovals = input.phase === 'call' || !this.options.replaysRecord;
+    const callIndex = input.phase === 'call' ? input.callIndex : undefined;
     for (const call of asksApprovals ? (verdict?.approvalCalls ?? []) : []) {
-      const needsApproval = await this.approvalOfCall(call, input.phase === 'call');
+      const needsApproval = await this.approvalOfCall(call, input.phase === 'call', callIndex);
       if (needsApproval) return needsApproval;
     }
     if (input.phase === 'call') return ALLOW;
@@ -133,12 +177,21 @@ export class RunReview {
     return rules.reviewCall(input.toolName, input.args);
   }
 
-  private approvalOfCall(call: ApprovalCall, consume: boolean): Promise<ReviewDecision | undefined> {
+  private approvalOfCall(
+    call: ApprovalCall,
+    consume: boolean,
+    callIndex: number | undefined,
+  ): Promise<ReviewDecision | undefined> {
     const reference = this.options.approvals.referenceFor(call);
-    return this.approvalOf({ reference, call }, consume, {
-      decision: 'needs_approval',
-      reason: `Tool "${call.toolName}" is destructive: it runs once a person approves this call`,
-    });
+    return this.approvalOf(
+      { reference, call },
+      consume,
+      {
+        decision: 'needs_approval',
+        reason: `Tool "${call.toolName}" is destructive: it runs once a person approves this call`,
+      },
+      callIndex,
+    );
   }
 
   /** Undefined when a person approved the reference; otherwise the decision that stops the run. */
@@ -146,6 +199,7 @@ export class RunReview {
     pending: PendingApproval,
     consume: boolean,
     request: Extract<ReviewDecision, { decision: 'needs_approval' }>,
+    callIndex?: number,
   ): Promise<ReviewDecision | undefined> {
     const state = await this.options.approvals.stateOf(pending.reference, consume);
     if (state === 'approved') return undefined;
@@ -160,6 +214,7 @@ export class RunReview {
       return needsOwnScript(pending.call.toolName, repeated);
     }
     this.pendingApproval = pending;
+    this.pendingByCallIndex.set(callIndex, pending);
     return request;
   }
 }
