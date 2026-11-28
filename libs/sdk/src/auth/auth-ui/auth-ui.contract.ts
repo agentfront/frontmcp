@@ -106,7 +106,10 @@ export interface AuthFlowState {
   slot: AuthSlot;
   /** The pending authorization id (`pending_auth_id`). */
   pendingAuthId?: string;
-  /** OAuth client display name (CIMD `client_name` or the raw client id). */
+  /**
+   * The OAuth client's name: its CIMD or registered `client_name`, else its `client_id`. The client sends it itself:
+   * render it as text.
+   */
   clientName?: string;
   /** OAuth `client_id`. */
   clientId?: string;
