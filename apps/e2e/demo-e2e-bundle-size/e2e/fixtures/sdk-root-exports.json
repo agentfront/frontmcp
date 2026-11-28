@@ -73,6 +73,7 @@
   "ConfigPluginConfigToken": "symbol",
   "ConfigService": "class",
   "ConfigValidationError": "class",
+  "ContainerDisposedError": "class",
   "Context": "class",
   "ContextExtensionNotAvailableError": "class",
   "CredentialProviderAlreadyRegisteredError": "class",
