@@ -1,4 +1,4 @@
-import { FlowHooksOf, ResourceHook, ToolHook } from '@frontmcp/sdk';
+import { FlowHooksOf, registerWorkTracker, ResourceHook, ToolHook } from '@frontmcp/sdk';
 
 import { DevEventStream, IpcDevEventSink, JsonlFileSink, type DevEventSink } from '../dev-events/dev-event-stream';
 import { flowFailureOf, sessionTracingId } from '../plugin/observability.hooks';
@@ -18,6 +18,8 @@ interface SharedStallDetector {
   readonly detector: StallDetector;
   /** The monitors of the servers it samples for; the first one reports each stall. */
   readonly monitors: Set<CallMonitor>;
+  /** Stops following the process's work spans, while the detector samples. */
+  stopFollowingWork?: () => void;
 }
 
 interface CallFlowContext {
@@ -104,15 +106,25 @@ export class CallMonitor {
   }
 
   onReady(): void {
-    if (!this.sharedStalls) return;
-    this.sharedStalls.monitors.add(this);
-    this.sharedStalls.detector.start();
+    const shared = this.sharedStalls;
+    if (!shared) return;
+    shared.monitors.add(this);
+    shared.detector.start();
+    // Each detector follows the work spans once (an HTTP route, a duty, a worker, trackWork()), however many servers share it
+    shared.stopFollowingWork ??= registerWorkTracker({
+      begin: ({ kind, name }) =>
+        shared.detector.running ? shared.detector.calls.begin({ method: kind, entry: name }) : () => undefined,
+    });
   }
 
   async onShutdown(): Promise<void> {
     const shared = this.sharedStalls;
     if (shared?.monitors.has(this)) {
-      if (shared.monitors.size === 1) shared.detector.stop();
+      if (shared.monitors.size === 1) {
+        shared.detector.stop();
+        shared.stopFollowingWork?.();
+        shared.stopFollowingWork = undefined;
+      }
       shared.monitors.delete(this);
     }
     await this.devEvents?.onShutdown();

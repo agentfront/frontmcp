@@ -314,6 +314,10 @@ export class RouteAuditPlugin {
 }
 ```
 
+Each `handle()` (and each view an SSE route sends) is a work span named by the route's method and declared path, so
+with `observability.stalls` on, a stall while it runs names it: `while running http GET /board/:id (604 ms)`. See
+`frontmcp-observability` → `stall-detection`.
+
 ## `@HttpRoute` or `http.routes`
 
 |                   | `@HttpRoute`                                 | `http.routes`                          |
@@ -325,6 +329,7 @@ export class RouteAuditPlugin {
 | Authorities       | `authorities`, with `auth: 'bearer'`         | None                                   |
 | Same-origin check | On mutations                                 | None                                   |
 | SSE from a store  | `sse: { store, topics }`                     | Write it yourself                      |
+| Named in a stall  | Yes, as `http GET /path/:param`              | No                                     |
 
 ## Common Patterns
 

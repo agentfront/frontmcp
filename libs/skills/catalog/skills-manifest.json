@@ -2796,7 +2796,7 @@
     {
       "name": "frontmcp-observability",
       "category": "observability",
-      "description": "Use when adding tracing, structured logging, metrics, or monitoring to a FrontMCP server. Covers zero-config OpenTelemetry distributed tracing across all flows; the this.telemetry API for custom spans, events, and attributes in tools, plugins, agents, and skills; structured JSON logging with trace correlation and configurable sinks (Winston, Pino, stdout); the off-by-default /metrics endpoint (process and framework metrics, Prometheus-compatible); event-loop stall detection that names the calls in flight; vendor integrations (Coralogix, Datadog, Logz.io, Grafana Cloud, or any OTLP backend); and testing spans, log correlation, and instrumentation. Triggers: observability, telemetry, tracing, logging, monitoring, OpenTelemetry, OTel, spans, metrics, Prometheus, event loop stall, blocked event loop, Datadog, Coralogix, Logz.io, Grafana, Winston, Pino.",
+      "description": "Use when adding tracing, structured logging, metrics, or monitoring to a FrontMCP server. Covers zero-config OpenTelemetry distributed tracing across all flows; the this.telemetry API for custom spans, events, and attributes in tools, plugins, agents, and skills; structured JSON logging with trace correlation and configurable sinks (Winston, Pino, stdout); the off-by-default /metrics endpoint (process and framework metrics, Prometheus-compatible); event-loop stall detection that names the calls and work in flight; vendor integrations (Coralogix, Datadog, Logz.io, Grafana Cloud, or any OTLP backend); and testing spans, log correlation, and instrumentation. Triggers: observability, telemetry, tracing, logging, monitoring, OpenTelemetry, OTel, spans, metrics, Prometheus, event loop stall, blocked event loop, Datadog, Coralogix, Logz.io, Grafana, Winston, Pino.",
       "path": "frontmcp-observability",
       "targets": ["all"],
       "hasResources": true,
@@ -2833,7 +2833,7 @@
         },
         {
           "name": "stall-detection",
-          "description": "Find what blocks the event loop - a warning naming the calls in flight during each stall, a stall-seconds counter per entry, and GC pauses counted apart",
+          "description": "Find what blocks the event loop - a warning naming the calls and work in flight during each stall (HTTP routes, duties, workers, trackWork()), a stall-seconds counter per entry, and GC pauses counted apart",
           "examples": [
             {
               "name": "find-a-blocking-tool",

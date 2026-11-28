@@ -30,6 +30,7 @@ import { CrossOriginRequestError, InvalidHttpRouteResponseError, PersonNotSigned
 import { FlowContextProviders } from '../../provider/flow-context-providers';
 import { corsAllowedOrigins } from '../../server/security/resolve-allowed-hosts';
 import { isSameOriginRequest } from '../../server/security/same-origin';
+import { withWorkSpan } from '../../work/work-spans';
 import { type HttpRouteEntry } from '../http-route.table';
 import { SseRouteStream } from '../sse-route.stream';
 
@@ -207,9 +208,13 @@ export default class HttpRouteFlow extends FlowBase<typeof name> {
     });
     // `authorities.pipes` may be async: run them before `handle()` reads `this.auth`, as a tool's flow does.
     if (route.auth === 'bearer') await (context as { loadAuthContext?: () => Promise<void> }).loadAuthContext?.();
-    this.respond(
-      route.sse ? this.openStream(route, route.sse, context) : this.toHttpOutput(route, await context.handle()),
-    );
+    if (route.sse) {
+      this.respond(this.openStream(route, route.sse, context));
+      return;
+    }
+    // `handle()` is a work span, so a stall while it runs names the route
+    const result = await withWorkSpan('http', routeSpanName(route), () => context.handle());
+    this.respond(this.toHttpOutput(route, result));
   }
 
   /**
@@ -262,7 +267,7 @@ export default class HttpRouteFlow extends FlowBase<typeof name> {
   ): HttpOutput {
     const table = this.scope.httpRouteTable;
     const stream: SseRouteStream = new SseRouteStream({
-      produce: async () => context.handle(),
+      produce: async () => withWorkSpan('http', routeSpanName(route), () => context.handle()),
       subscribe: (listener) => {
         const stops = sse.topics.map((topic) => sse.store.subscribe(topic, listener));
         return () => stops.forEach((stop) => stop());
@@ -284,6 +289,11 @@ export default class HttpRouteFlow extends FlowBase<typeof name> {
       headers: { 'X-Accel-Buffering': 'no', Connection: 'close' },
     };
   }
+}
+
+/** A route's work span name: its method and declared path, never the path asked for, so the names stay a fixed set. */
+function routeSpanName(route: HttpRouteEntry): string {
+  return `${route.method} ${route.path}`;
 }
 
 /** What a route's `authorities` read as input: the body's fields, then the path's parameters, which win. */

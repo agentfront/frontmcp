@@ -1,6 +1,6 @@
 ---
 name: frontmcp-observability
-description: 'Use when adding tracing, structured logging, metrics, or monitoring to a FrontMCP server. Covers zero-config OpenTelemetry distributed tracing across all flows; the this.telemetry API for custom spans, events, and attributes in tools, plugins, agents, and skills; structured JSON logging with trace correlation and configurable sinks (Winston, Pino, stdout); the off-by-default /metrics endpoint (process and framework metrics, Prometheus-compatible); event-loop stall detection that names the calls in flight; vendor integrations (Coralogix, Datadog, Logz.io, Grafana Cloud, or any OTLP backend); and testing spans, log correlation, and instrumentation. Triggers: observability, telemetry, tracing, logging, monitoring, OpenTelemetry, OTel, spans, metrics, Prometheus, event loop stall, blocked event loop, Datadog, Coralogix, Logz.io, Grafana, Winston, Pino.'
+description: 'Use when adding tracing, structured logging, metrics, or monitoring to a FrontMCP server. Covers zero-config OpenTelemetry distributed tracing across all flows; the this.telemetry API for custom spans, events, and attributes in tools, plugins, agents, and skills; structured JSON logging with trace correlation and configurable sinks (Winston, Pino, stdout); the off-by-default /metrics endpoint (process and framework metrics, Prometheus-compatible); event-loop stall detection that names the calls and work in flight; vendor integrations (Coralogix, Datadog, Logz.io, Grafana Cloud, or any OTLP backend); and testing spans, log correlation, and instrumentation. Triggers: observability, telemetry, tracing, logging, monitoring, OpenTelemetry, OTel, spans, metrics, Prometheus, event loop stall, blocked event loop, Datadog, Coralogix, Logz.io, Grafana, Winston, Pino.'
 tags: [router, observability, telemetry, tracing, logging, monitoring, opentelemetry, otel, spans]
 category: observability
 targets: [all]
@@ -87,15 +87,15 @@ Follow the scenario routing table above to find the right reference for your use
 
 ## Scenario Routing Table
 
-| Scenario                              | Reference                             | Description                                                                 |
-| ------------------------------------- | ------------------------------------- | --------------------------------------------------------------------------- |
-| Enable OpenTelemetry tracing          | `references/tracing-setup.md`         | Zero-config auto-instrumentation, setupOTel(), span hierarchy               |
-| Add JSON logs with trace correlation  | `references/structured-logging.md`    | Sinks (stdout, console, OTLP, winston, pino), redaction, log format         |
-| Custom spans in tools/plugins         | `references/telemetry-api.md`         | `this.telemetry.startSpan()`, `withSpan()`, `addEvent()`, `setAttributes()` |
-| Connect to monitoring platforms       | `references/vendor-integrations.md`   | Coralogix, Datadog, Logz.io, Grafana — OTLP and direct                      |
-| Test spans and log entries            | `references/testing-observability.md` | `createTestTracer()`, `assertSpanExists()`, integration test patterns       |
-| Expose Prometheus `/metrics` endpoint | `references/metrics-endpoint.md`      | Off-by-default Prometheus scrape endpoint with process + framework counters |
-| Find what blocks the event loop       | `references/stall-detection.md`       | `observability.stalls`: calls in flight per stall, GC apart, stall counter  |
+| Scenario                              | Reference                             | Description                                                                                                                  |
+| ------------------------------------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Enable OpenTelemetry tracing          | `references/tracing-setup.md`         | Zero-config auto-instrumentation, setupOTel(), span hierarchy                                                                |
+| Add JSON logs with trace correlation  | `references/structured-logging.md`    | Sinks (stdout, console, OTLP, winston, pino), redaction, log format                                                          |
+| Custom spans in tools/plugins         | `references/telemetry-api.md`         | `this.telemetry.startSpan()`, `withSpan()`, `addEvent()`, `setAttributes()`                                                  |
+| Connect to monitoring platforms       | `references/vendor-integrations.md`   | Coralogix, Datadog, Logz.io, Grafana — OTLP and direct                                                                       |
+| Test spans and log entries            | `references/testing-observability.md` | `createTestTracer()`, `assertSpanExists()`, integration test patterns                                                        |
+| Expose Prometheus `/metrics` endpoint | `references/metrics-endpoint.md`      | Off-by-default Prometheus scrape endpoint with process + framework counters                                                  |
+| Find what blocks the event loop       | `references/stall-detection.md`       | `observability.stalls`: calls and work in flight per stall (routes, duties, workers, `trackWork()`), GC apart, stall counter |
 
 ## Common Patterns
 
