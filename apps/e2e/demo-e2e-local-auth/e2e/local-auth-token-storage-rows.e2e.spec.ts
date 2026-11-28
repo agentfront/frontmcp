@@ -130,16 +130,17 @@ describeCluster('auth.tokenStorage row names on a Redis Cluster shared by two in
   const keyPrefix = `token-storage-rows-e2e:${Date.now()}:`;
   const env = { TOKEN_STORAGE_REDIS_CLUSTER: CLUSTER_NODES.join(','), TOKEN_STORAGE_REDIS_PREFIX: keyPrefix };
   let cluster: Cluster;
-  let servers: TestServer[];
+  // Each server is kept as soon as it starts, so one that started before another failed to is still stopped.
+  const servers: TestServer[] = [];
 
   beforeAll(async () => {
     const [host, port] = CLUSTER_NODES[0].split(':');
     cluster = new Cluster([{ host, port: Number(port) }]);
-    servers = [await startServer(env), await startServer(env)];
+    for (let i = 0; i < 2; i += 1) servers.push(await startServer(env));
   }, 180000);
 
   afterAll(async () => {
-    await Promise.all((servers ?? []).map((server) => server.stop()));
+    await Promise.all(servers.map((server) => server.stop()));
     for (const key of await keysOnCluster()) await cluster.del(key);
     cluster.disconnect();
   });
