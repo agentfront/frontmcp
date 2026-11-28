@@ -22,6 +22,7 @@ import {
   StorageFederatedAuthSessionStore,
   StorageOrchestratedTokenStore,
   TokenNotAvailableError,
+  tokenStorageKeyHashSecret,
   verifyPkce,
   type AuthorizationStore,
   type ClientAssertionInput,
@@ -330,6 +331,8 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   private readonly publicHostPinned: boolean;
   readonly keys: JWK[] = [];
   readonly secret: Uint8Array;
+  /** Whether {@link secret} is the configured `JWT_SECRET`, not the random per-process fallback. */
+  private readonly secretConfigured: boolean;
   readonly logger: FrontMcpLogger;
   private jwks = new JwksService();
   /** The keys this server signs and verifies its own tokens with: `signKey`, else HS256 with {@link secret}. */
@@ -517,6 +520,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     // invalidate every outstanding token for anyone whose secret has padding.
     const jwtSecret = getEnv('JWT_SECRET');
     const hasJwtSecret = !!jwtSecret?.trim();
+    this.secretConfigured = hasJwtSecret;
     if (hasJwtSecret && jwtSecret) {
       const encoded = new TextEncoder().encode(jwtSecret);
       // RFC 7518 §3.2: HS256 MUST use a key at least as long as the hash output.
@@ -718,7 +722,12 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       this.storageClosers.push(() => adapter.disconnect());
       this.disposeInMemoryStores();
 
-      this.authorizationStoreImpl = new StorageAuthorizationStore(adapter);
+      // Rows are named by a keyed hash of the code or token, never the value: the key derives from the SQLite
+      // encryption secret, else JWT_SECRET, both the same across restarts and instances. Without either the names are
+      // hashed under a fixed key, and still stay the same across restarts (the random fallback secret would not).
+      this.authorizationStoreImpl = new StorageAuthorizationStore(adapter, {
+        keyHashSecret: tokenStorageKeyHashSecret(this.tokenStorage, this.secretConfigured ? this.secret : undefined),
+      });
       this.federatedSessionStoreImpl = new StorageFederatedAuthSessionStore(adapter, { encryptionKey: this.secret });
       this.orchestratedTokenStoreImpl = new StorageOrchestratedTokenStore(adapter, {
         encryptionKey: this.secret,
