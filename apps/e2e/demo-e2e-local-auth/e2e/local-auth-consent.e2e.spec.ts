@@ -27,10 +27,10 @@ function makePkce(): { verifier: string; challenge: string } {
   return { verifier, challenge: sha256Base64url(verifier) };
 }
 
-function buildAuthorizeUrl(baseUrl: string, challenge: string): string {
+function buildAuthorizeUrl(baseUrl: string, challenge: string, clientId = CLIENT_ID): string {
   const url = new URL(`${baseUrl}/oauth/authorize`);
   url.searchParams.set('response_type', 'code');
-  url.searchParams.set('client_id', CLIENT_ID);
+  url.searchParams.set('client_id', clientId);
   url.searchParams.set('redirect_uri', REDIRECT_URI);
   url.searchParams.set('code_challenge', challenge);
   url.searchParams.set('code_challenge_method', 'S256');
@@ -39,8 +39,11 @@ function buildAuthorizeUrl(baseUrl: string, challenge: string): string {
 }
 
 /** GET /oauth/authorize and extract `pending_auth_id` from the login page. */
-async function startAuthorization(baseUrl: string, challenge: string) {
-  const res = await browserFetch(buildAuthorizeUrl(baseUrl, challenge), { method: 'GET', redirect: 'manual' });
+async function startAuthorization(baseUrl: string, challenge: string, clientId = CLIENT_ID) {
+  const res = await browserFetch(buildAuthorizeUrl(baseUrl, challenge, clientId), {
+    method: 'GET',
+    redirect: 'manual',
+  });
   expect(res.status).toBe(200);
   const html = await res.text();
   const match = html.match(/name="pending_auth_id"\s+value="([^"]+)"/);
@@ -148,6 +151,25 @@ describe('LOCAL-mode auth E2E — consent mode', () => {
       // until consent is given, and the form carries a CSRF token instead.
       expect(html).not.toContain('name="email"');
       expect(html).toMatch(/name="csrf" value="[^"]+"/);
+    });
+
+    it('names a client registered through DCR by its client_name (#1505)', async () => {
+      const registration = await fetch(`${baseUrl}/oauth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ redirect_uris: [REDIRECT_URI], client_name: 'ChatGPT' }),
+      });
+      expect(registration.status).toBe(201);
+      const { client_id } = (await registration.json()) as { client_id: string };
+      const { challenge } = makePkce();
+      const { pendingAuthId } = await startAuthorization(baseUrl, challenge, client_id);
+
+      const res = await getCallback(baseUrl, { pending_auth_id: pendingAuthId, email: 'user@test.local' });
+
+      expect(res.status).toBe(200);
+      const html = await res.text();
+      expect(html).toContain('Choose which tools ChatGPT can access');
+      expect(html).not.toContain(client_id);
     });
 
     it('rejects an empty submit (requireSelection) by re-rendering the consent screen', async () => {

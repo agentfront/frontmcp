@@ -35,6 +35,7 @@ const DESK_KEY = 'desk-test-key';
     <title>Desk sign-in</title>
   </head>
   <body>
+    <h1>Sign in to ${escapeHtml(ctx.clientName)}</h1>
     ${ctx.error ? `<p role="alert">${escapeHtml(ctx.error)}</p>` : ''}
     <form method="POST" action="${escapeHtml(ctx.callbackPath)}">
       <input type="hidden" name="pending_auth_id" value="${escapeHtml(ctx.pendingAuthId)}">

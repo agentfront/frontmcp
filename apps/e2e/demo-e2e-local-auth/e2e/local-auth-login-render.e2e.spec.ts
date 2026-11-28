@@ -12,11 +12,11 @@ const SERVER_ENTRY = 'apps/e2e/demo-e2e-local-auth/src/main.login-render.ts';
 const REDIRECT_URI = 'http://127.0.0.1:9877/oauth/cb';
 const CLIENT_ID = 'login-render-client';
 
-async function startAuthorization(baseUrl: string): Promise<Response> {
+async function startAuthorization(baseUrl: string, clientId = CLIENT_ID): Promise<Response> {
   const url = new URL(`${baseUrl}/oauth/authorize`);
   url.search = new URLSearchParams({
     response_type: 'code',
-    client_id: CLIENT_ID,
+    client_id: clientId,
     redirect_uri: REDIRECT_URI,
     code_challenge: sha256Base64url(generateCodeVerifier()),
     code_challenge_method: 'S256',
@@ -24,6 +24,21 @@ async function startAuthorization(baseUrl: string): Promise<Response> {
     state: 'st-render',
   }).toString();
   return browserFetch(url.toString(), { method: 'GET', redirect: 'manual' });
+}
+
+/** Register a client through DCR, as ChatGPT does; returns its `client_id`. */
+async function register(baseUrl: string, clientName: string): Promise<string> {
+  const res = await fetch(`${baseUrl}/oauth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ redirect_uris: [REDIRECT_URI], client_name: clientName }),
+  });
+  expect(res.status).toBe(201);
+  return String(((await res.json()) as { client_id: string }).client_id);
+}
+
+function heading(html: string): string | undefined {
+  return html.match(/<h1>([^<]*)<\/h1>/)?.[1];
 }
 
 function pageCsp(html: string): string {
@@ -88,5 +103,16 @@ describe('LOCAL-mode login.render page with its own CSP (#1477)', () => {
     const retry = await res.text();
     expect(retry).toContain('Unknown desk key');
     expect(pageCsp(retry)).toBe("default-src 'none'; form-action 'self' http://127.0.0.1:9877");
+  });
+
+  it('names a client registered through DCR by its client_name, on the first page and the page shown again (#1505)', async () => {
+    const clientId = await register(baseUrl, 'ChatGPT');
+    const html = await (await startAuthorization(baseUrl, clientId)).text();
+
+    const retry = await (await submit(baseUrl, html, 'wrong-key')).text();
+
+    expect(heading(html)).toBe('Sign in to ChatGPT');
+    expect(retry).toContain('Unknown desk key');
+    expect(heading(retry)).toBe('Sign in to ChatGPT');
   });
 });
