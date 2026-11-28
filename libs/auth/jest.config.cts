@@ -6,6 +6,11 @@ module.exports = {
     '^.+\\.[tj]s$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.spec.json' }],
   },
   moduleFileExtensions: ['ts', 'js', 'html'],
+  moduleNameMapper: {
+    ...require('../../jest.imports-mapper'),
+    // Pinned so a spec's jest.mock and the code's lazy require resolve it the same way, built or not.
+    '^@frontmcp/storage-sqlite$': '<rootDir>/../storage-sqlite/src/index.ts',
+  },
   coverageDirectory: '../../coverage/unit/auth',
   // Run coverage single-worker for determinism. Under parallel workers a pre-existing
   // worker-teardown force-exit (no persistent open handle — all cleanup timers already
