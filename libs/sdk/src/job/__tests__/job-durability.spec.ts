@@ -36,6 +36,7 @@ import {
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { type Scope } from '../../scope/scope.instance';
 import { JobExecutionManager } from '../execution/job-execution.manager';
+import { MachineJobAdmission } from '../job-admission';
 import { type JobRunRecord, type JobStateStore, type WorkflowRunRecord } from '../store/job-state.interface';
 import { MemoryJobStateStore } from '../store/memory-job-state.store';
 
@@ -805,6 +806,36 @@ describe('admission', () => {
       await managerOf(server).dispose();
       expect((await finished(server, interrupted.runId)).state).toBe('interrupted');
       await expectSlotFree();
+    } finally {
+      await server.dispose();
+    }
+  });
+
+  it('stops an attempt that lost its machine-wide slot, and runs its cleanup', async () => {
+    const server = await FrontMcpInstance.createDirect({
+      info: { name: 'durable-lost-slot', version: '1.0.0' },
+      apps: [DurableApp],
+      logging: { level: LogLevel.Off },
+      jobs: { enabled: true },
+    });
+    try {
+      const scope = scopeOf(server);
+      const store = new MemoryJobStateStore();
+      const admission = new MachineJobAdmission({ concurrency: 1, scope: 'machine' }, store, undefined, {
+        leaseSeconds: 1,
+        hostname: () => 'box',
+      });
+      const manager = new JobExecutionManager(store, scope.logger, undefined, scope, { admission });
+      const { runId } = await manager.executeJob(jobOf(server, 'hang_job'), { tag: 'lost' }, { background: true });
+      await waitFor(() => entered.includes('lost'), 'the job to start');
+
+      // Another process found its lease ended and took the machine's leases over
+      await store.swapLeases('admission:box', await store.readLeases('admission:box'), '[]', 30);
+      await waitFor(async () => (await store.getRun(runId))?.state === 'failed', 'the run to stop');
+
+      expect((await store.getRun(runId))?.error).toEqual(expect.objectContaining({ name: 'JobAdmissionLostError' }));
+      expect(cleanups).toEqual(['lost:interrupt']);
+      await manager.dispose();
     } finally {
       await server.dispose();
     }

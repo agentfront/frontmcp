@@ -89,6 +89,13 @@ function fakeRedis(): RedisStateStoreLike {
     },
     srem: async (key, ...members) => members.filter((member) => setOf(key).delete(member)).length,
     smembers: async (key) => [...setOf(key)],
+    // The one script the store runs: swap a lease list while it holds the expected value
+    eval: async (_script, _keys, key, expected, next, ttlSeconds) => {
+      if ((live(String(key)) ?? '') !== expected) return 0;
+      values.set(String(key), String(next));
+      expiries.set(String(key), Date.now() + Number(ttlSeconds) * 1000);
+      return 1;
+    },
     scan: async (_cursor, _match, pattern) => [
       '0',
       [...values.keys()].filter((key) => key.startsWith(String(pattern).replace(/\*$/, ''))),
@@ -192,23 +199,26 @@ describe.each(stateBackends)('%s job state store', (_backend, open) => {
     expect(await store.isRunnerAlive?.('runner-1')).toBe(false);
   });
 
-  it('holds a lease for one value, renews and releases it only for that value, and lists the live ones', async () => {
-    expect(await store.holdLease?.('admission:box:slot:a', 'mine', 1)).toBe(true);
-    expect(await store.holdLease?.('admission:box:slot:a', 'theirs', 1)).toBe(false);
-    expect(await store.holdLease?.('admission:box:slot:b', 'other', 30)).toBe(true);
-    expect(await store.holdLease?.('admission:elsewhere:slot:c', 'far', 30)).toBe(true);
+  it('swaps a lease list only from the value it holds, one swap from none at a time, and ends it at its TTL', async () => {
+    expect(await store.readLeases?.('admission:box')).toBe('');
+    expect(await store.swapLeases?.('admission:box', 'stale', 'mine', 30)).toBe(false);
+    const fromNone = await Promise.all([
+      store.swapLeases?.('admission:box', '', 'mine', 1),
+      store.swapLeases?.('admission:box', '', 'theirs', 1),
+    ]);
+    expect(fromNone.filter(Boolean)).toHaveLength(1);
+    const first = await store.readLeases?.('admission:box');
+    expect(['mine', 'theirs']).toContain(first);
+    expect(await store.readLeases?.('admission:elsewhere')).toBe('');
 
-    expect(await store.renewLease?.('admission:box:slot:a', 'theirs', 30)).toBe(false);
-    expect((await store.listLeases?.('admission:box:slot:'))?.sort()).toEqual(['mine', 'other']);
-    await store.releaseLease?.('admission:box:slot:b', 'theirs');
-    expect((await store.listLeases?.('admission:box:slot:'))?.sort()).toEqual(['mine', 'other']);
-    await store.releaseLease?.('admission:box:slot:b', 'other');
-    expect(await store.listLeases?.('admission:box:slot:')).toEqual(['mine']);
+    expect(await store.swapLeases?.('admission:box', first ?? '', 'ours', 1)).toBe(true);
+    expect(await store.swapLeases?.('admission:box', first ?? '', 'late', 30)).toBe(false);
+    expect(await store.readLeases?.('admission:box')).toBe('ours');
 
     await new Promise((resolve) => setTimeout(resolve, 1_100));
-    expect(await store.listLeases?.('admission:box:slot:')).toEqual([]);
-    expect(await store.renewLease?.('admission:box:slot:a', 'mine', 30)).toBe(false);
-    expect(await store.holdLease?.('admission:box:slot:a', 'theirs', 30)).toBe(true);
+    expect(await store.readLeases?.('admission:box')).toBe('');
+    expect(await store.swapLeases?.('admission:box', 'ours', 'late', 30)).toBe(false);
+    expect(await store.swapLeases?.('admission:box', '', 'next', 30)).toBe(true);
   });
 
   it('lets one caller claim a run', async () => {

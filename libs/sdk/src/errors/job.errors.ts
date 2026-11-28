@@ -91,6 +91,13 @@ export class JobAdmissionTimeoutError extends PublicMcpError {
   }
 }
 
+/** A running attempt lost its machine-wide admission slot (its lease ended unrenewed), so it was stopped. */
+export class JobAdmissionLostError extends PublicMcpError {
+  constructor(jobName: string, why: string) {
+    super(`Job "${jobName}" lost its admission slot and was stopped: ${why}`, 'JOB_ADMISSION_LOST', 503);
+  }
+}
+
 /** No run with this id, or one the caller may not see: both read the same, so run ids cannot be probed. */
 export class JobRunNotFoundError extends PublicMcpError {
   constructor(runId: string) {

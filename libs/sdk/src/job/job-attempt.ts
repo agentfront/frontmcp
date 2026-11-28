@@ -9,6 +9,7 @@ import { FrontMcpContextStorage, type FrontMcpContext } from '../context';
 import {
   InvalidInputError,
   InvalidOutputError,
+  JobAdmissionLostError,
   JobCancelledError,
   JobInterruptedError,
   JobTimeoutError,
@@ -187,7 +188,7 @@ export async function runJobCleanup(
 /** What the job's `cleanup` is told about why its attempt stopped, from the reason its signal was aborted with. */
 export function interruptReasonOf(reason: unknown): JobInterruptReason {
   if (reason instanceof JobCancelledError) return 'cancel';
-  if (reason instanceof JobInterruptedError) return 'interrupt';
+  if (reason instanceof JobInterruptedError || reason instanceof JobAdmissionLostError) return 'interrupt';
   return 'timeout';
 }
 

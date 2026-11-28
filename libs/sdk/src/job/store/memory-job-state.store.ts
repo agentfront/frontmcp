@@ -101,28 +101,14 @@ export class MemoryJobStateStore implements JobStateStore {
     return true;
   }
 
-  async holdLease(key: string, value: string, ttlSeconds: number): Promise<boolean> {
-    const held = this.liveLease(key);
-    if (held && held.value !== value) return false;
-    this.leases.set(key, { value, expiresAt: Date.now() + ttlSeconds * 1000 });
+  async readLeases(key: string): Promise<string> {
+    return this.liveLease(key)?.value ?? '';
+  }
+
+  async swapLeases(key: string, expected: string, next: string, ttlSeconds: number): Promise<boolean> {
+    if ((this.liveLease(key)?.value ?? '') !== expected) return false;
+    this.leases.set(key, { value: next, expiresAt: Date.now() + ttlSeconds * 1000 });
     return true;
-  }
-
-  async renewLease(key: string, value: string, ttlSeconds: number): Promise<boolean> {
-    if (this.liveLease(key)?.value !== value) return false;
-    this.leases.set(key, { value, expiresAt: Date.now() + ttlSeconds * 1000 });
-    return true;
-  }
-
-  async releaseLease(key: string, value: string): Promise<void> {
-    if (this.liveLease(key)?.value === value) this.leases.delete(key);
-  }
-
-  async listLeases(prefix: string): Promise<string[]> {
-    return [...this.leases.keys()]
-      .filter((key) => key.startsWith(prefix))
-      .map((key) => this.liveLease(key)?.value)
-      .filter((value): value is string => value !== undefined);
   }
 
   /** The lease `key`, unless it expired, which removes it. */

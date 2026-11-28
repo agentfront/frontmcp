@@ -327,6 +327,7 @@
   "JSON_RPC": "string",
   "Job": "function",
   "JobAdmission": "class",
+  "JobAdmissionLostError": "class",
   "JobAdmissionTimeoutError": "class",
   "JobCancelledError": "class",
   "JobContext": "class",

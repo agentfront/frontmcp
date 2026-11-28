@@ -226,7 +226,8 @@ export default class ExecuteJobFlow extends FlowBase<typeof name> {
     // An attempt its caller gave up on while its providers were built never builds the job.
     this.throwIfAborted();
 
-    const attemptAbort = abortControllerFollowing(ctx.signal);
+    // A slot lost while the attempt runs stops it, as a cancel does
+    const attemptAbort = abortControllerFollowing(ctx.signal, ctx.admission?.lost);
     this.state.set('attemptAbort', attemptAbort);
     const jobContext = job.create(parsedInput, {
       authInfo: this.state.authInfo ?? {},
@@ -364,10 +365,12 @@ export default class ExecuteJobFlow extends FlowBase<typeof name> {
 }
 
 /** A controller of its own for the attempt, aborted with the caller's reason when the caller's signal aborts. */
-function abortControllerFollowing(signal: AbortSignal | undefined): AbortController {
+function abortControllerFollowing(...signals: Array<AbortSignal | undefined>): AbortController {
   const controller = new AbortController();
-  if (signal?.aborted) controller.abort(signal.reason);
-  signal?.addEventListener('abort', () => controller.abort(signal.reason), { once: true });
+  for (const signal of signals) {
+    if (signal?.aborted) controller.abort(signal.reason);
+    signal?.addEventListener('abort', () => controller.abort(signal.reason), { once: true });
+  }
   return controller;
 }
 

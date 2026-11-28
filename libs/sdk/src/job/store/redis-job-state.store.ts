@@ -21,6 +21,8 @@ export interface RedisStateStoreLike extends RedisScanClient {
   srem(key: string, ...members: string[]): Promise<number>;
   smembers(key: string): Promise<string[]>;
   expire?(key: string, seconds: number): Promise<unknown>;
+  /** `EVAL script numKeys ...keys ...args`: the leases are swapped by a script on one key. */
+  eval(script: string, numKeys: number, ...keysAndArgs: (string | number)[]): Promise<unknown>;
   quit?(): Promise<unknown>;
 }
 
@@ -28,6 +30,14 @@ export interface RedisJobStateStoreOptions {
   /** Close the client on `dispose()`: set when the store created it (the factory does). @default false */
   ownsClient?: boolean;
 }
+
+/** Replace a key's value while it holds the expected one (an absent key holds `''`), with a TTL. */
+const SWAP_SCRIPT = `
+local current = redis.call('GET', KEYS[1]) or ''
+if current ~= ARGV[1] then return 0 end
+redis.call('SET', KEYS[1], ARGV[2], 'EX', ARGV[3])
+return 1
+`;
 
 /**
  * Redis implementation of JobStateStore.
@@ -193,26 +203,12 @@ export class RedisJobStateStore implements JobStateStore {
     return (await this.client.set(`${this.keyPrefix}claim:${runId}`, '1', 'NX', 'EX', this.ttlSeconds)) === 'OK';
   }
 
-  async holdLease(key: string, value: string, ttlSeconds: number): Promise<boolean> {
-    if ((await this.client.set(this.leaseKey(key), value, 'EX', ttlSeconds, 'NX')) === 'OK') return true;
-    return (await this.client.get(this.leaseKey(key))) === value;
+  async readLeases(key: string): Promise<string> {
+    return (await this.client.get(this.leaseKey(key))) ?? '';
   }
 
-  /** A lease ends by its TTL; renewing reads it first, so a renew that races its expiry and a new holder may extend it. */
-  async renewLease(key: string, value: string, ttlSeconds: number): Promise<boolean> {
-    if ((await this.client.get(this.leaseKey(key))) !== value) return false;
-    await this.client.expire?.(this.leaseKey(key), ttlSeconds);
-    return true;
-  }
-
-  async releaseLease(key: string, value: string): Promise<void> {
-    if ((await this.client.get(this.leaseKey(key))) === value) await this.client.del(this.leaseKey(key));
-  }
-
-  async listLeases(prefix: string): Promise<string[]> {
-    const keys = await scanRedisKeys(this.client, `${this.leaseKey(prefix)}*`);
-    const values = await Promise.all(keys.map((key) => this.client.get(key)));
-    return values.filter((value): value is string => value !== null);
+  async swapLeases(key: string, expected: string, next: string, ttlSeconds: number): Promise<boolean> {
+    return (await this.client.eval(SWAP_SCRIPT, 1, this.leaseKey(key), expected, next, ttlSeconds)) === 1;
   }
 
   private leaseKey(key: string): string {
