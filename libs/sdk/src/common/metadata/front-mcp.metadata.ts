@@ -66,6 +66,7 @@ import {
 import { legacySessionOptionsSchema } from '../types/options/session/schema';
 import { packageLoaderSchema, type PackageLoader } from './app.metadata';
 import { channelsConfigSchema, type ChannelsConfigInput } from './channel.metadata';
+import { type EnabledResolver } from './enabled.metadata';
 import { eventsConfigSchema, type EventsConfigOptions } from './event.metadata';
 import { inputPolicySchema, type InputPolicy } from './input-policy';
 import { MAX_JOB_TIMER_MS, timerLimitMessage } from './job.metadata';
@@ -128,6 +129,18 @@ export interface FrontMcpBaseMetadata {
    * one next to its entry script, where `frontmcp build` writes it.
    */
   manifest?: string | ServerManifest;
+
+  /**
+   * Maps the server's tools, resources, resource templates and prompts to their `enabled` switch in one place, by
+   * kind, name or URI, instead of on each decorator. Called once per entry; `undefined` leaves the entry to its own
+   * `enabled`. An entry is on only when its own `enabled` and this answer are both on.
+   *
+   * @example
+   * ```typescript
+   * enabled: (entry) => features.sourceFor(entry.name), // an EnabledSource, or undefined
+   * ```
+   */
+  enabled?: EnabledResolver;
 
   /**
    * Shared storage configuration
@@ -735,6 +748,11 @@ const serverManifestOptionSchema = z.union(
   { message: '`manifest` must be the path of a frontmcp.manifest.json, or the manifest itself' },
 );
 
+/** The server's `enabled`: a function from an entry to its switch. */
+const enabledResolverSchema = z.custom<EnabledResolver>((value) => typeof value === 'function', {
+  message: "The server's `enabled` must be a function (entry) => boolean | EnabledSource | undefined",
+});
+
 /** Why `jobs.store` was refused: the field of its object that is wrong, or the values it takes. */
 function jobsStoreError(issue: { code?: string; errors?: Array<Array<{ path: PropertyKey[]; message: string }>> }) {
   if (issue.code !== 'invalid_union') return undefined;
@@ -751,6 +769,7 @@ export const frontMcpBaseSchema = z.object({
   instructions: z.string().optional(),
   instructionsBudget: instructionsBudgetOptionsSchema.optional(),
   manifest: serverManifestOptionSchema.optional(),
+  enabled: enabledResolverSchema.optional(),
   providers: z.array(annotatedFrontMcpProvidersSchema).optional().default([]),
   authProvidersVault: authProvidersVaultOptionsSchema.optional(),
   lifecycle: lifecycleOptionsSchema.optional(),
@@ -1034,6 +1053,7 @@ const frontMcpLiteSchema = z.object({
   instructions: z.string().optional(),
   instructionsBudget: instructionsBudgetOptionsSchema.optional(),
   manifest: serverManifestOptionSchema.optional(),
+  enabled: enabledResolverSchema.optional(),
   providers: z.array(annotatedFrontMcpProvidersSchema).optional().default([]),
   authProvidersVault: authProvidersVaultOptionsSchema.optional(),
   lifecycle: lifecycleOptionsSchema.optional(),

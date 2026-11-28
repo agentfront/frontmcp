@@ -29,7 +29,7 @@ import { encodeOffsetCursor, parseOffsetCursor } from '../../common/utils/offset
 import { InternalMcpError, InvalidInputError, InvalidMethodError } from '../../errors';
 import { type Scope } from '../../scope/scope.instance';
 import { isSkillsOnlyRequest } from '../../skill/skill-mode.utils';
-import { enabledItems, SURFACE_META_KEY, surfaceHash } from '../../surface';
+import { enabledItems, SURFACE_META_KEY, surfaceHash, switchesOf } from '../../surface';
 import { isListedByAuthorities } from '../../surface/entry-authorized';
 import { toolOutputPolicies } from '../tool-output-policy';
 import { isAppOnlyTool, knownPlatformOf, rendersAppPages } from '../ui/app-only-tools';
@@ -326,13 +326,13 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
     }
   }
 
-  /** Leave out the tools whose `enabled` is off for this request. */
+  /** Leave out the tools whose `enabled` (their own, or the server's for them) is off for this request. */
   @Stage('filterByEnabled')
   async filterByEnabled() {
     const { tools } = this.state.required;
     this.state.set(
       'tools',
-      await enabledItems(tools, ({ tool }) => tool.metadata.enabled, this.tryGetContext(), this.logger),
+      await enabledItems(tools, ({ tool }) => switchesOf(this.scope, 'tools', tool), this.tryGetContext(), this.logger),
     );
   }
 

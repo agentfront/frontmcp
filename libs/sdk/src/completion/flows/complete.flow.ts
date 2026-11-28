@@ -24,7 +24,7 @@ import { availabilityForCall, callSurfaceOf } from '../../common/availability';
 import { runOnSurface } from '../../context/call-surface';
 import { InvalidInputError, InvalidMethodError } from '../../errors';
 import { ResolvedEntries } from '../../flows/resolved-entries';
-import { isEntryEnabled } from '../../surface';
+import { isEntryEnabled, switchesOf } from '../../surface';
 import { hasUIConfig } from '../../tool/ui/ui-shared';
 import { appOwnerIdOf } from '../../utils/lineage.utils';
 
@@ -146,7 +146,10 @@ export default class CompleteFlow extends FlowBase<typeof name> {
       reference = findCompletionReference(scope, ref);
     }
     const referenced = reference.prompt ?? reference.resource;
-    if (referenced && (await loadAppOfPlaceholder(scope, referenced))) reference = findCompletionReference(scope, ref);
+    const kind = reference.prompt ? 'prompts' : 'resources';
+    if (referenced && (await loadAppOfPlaceholder(scope, referenced, kind))) {
+      reference = findCompletionReference(scope, ref);
+    }
     const { prompt, resource } = reference;
     if (!prompt && !resource) return undefined;
     resolvedReferences.remember(rawInput, referenceKeyOf(ref), reference);
@@ -225,10 +228,10 @@ export default class CompleteFlow extends FlowBase<typeof name> {
   async checkEnabled() {
     const { prompt, resource } = this.state;
     const context = this.tryGetContext();
-    if (prompt && !(await isEntryEnabled(prompt.metadata.enabled, context, this.logger))) {
+    if (prompt && !(await isEntryEnabled(switchesOf(this.scope, 'prompts', prompt), context, this.logger))) {
       this.state.set('prompt', undefined);
     }
-    if (resource && !(await isEntryEnabled(resource.metadata.enabled, context, this.logger))) {
+    if (resource && !(await isEntryEnabled(switchesOf(this.scope, 'resources', resource), context, this.logger))) {
       this.state.set('resource', undefined);
     }
   }

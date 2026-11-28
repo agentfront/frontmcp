@@ -14,7 +14,8 @@
  */
 import { MCP_20260728_META, type Implementation } from '@frontmcp/protocol';
 
-import { isEnabledSource, type FlowName, type ScopeEntry } from '../../common';
+import { isEnabledSource, type FlowName, type ListChangedKind, type ScopeEntry } from '../../common';
+import { switchesOf, type SwitchedEntry, type SwitchesScope } from '../../surface/entry-enabled';
 import { CACHEABLE_METHODS, DEFAULT_CACHE_TTL_MS } from './protocol-20260728.constants';
 
 export interface DecorateResultOptions {
@@ -119,17 +120,20 @@ const RESULT_SHAPING_FLOWS: Record<string, readonly FlowName[]> = {
   'server/discover': ['skills:filter'],
 };
 
-/** The entries whose `enabled` filters each list, or gates each read. */
-const LIVE_LIST_ENTRIES: Record<
-  string,
-  (scope: Pick<ScopeEntry, 'tools' | 'resources' | 'prompts'>) => readonly { metadata: { enabled?: unknown } }[]
-> = {
-  'tools/list': (scope) => scope.tools.listAllInstances(),
-  'resources/list': (scope) => scope.resources.listAllInstances(),
-  'resources/templates/list': (scope) => scope.resources.listAllInstances(),
-  'prompts/list': (scope) => scope.prompts.listAllInstances(),
-  'resources/read': (scope) => scope.resources.listAllInstances(),
+/** The list whose entries' `enabled` filters each list result, or gates each read. */
+const LIVE_LIST_KINDS: Record<string, ListChangedKind> = {
+  'tools/list': 'tools',
+  'resources/list': 'resources',
+  'resources/templates/list': 'resources',
+  'prompts/list': 'prompts',
+  'resources/read': 'resources',
 };
+
+/** Whether an entry of the `kind` list in `scope` has an `enabled` source: its own, or the server's for it. */
+function hasEnabledSource(scope: SwitchesScope, kind: ListChangedKind, entry: SwitchedEntry): boolean {
+  const switches = switchesOf(scope, kind, entry);
+  return (Array.isArray(switches) ? switches : [switches]).some(isEnabledSource);
+}
 
 /**
  * Whether a cacheable result may differ from one caller to another, even between anonymous callers.
@@ -137,11 +141,13 @@ const LIVE_LIST_ENTRIES: Record<
  * It may when the scope evaluates `authorities` rules, which filter lists and gate reads for the
  * caller, when `clients` profiles shape results for the caller's `clientInfo.name`, or when any
  * hook runs in a flow that builds the result: feature flags, skill visibility and custom filters
- * all decide there, for the caller. So does a list or read of entries whose `enabled` is a source.
+ * all decide there, for the caller. So does a list or read of entries whose `enabled` is a source, their own or the
+ * one the server's `enabled` maps them to.
  * Methods not listed count as per-caller.
  */
 export function isShapedPerCaller(
-  scope: Pick<ScopeEntry, 'hooks' | 'authoritiesEngine' | 'metadata' | 'tools' | 'resources' | 'prompts'>,
+  scope: Pick<ScopeEntry, 'hooks' | 'authoritiesEngine' | 'metadata' | 'tools' | 'resources' | 'prompts'> &
+    SwitchesScope,
   method: string,
 ): boolean {
   if (scope.authoritiesEngine) return true;
@@ -149,7 +155,9 @@ export function isShapedPerCaller(
   const flows = RESULT_SHAPING_FLOWS[method];
   if (!flows) return true;
   if (flows.some((flow) => scope.hooks.getFlowHooks(flow).length > 0)) return true;
-  return (LIVE_LIST_ENTRIES[method]?.(scope) ?? []).some((entry) => isEnabledSource(entry.metadata.enabled));
+  const kind = LIVE_LIST_KINDS[method];
+  if (!kind) return false;
+  return scope[kind].listAllInstances().some((entry: SwitchedEntry) => hasEnabledSource(scope, kind, entry));
 }
 
 /**

@@ -54,6 +54,25 @@ describe('parseFrontMcpConfigLite — preserves CLI-relevant fields', () => {
     expect(parsed['authorities']).toBe(input.authorities);
   });
 
+  it("keeps the server's enabled, which a CLI build's lists and calls read", () => {
+    const enabled = () => undefined;
+    const parsed = parseFrontMcpConfigLite({
+      info: { name: 'demo', version: '0.1.0' },
+      apps: minimalApps,
+      enabled,
+    } as never) as unknown as Record<string, unknown>;
+
+    expect(parsed['enabled']).toBe(enabled);
+  });
+
+  it('refuses a server enabled that is not a function, on the server and in CLI mode', () => {
+    const input = { info: { name: 'demo', version: '0.1.0' }, apps: minimalApps, enabled: true } as never;
+    const message = "The server's `enabled` must be a function";
+
+    expect(frontMcpBaseSchema.safeParse(input).error?.issues[0]?.message).toContain(message);
+    expect(() => parseFrontMcpConfigLite(input)).toThrow(message);
+  });
+
   it('keeps tasks, which the CLI host reads for its store and runner', () => {
     const tasks = { store: false, runner: 'cli', defaultTtlMs: 60_000 };
     const parsed = parseFrontMcpConfigLite({
