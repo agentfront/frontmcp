@@ -40,9 +40,13 @@
  *
  * await oauthServer.start();
  *
- * // User visits /oauth/authorize → automatically redirects back with code
- * // Token exchange happens automatically
+ * // User visits /oauth/authorize with an S256 code_challenge → automatically redirects back with code
+ * // Token exchange happens automatically, with the code_verifier
  * ```
+ *
+ * By default the mock checks PKCE and resource indicators as an OAuth 2.1 server does (since 1.14): an authorization
+ * request needs an S256 `code_challenge`, and a `resource` / `audience` value becomes the access token's `aud`. Set
+ * `pkce: 'lenient'` or `resourceIndicators: false` for the behaviour up to 1.13.
  */
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http';
@@ -127,9 +131,9 @@ export interface MockOAuthServerOptions {
   users?: MockTestUser[];
   /**
    * Issue the access token for the `resource` (RFC 8707) and `audience` values of the authorization and token
-   * requests, kept across refresh: `true` accepts any, a list accepts those only and refuses others with
-   * `invalid_target`. A request naming none gets the token factory's audience. Unset, they are ignored as before,
-   * with a warning the first time a request carries one.
+   * requests, kept across refresh: `true` (the default since 1.14) accepts any, a list accepts those only and refuses
+   * others with `invalid_target`. A request naming none gets the token factory's audience. `false` ignores them, so
+   * every token gets the token factory's audience, as by default up to 1.13.
    */
   resourceIndicators?: boolean | string[];
   /** Expected client ID for validation */
@@ -143,9 +147,9 @@ export interface MockOAuthServerOptions {
   /** Refresh token TTL in seconds (default: 30 days) */
   refreshTokenTtlSeconds?: number;
   /**
-   * `'strict'` requires S256 PKCE as OAuth 2.1 does: an authorization request without a `code_challenge`, or with
-   * the `plain` method, is redirected back with `invalid_request`, and a code needs a valid `code_verifier`.
-   * `'lenient'` accepts both. Unset, it is lenient and warns once the first time it accepts such a request.
+   * `'strict'` (the default since 1.14) requires S256 PKCE as OAuth 2.1 does: an authorization request without a
+   * `code_challenge`, or with the `plain` method, is redirected back with `invalid_request`, and a code needs a valid
+   * `code_verifier`. `'lenient'` accepts both, as by default up to 1.13.
    */
   pkce?: 'strict' | 'lenient';
 }
@@ -196,8 +200,6 @@ export class MockOAuthServer {
   /** Refresh token TTL in seconds */
   private readonly refreshTokenTtlSeconds: number;
 
-  private warnedLenientPkce = false;
-  private warnedIgnoredTargets = false;
 
   constructor(tokenFactory: TestTokenFactory, options: MockOAuthServerOptions = {}) {
     this.tokenFactory = tokenFactory;
@@ -421,7 +423,7 @@ export class MockOAuthServer {
       grant_types_supported: ['authorization_code', 'refresh_token', 'anonymous'],
       token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post', 'none'],
       scopes_supported: ['openid', 'profile', 'email', 'anonymous'],
-      ...(this.options.pkce === 'strict' ? { code_challenge_methods_supported: ['S256'] } : {}),
+      ...(this.strictPkce ? { code_challenge_methods_supported: ['S256'] } : {}),
     };
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -734,7 +736,7 @@ export class MockOAuthServer {
       }
 
       const expectedChallenge = await this.computeCodeChallengeAsync(codeVerifier, method);
-      const malformed = this.options.pkce === 'strict' && !isValidCodeVerifier(codeVerifier);
+      const malformed = this.strictPkce && !isValidCodeVerifier(codeVerifier);
       if (malformed || expectedChallenge !== codeRecord.codeChallenge) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(
@@ -1181,18 +1183,14 @@ export class MockOAuthServer {
     return this.issuedUsers.get(sub) ?? this.options.users?.find((user) => user.sub === sub);
   }
 
-  /** A request's `resource` and `audience` values when `resourceIndicators` is set; else none, with one warning. */
+  /** Whether PKCE is checked as OAuth 2.1 requires: unless `pkce: 'lenient'`. */
+  private get strictPkce(): boolean {
+    return this.options.pkce !== 'lenient';
+  }
+
+  /** A request's `resource` and `audience` values; none with `resourceIndicators: false`. */
   private requestedTargets(params: URLSearchParams): string[] {
-    const targets = targetsOf(params);
-    if (this.options.resourceIndicators) return targets;
-    if (targets.length > 0 && !this.warnedIgnoredTargets) {
-      this.warnedIgnoredTargets = true;
-      console.warn(
-        `[MockOAuthServer] Ignored resource/audience ${targets.join(', ')}: the token gets the token factory's audience. ` +
-          'Set resourceIndicators: true (or a list of allowed values) to issue the token for it.',
-      );
-    }
-    return [];
+    return this.options.resourceIndicators === false ? [] : targetsOf(params);
   }
 
   /** Why the requested `resource` / `audience` values are refused (RFC 8707 §2), or `undefined`. */
@@ -1215,21 +1213,13 @@ export class MockOAuthServer {
     return this.checkTargets(requested) ?? requested;
   }
 
-  /** Why an authorization request's PKCE is refused, or `undefined` when it is S256 or leniency accepts it. */
+  /** Why an authorization request's PKCE is refused, or `undefined` when it is S256 or `pkce: 'lenient'` accepts it. */
   private checkPkce(codeChallenge?: string, codeChallengeMethod?: string): string | undefined {
-    if (codeChallenge && codeChallengeMethod === 'S256') return undefined;
+    if (!this.strictPkce || (codeChallenge && codeChallengeMethod === 'S256')) return undefined;
     const problem = codeChallenge
       ? `code_challenge_method ${codeChallengeMethod ?? 'plain'} is not S256`
       : 'code_challenge is missing';
-    if (this.options.pkce === 'strict') return `S256 PKCE is required: ${problem}`;
-    if (this.options.pkce === undefined && !this.warnedLenientPkce) {
-      this.warnedLenientPkce = true;
-      console.warn(
-        `[MockOAuthServer] Accepted an authorization request without S256 PKCE (${problem}). ` +
-          "Set pkce: 'strict' to refuse it, as OAuth 2.1 servers do, or pkce: 'lenient' to accept it without this warning.",
-      );
-    }
-    return undefined;
+    return `S256 PKCE is required: ${problem}`;
   }
 
   /**

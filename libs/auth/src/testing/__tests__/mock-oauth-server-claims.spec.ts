@@ -17,6 +17,7 @@ describe('MockOAuthServer tokens: auth_time, resource indicators and several use
       autoApprove: true,
       clientId: 'c',
       validRedirectUris: [REDIRECT_URI],
+      // These tests are about the token's claims, not PKCE (mock-oauth-server-pkce.spec.ts covers it): sign in without it.
       pkce: 'lenient',
       ...options,
     });
@@ -83,15 +84,34 @@ describe('MockOAuthServer tokens: auth_time, resource indicators and several use
   });
 
   describe('resourceIndicators', () => {
-    it('unset, ignores resource and audience as before, and warns once naming the option', async () => {
+    it('unset (the default since 1.14), issues the token for the requested resource and audience', async () => {
       await start({ testUser: { sub: 'u' } });
+
+      const { body } = await signIn({ resource: NOTES, audience: 'notes-api' });
+      const refreshed = await token({ grant_type: 'refresh_token', refresh_token: body.refresh_token });
+
+      expect(decode(body.access_token)['aud']).toEqual([NOTES, 'notes-api']);
+      expect(decode(refreshed.body.access_token)['aud']).toEqual([NOTES, 'notes-api']);
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it("unset, refuses a token request for a resource the authorization didn't grant", async () => {
+      await start({ testUser: { sub: 'u' } });
+
+      const { status, body } = await signIn({ resource: NOTES }, { resource: TASKS });
+
+      expect(status).toBe(400);
+      expect(body.error).toBe('invalid_target');
+    });
+
+    it('false, ignores resource and audience as up to 1.13, without a warning', async () => {
+      await start({ testUser: { sub: 'u' }, resourceIndicators: false });
 
       const { body } = await signIn({ resource: NOTES, audience: 'notes-api' }, { resource: NOTES });
       await signIn({ resource: TASKS });
 
       expect(decode(body.access_token)['aud']).toBe('default-audience');
-      expect(warn).toHaveBeenCalledTimes(1);
-      expect(warn.mock.calls[0][0]).toContain('resourceIndicators: true');
+      expect(warn).not.toHaveBeenCalled();
     });
 
     it('true, issues the token for the requested resource and audience, and a refresh keeps it', async () => {
