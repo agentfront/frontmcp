@@ -157,6 +157,60 @@ describe('http:request handleDeleteSession', () => {
   });
 });
 
+describe('http:request, a DELETE sent again while the holder has not confirmed (#1446)', () => {
+  /** A DELETE run through the router and handleDeleteSession stages, as the flow runs them. */
+  async function deleteThroughStages(transportService: TransportServiceStub, terminated: Set<string>) {
+    const stage = Object.create(HttpRequestFlow.prototype) as HttpRequestFlow & Record<string, unknown>;
+    const authorization = { token: '', session: { id: 'sess-1', payload: { protocol: 'streamable-http' } } };
+    const state = new Map<string, unknown>();
+    const request = { method: 'DELETE', path: '/', headers: { 'mcp-session-id': 'sess-1' }, query: {} };
+    Object.assign(stage, {
+      scope: {
+        metadata: { transport: { protocol: 'modern' } },
+        transportService,
+        notifications: {
+          terminateSession: (sessionId: string) => terminated.add(sessionId),
+          isSessionTerminated: (sessionId: string) => terminated.has(sessionId),
+          unmarkTerminated: (sessionId: string) => terminated.delete(sessionId),
+        },
+      },
+      metadata: { outputSchema: httpOutputSchema },
+      logger: { verbose: jest.fn(), warn: jest.fn(), info: jest.fn(), error: jest.fn(), debug: jest.fn() },
+      requestId: 'req-1',
+      requestStartTime: Date.now(),
+      state: {
+        required: { verifyResult: { kind: 'authorized', authorization } },
+        set: (key: string, value: unknown) => state.set(key, value),
+        get: (key: string) => state.get(key),
+      },
+      rawInput: { request, response: { setHeader: jest.fn() } },
+    });
+    const routed = await runStage(stage, 'router');
+    if (routed) return routed.output;
+    expect(state.get('intent')).toBe('delete-session');
+    return (await runStage(stage, 'handleDeleteSession'))?.output;
+  }
+
+  it('asks the holder again each time, never answering 404 for the session it ended itself', async () => {
+    const transportService = transportServiceStub();
+    transportService.endSessionOnOtherInstances.mockRejectedValue(
+      new SessionEndUnconfirmedError('1 of 1 other instances', 5, 'no answer', 'timed-out'),
+    );
+    const terminated = new Set<string>();
+
+    const first = await deleteThroughStages(transportService, terminated);
+    const second = await deleteThroughStages(transportService, terminated);
+
+    expect([first, second]).toEqual([
+      expect.objectContaining({ status: 503 }),
+      expect.objectContaining({ status: 503 }),
+    ]);
+    expect(terminated.has('sess-1')).toBe(true);
+    expect(transportService.endSessionOnOtherInstances).toHaveBeenCalledTimes(2);
+    expect(transportService.destroyTransporter).toHaveBeenCalledTimes(4);
+  });
+});
+
 describe('http:request applyDeleteNodeHeaders', () => {
   const originalMode = process.env['FRONTMCP_DEPLOYMENT_MODE'];
 
