@@ -1,6 +1,7 @@
 /**
  * E2E: `observability.stalls` names the call that blocked the event loop. A tool that busy-waits is named in the
- * stall warning; a call that failed earlier is not, because its failure took it out of the calls in flight.
+ * stall warning; a call that failed earlier is not, because its failure took it out of the calls in flight. Work
+ * outside a call is named by its work span: an `@HttpRoute` request, and a timer's work in a `trackWork()` span.
  */
 import { expect, test } from '@frontmcp/testing';
 
@@ -41,5 +42,27 @@ test.describe('Stall attribution', () => {
     expect(line).toMatch(/tools\/call stall-probe:busy-wait \(\d+ ms, session [0-9a-f]{12}\)/);
     expect(line).not.toContain('fail-fast');
     expect(line).not.toContain('"ms"');
+  });
+
+  test('names an @HttpRoute that busy-waits by its method and declared path', async ({ server }) => {
+    const response = await fetch(`${server.info.baseUrl}/stall-probe/busy/600`);
+    expect(response.status).toBe(200);
+
+    const line = await stallLineNaming(() => server.getLogs(), 'GET /stall-probe/busy/:ms');
+    expect(Number(STALL_LINE.exec(line)?.[1])).toBeGreaterThanOrEqual(590);
+    expect(line).toMatch(/http GET \/stall-probe\/busy\/:ms \(\d+ ms\)/);
+    expect(line).not.toContain('/busy/600');
+  });
+
+  test('names the trackWork() span of a timer that blocks after its call returned, and not the call', async ({
+    mcp,
+    server,
+  }) => {
+    const scheduled = await mcp.tools.call('later-busy-wait', { ms: 600 });
+    expect(scheduled).toBeSuccessful();
+
+    const line = await stallLineNaming(() => server.getLogs(), 'stall-probe:timer');
+    expect(line).toMatch(/work stall-probe:timer \(\d+ ms\)/);
+    expect(line).not.toContain('later-busy-wait');
   });
 });
