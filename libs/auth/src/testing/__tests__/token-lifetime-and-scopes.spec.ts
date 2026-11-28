@@ -2,6 +2,8 @@
  * Issue #644 — access tokens minted by MockOAuthServer carry the granted `scope`, their `exp` follows
  * `accessTokenTtlSeconds` (not only `expires_in`), and `expiresIn: 1` cannot expire before first use.
  */
+import { generatePkcePair } from '@frontmcp/utils';
+
 import { MockOAuthServer } from '../mock-oauth-server';
 import { TestTokenFactory } from '../token-factory';
 
@@ -61,6 +63,9 @@ describe('MockOAuthServer token claims', () => {
     authorizeUrl.searchParams.set('redirect_uri', 'http://localhost:3000/callback');
     authorizeUrl.searchParams.set('response_type', 'code');
     authorizeUrl.searchParams.set('scope', scope);
+    const { codeVerifier, codeChallenge } = generatePkcePair();
+    authorizeUrl.searchParams.set('code_challenge', codeChallenge);
+    authorizeUrl.searchParams.set('code_challenge_method', 'S256');
     const auth = await fetch(authorizeUrl.toString(), { redirect: 'manual' });
     const code = new URL(auth.headers.get('location') as string).searchParams.get('code') as string;
     const res = await fetch(`${server.info.baseUrl}/oauth/token`, {
@@ -71,6 +76,7 @@ describe('MockOAuthServer token claims', () => {
         code,
         redirect_uri: 'http://localhost:3000/callback',
         client_id: 'test-client',
+        code_verifier: codeVerifier,
       }).toString(),
     });
     return res.json();

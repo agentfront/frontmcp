@@ -64,8 +64,11 @@ describe('MockOAuthServer PKCE modes', () => {
     warn.mockRestore();
   });
 
-  describe("pkce: 'strict'", () => {
-    beforeEach(() => start('strict'));
+  describe.each([
+    ["pkce: 'strict'", 'strict' as const],
+    ['unset (the default since 1.14)', undefined],
+  ])('%s', (_name, pkce) => {
+    beforeEach(() => start(pkce));
 
     it('signs in with S256', async () => {
       const { codeVerifier, codeChallenge } = generatePkcePair();
@@ -132,25 +135,7 @@ describe('MockOAuthServer PKCE modes', () => {
     });
   });
 
-  describe('unset (the default)', () => {
-    beforeEach(() => start());
-
-    it('still signs in without PKCE, and warns once, naming the option', async () => {
-      const first = await authorize({});
-      const second = await authorize({ code_challenge: 'plain-challenge', code_challenge_method: 'plain' });
-
-      expect((await exchange(first.get('code') as string)).status).toBe(200);
-      expect((await exchange(second.get('code') as string, 'plain-challenge')).status).toBe(200);
-      expect(warn).toHaveBeenCalledTimes(1);
-      expect(warn.mock.calls[0][0]).toContain("Set pkce: 'strict'");
-    });
-
-    it('advertises no challenge methods, as before', async () => {
-      expect(await metadata()).not.toHaveProperty('code_challenge_methods_supported');
-    });
-  });
-
-  describe("pkce: 'lenient'", () => {
+  describe("pkce: 'lenient' (the default up to 1.13)", () => {
     beforeEach(() => start('lenient'));
 
     it('signs in without PKCE and does not warn', async () => {
@@ -158,6 +143,31 @@ describe('MockOAuthServer PKCE modes', () => {
 
       expect((await exchange(redirect.get('code') as string)).status).toBe(200);
       expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('signs in with the plain method', async () => {
+      const redirect = await authorize({ code_challenge: 'plain-challenge', code_challenge_method: 'plain' });
+
+      expect((await exchange(redirect.get('code') as string, 'plain-challenge')).status).toBe(200);
+    });
+
+    it('still checks a challenge it accepted: a wrong verifier or an unknown method is refused at the token endpoint', async () => {
+      const { codeChallenge } = generatePkcePair();
+      const wrongVerifier = await authorize({ code_challenge: codeChallenge, code_challenge_method: 'S256' });
+      const unknownMethod = await authorize({ code_challenge: codeChallenge, code_challenge_method: 'SHA256' });
+
+      expect((await exchange(wrongVerifier.get('code') as string, 'wrong-verifier')).body).toMatchObject({
+        error: 'invalid_grant',
+        error_description: 'PKCE verification failed',
+      });
+      expect((await exchange(unknownMethod.get('code') as string, 'any-verifier')).body).toMatchObject({
+        error: 'invalid_grant',
+        error_description: 'Unsupported code_challenge_method: SHA256',
+      });
+    });
+
+    it('advertises no challenge methods', async () => {
+      expect(await metadata()).not.toHaveProperty('code_challenge_methods_supported');
     });
   });
 });
