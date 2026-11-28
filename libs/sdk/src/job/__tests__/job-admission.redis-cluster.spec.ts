@@ -44,6 +44,15 @@ describeCluster('MachineJobAdmission on a Redis Cluster', () => {
     await Promise.all(stores.map((store) => store.dispose()));
   });
 
+  it('runs on a cluster client, and swaps the lease lists of machines whose keys live on different nodes', async () => {
+    const client = (stores[0] as unknown as { client: { isCluster?: boolean; nodes(role: string): unknown[] } }).client;
+    expect(client.isCluster).toBe(true);
+    expect(client.nodes('master').length).toBeGreaterThan(1);
+    const machines = Array.from({ length: 16 }, (_, index) => `admission:spread-box-${index}`);
+    const swapped = await Promise.all(machines.map((key) => stores[0].swapLeases?.(key, '', '[]', 30)));
+    expect(swapped).toEqual(machines.map(() => true));
+  });
+
   it('swaps the lease list only from the value it holds', async () => {
     const [first, second] = stores;
     const key = 'admission:swap-box';
