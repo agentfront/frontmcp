@@ -632,8 +632,8 @@
     "package": "@frontmcp/storage-sqlite",
     "category": "change",
     "severity": "medium",
-    "old": "npm install @frontmcp/storage-sqlite // also builds better-sqlite3; the stores run on it",
-    "new": "npm install @frontmcp/storage-sqlite // no native build; the stores run on node:sqlite\nnpm install @frontmcp/storage-sqlite better-sqlite3 // the stores run on better-sqlite3",
+    "old": "npm install @frontmcp/storage-sqlite # also builds better-sqlite3; the stores run on it",
+    "new": "npm install @frontmcp/storage-sqlite # no native build; the stores run on node:sqlite\nnpm install @frontmcp/storage-sqlite better-sqlite3 # the stores run on better-sqlite3",
     "migration": "`better-sqlite3` moved from the `optionalDependencies` of `@frontmcp/storage-sqlite` to its `peerDependencies`, marked optional in `peerDependenciesMeta`. Installing the package no longer builds the native module, and the stores open their files with Node's built-in `node:sqlite` by default. An installed `better-sqlite3` is still selected, and `FRONTMCP_SQLITE_DRIVER` (`node:sqlite` or `better-sqlite3`) still chooses; with `better-sqlite3` asked for but missing, opening a store fails with an error that says to install it. Both libraries write the same file, so no data moves. To keep `better-sqlite3`, add it to your own dependencies; code that calls `better-sqlite3`-only methods (`pluck()`, `iterate()`, `backup()`) on `getDatabase()` or `openDatabase()` needs it. `frontmcp install` installs it next to an installed app when the project lists it in `dependencies` or `optionalDependencies` (as optional there), or the build lists it in `build.dependencies.nativeAddons`, so such an app keeps running on it; otherwise the installed app runs on `node:sqlite`.",
     "codemod": "no"
   }
