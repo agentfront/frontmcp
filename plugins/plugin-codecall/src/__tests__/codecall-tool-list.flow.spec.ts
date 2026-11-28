@@ -13,7 +13,7 @@ import type { CodeCallPluginOptionsInput } from '../codecall.types';
 
 jest.setTimeout(60000);
 
-/** The JSON bytes of tools/list for the 47-tool fixture: 18,517 without review or budgets, 19,690 with them. */
+/** The JSON bytes of tools/list for the 47-tool fixture: 18,597 without review or budgets, 19,770 with them. */
 const TOOL_LIST_BUDGETS = { default: 19_500, everything: 20_700 };
 
 const ENTITIES = [

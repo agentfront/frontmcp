@@ -470,6 +470,31 @@ describe('CodeCall budgets', () => {
     expect(executed).toEqual(['tickets.get:1', 'tickets.get:2', 'tickets.get:3', 'tickets.get:4']);
   });
 
+  it.each(RUNTIMES)(
+    'pauses a parallel() on the %s runtime at the call a budget stopped as its tool started, once the others ran',
+    async (runtime) => {
+      const ada = await open(serverConfig({ vm: { preset: 'secure', runtime }, budgets: threeCallsPerHour() }), 'ada');
+
+      const stopped = await execute(
+        ada,
+        "return await parallel([1, 2, 3, 4], (id) => callTool('tickets.get', { id }));",
+      );
+
+      expect(stopped).toMatchObject({ paused: { call: { tool: 'tickets.get' } } });
+      expect(new Set(executed).size).toBe(3);
+      const resume = async () =>
+        structuredOf<ExecuteOutcome>(
+          (await ada.callTool('codecall:resume', { runId: stopped.runId as string })) as CallToolResult,
+        );
+      const asked = await resume();
+      expect(asked).toMatchObject({ status: 'needs_approval', paused: { call: stopped.paused?.call } });
+      await ada.callTool('approvals.grant', { id: asked.approval?.id as string });
+
+      expect(await resume()).toMatchObject({ status: 'ok', result: [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }] });
+      expect([...executed].sort()).toEqual(['tickets.get:1', 'tickets.get:2', 'tickets.get:3', 'tickets.get:4']);
+    },
+  );
+
   it('neither checks nor counts again the calls a resumed run answers from its record', async () => {
     const ada = await open(serverConfig({ budgets: threeCallsPerHour() }), 'ada');
 

@@ -10,6 +10,7 @@ import type {
   CodeCallScriptError,
 } from './run-record.types';
 import type { RunReplay } from './run-replay';
+import { RunStops } from './run-stops';
 
 const PHASE_BY_ERROR_CODE: Partial<Record<string, CodeCallCallPhase>> = {
   [TOOL_CALL_ERROR_CODES.SELF_REFERENCE]: 'access',
@@ -105,9 +106,19 @@ export class RunJournal {
   private readonly entries: CodeCallJournalEntry[] = [];
   private readonly unsettledStartTimes = new Map<CodeCallJournalEntry, number>();
   private readonly values = new Map<CodeCallJournalEntry, RunCallValues>();
+  private readonly mootPositions = new Set<number>();
+  private readonly changeWaiters = new Set<() => void>();
   private closed = false;
+  /** The answers that stop the run, held while its other calls settle (see {@link RunStops}). */
+  readonly stops: RunStops;
 
-  constructor(private readonly options: RunJournalOptions = {}) {}
+  constructor(private readonly options: RunJournalOptions = {}) {
+    this.stops = new RunStops({
+      running: () => this.running(),
+      changed: () => this.changed(),
+      arrivals: () => this.options.replay?.callsSeen ?? this.entries.length,
+    });
+  }
 
   get replay(): RunReplay | undefined {
     return this.options.replay;
@@ -130,6 +141,7 @@ export class RunJournal {
     this.unsettledStartTimes.set(entry, Date.now());
     if (this.options.keepValues && !keptValueCall.kind) this.values.set(entry, { arguments: args });
     this.options.observer?.callStarted(entry);
+    this.notify();
     return {
       succeed: (result) => {
         if (!this.settle(entry)) return;
@@ -151,9 +163,42 @@ export class RunJournal {
     };
   }
 
-  /** Records a call a call-phase decision (the review's, or a budget's) refused before it reached the tool handler. */
+  /** Whether the run can hold an answer that stops it while its other calls settle: only a run that can pause. */
+  get holdsStops(): boolean {
+    return !this.closed && this.options.replay?.recordsReads === true;
+  }
+
+  /**
+   * Marks the call at `position` moot: a `needs_approval` of another call stopped the run before the script got its
+   * answer, so its call is asked again on resume rather than answered from the record.
+   */
+  markMoot(position: number): void {
+    this.mootPositions.add(position);
+  }
+
+  /** Whether the call at `position` is moot (see {@link markMoot}). */
+  isMoot(position: number): boolean {
+    return this.mootPositions.has(position);
+  }
+
+  /** How many calls are running in their tools now. */
+  running(): number {
+    return this.unsettledStartTimes.size;
+  }
+
+  /** Settles at the next change: a call starts, settles or is refused, or the journal closes. */
+  changed(): Promise<void> {
+    if (this.closed) return Promise.resolve();
+    return new Promise((resolve) => this.changeWaiters.add(resolve));
+  }
+
+  /**
+   * Records a call a call-phase decision (the review's, or a budget's) refused before it reached the tool handler, as
+   * the decision goes to the script.
+   */
   refuse(tool: string, args: unknown, callIndex: number, decision: CodeCallCallDecision): void {
     if (this.closed) return;
+    this.options.replay?.released(callIndex);
     const entry = this.add({
       position: callIndex + 1,
       tool: journalToolNameOf(tool),
@@ -184,6 +229,8 @@ export class RunJournal {
       this.ended(entry);
     }
     this.closed = true;
+    this.stops.close();
+    this.notify();
     return this.entries;
   }
 
@@ -197,6 +244,13 @@ export class RunJournal {
 
   private ended(entry: CodeCallJournalEntry): void {
     this.options.observer?.callEnded(entry, this.values.get(entry));
+    this.notify();
+  }
+
+  private notify(): void {
+    const waiters = [...this.changeWaiters];
+    this.changeWaiters.clear();
+    for (const waiter of waiters) waiter();
   }
 
   private settle(entry: CodeCallJournalEntry): boolean {
