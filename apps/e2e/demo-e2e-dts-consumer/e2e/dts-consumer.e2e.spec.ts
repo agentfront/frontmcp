@@ -58,6 +58,7 @@ const fixtureFiles = [
   'persistent-questions-must-compile.ts',
   'lazy-apps-must-compile.ts',
   'subpath-exports-must-compile.ts',
+  'direct-server-must-fail.ts',
 ].map((fileName) => path.join(fixtureDir, fileName));
 
 function compileFixture(withoutExpectErrors?: string): { diagnostics: FixtureDiagnostic[]; sourceFiles: string[] } {
@@ -274,6 +275,19 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
 
   it('types the transport, job/tools and workflow/tools subpaths as the root exports they re-export', () => {
     expect(describeEach(inFixtureFile('subpath-exports-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types DirectMcpServer.scope as required, so a test double or wrapper without one is rejected (#1513)', () => {
+    expect(describeEach(inFixtureFile('direct-server-must-fail.ts'))).toEqual([]);
+  });
+
+  it('fails the direct-server-must-fail.ts case once its @ts-expect-error is removed', () => {
+    const mustFail = path.join(fixtureDir, 'direct-server-must-fail.ts');
+    const failures = compileFixture(mustFail).diagnostics.filter((diagnostic) => diagnostic.fileName === mustFail);
+
+    expect(failures.map(({ summary }) => summary)).toEqual([
+      expect.stringMatching(/^TS2741: Property 'scope' is missing in type .* but required in type 'DirectMcpServer'\.$/),
+    ]);
   });
 
   it('ships declaration files that type-check with skipLibCheck disabled', () => {
