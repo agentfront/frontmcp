@@ -262,6 +262,17 @@ describe('AuthoritiesContextBuilder', () => {
       expect(ctx.user.principal).toBe('machine');
     });
 
+    it('follows the subject claimsMapping.userId resolves, and keeps an anonymous subject anonymous', () => {
+      const mapped = new AuthoritiesContextBuilder({ claimsMapping: { userId: 'uid' } });
+      const person = mapped.build({ user: { uid: 'user-1' } });
+      const anonymous = mapped.build({ user: { sub: 'anon:guest', uid: 'user-1' } });
+
+      expect([person.user.sub, person.user.principal]).toEqual(['user-1', 'person']);
+      expect(evaluateAbac(peopleOnly, person).granted).toBe(true);
+      expect([anonymous.user.sub, anonymous.user.principal]).toEqual([undefined, 'anonymous']);
+      expect(mapped.build({ user: { uid: 'svc', client_id: 'svc' } }).user.principal).toBe('machine');
+    });
+
     it('is set with a claimsResolver too', () => {
       const resolving = new AuthoritiesContextBuilder({
         claimsResolver: () => ({ roles: [], permissions: [], claims: {} }),

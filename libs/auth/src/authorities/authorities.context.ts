@@ -109,17 +109,20 @@ export function signedInSubject(rawSub: unknown, mappedSub?: unknown): string | 
 }
 
 /**
- * The kind of principal a request speaks for: the one session verification resolved (`extra.principal`), else the one
- * its claims name; `'anonymous'` for an anonymous caller.
+ * The kind of principal a request speaks for, given its signed-in `subject` (the one `claimsMapping.userId` resolves,
+ * else its own `sub`): `'anonymous'` without one; else the kind session verification resolved (`extra.principal`),
+ * else the kind its claims name, with `subject` as the subject when the claims carry no usable one.
  */
 export function principalKindOf(
   authInfo: Partial<AuthInfoLike> | undefined,
   claims: Record<string, unknown>,
+  subject: string | undefined = signedInSubject(resolveAuthUser(authInfo).sub),
 ): PrincipalKind {
-  const user = resolveAuthUser(authInfo);
-  if (signedInSubject(user.sub) === undefined) return 'anonymous';
+  if (subject === undefined) return 'anonymous';
   const given = authInfo?.extra?.['principal'];
-  return isAuthPrincipal(given) ? given.kind : detectPrincipal(claims).kind;
+  if (isAuthPrincipal(given) && given.kind !== 'anonymous') return given.kind;
+  const detected = detectPrincipal(claims);
+  return detected.kind !== 'anonymous' ? detected.kind : detectPrincipal({ ...claims, sub: subject }).kind;
 }
 
 /** The `env.*` of an evaluation context: the runtime's environment variables, read when a rule names one. */
@@ -167,13 +170,14 @@ export class AuthoritiesContextBuilder {
     // If a custom claimsResolver is provided, use it directly
     if (this.claimsResolver) {
       const resolved = this.claimsResolver(authInfo);
+      const sub = signedInSubject(resolveAuthUser(authInfo).sub);
       return {
         user: {
-          sub: signedInSubject(resolveAuthUser(authInfo).sub),
+          sub,
           roles: resolved.roles,
           permissions: resolved.permissions,
           claims: resolved.claims,
-          principal: principalKindOf(authInfo, resolveAuthUser(authInfo)),
+          principal: principalKindOf(authInfo, resolveAuthUser(authInfo), sub),
         },
         input,
         env,
@@ -223,14 +227,15 @@ export class AuthoritiesContextBuilder {
       ? resolveDotPath(rawClaims, this.claimsMapping.tenantId)
       : undefined;
 
+    const sub = signedInSubject(user.sub, mappedSub);
     return {
       user: {
-        sub: signedInSubject(user.sub, mappedSub),
+        sub,
         roles,
         permissions,
         claims: rawClaims,
         tenantId: typeof mappedTenantId === 'string' && mappedTenantId !== '' ? mappedTenantId : undefined,
-        principal: principalKindOf(authInfo, rawClaims),
+        principal: principalKindOf(authInfo, rawClaims, sub),
       },
       input,
       env,

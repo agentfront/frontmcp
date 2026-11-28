@@ -63,17 +63,21 @@ function toStringArray(value: unknown): readonly string[] {
 }
 
 /**
- * The principal of a request: the one session verification resolved (`extra.principal`), else the one the claims
- * name. An anonymous caller is always `'anonymous'`.
+ * The principal of a request with signed-in `subject` (undefined for an anonymous caller, who is always
+ * `'anonymous'`): the one session verification resolved (`extra.principal`), else the one the claims name, with
+ * `subject` as the subject when the claims carry no usable one.
  */
 function principalOf(
   source: AuthContextSourceInfo,
   rawClaims: Record<string, unknown>,
-  isAnonymous: boolean,
+  subject: string | undefined,
 ): AuthPrincipal {
   const given = source.extra?.['principal'];
-  const principal = isAuthPrincipal(given) ? given : detectPrincipal(rawClaims);
-  return Object.freeze(isAnonymous && principal.kind !== 'anonymous' ? { ...principal, kind: 'anonymous' } : principal);
+  const found = isAuthPrincipal(given) ? given : detectPrincipal(rawClaims);
+  if (subject === undefined) {
+    return Object.freeze(found.kind === 'anonymous' ? found : { ...found, kind: 'anonymous' });
+  }
+  return Object.freeze(found.kind !== 'anonymous' ? found : detectPrincipal({ ...rawClaims, sub: subject }));
 }
 
 /**
@@ -118,7 +122,7 @@ export class FrontMcpAuthContextImpl implements FrontMcpAuthContext {
     this.isAnonymous = signedInSub === undefined;
 
     // -- Principal: the one the request was verified with, else the one the claims name ----------
-    this.principal = principalOf(source, this.buildRawClaims(source), this.isAnonymous);
+    this.principal = principalOf(source, this.buildRawClaims(source), signedInSub);
 
     // -- Mode ----------------------------------------------------------
     const extraAuth = source.extra?.['authorization'] as Record<string, unknown> | undefined;
