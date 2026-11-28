@@ -272,7 +272,10 @@ posixOnly('a shared session across servers', () => {
     await session.attached;
     expect(Date.now() - started).toBeLessThan(5_000);
     expect(await whoami(client, 2)).toBe('embedded');
-    const ports = listen.mock.calls.map(([port, host]) => (host === '127.0.0.1' ? port : undefined));
+    const ports = listen.mock.calls.map((args) => {
+      const [port, host] = args as unknown[];
+      return host === '127.0.0.1' ? port : undefined;
+    });
     listen.mockRestore();
     expect(ports.filter((port) => typeof port === 'number' && port > 0)).toHaveLength(1);
     expect(await readServerRecord(sharedServerFiles('spec'))).toBeUndefined();
