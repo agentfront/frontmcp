@@ -2,8 +2,9 @@ import { registerOptionalModule } from '@frontmcp/utils';
 
 import { createTokenStorageAdapter } from '../token-storage.factory';
 
-// Mocked by its resolved path, not as a virtual module: a jest worker keeps the module id it resolved for a spec that
-// ran before this one and loaded the real package, and a virtual mock would then not apply here.
+// Mocked by its path (jest.config.cts maps it to its source), not as a virtual module: a jest worker keeps the module
+// id it resolved for a spec that ran before this one and loaded the real package, and a virtual mock would then not
+// apply here.
 jest.mock('@frontmcp/storage-sqlite', () => {
   throw new Error('@frontmcp/storage-sqlite was required');
 });
