@@ -36,9 +36,10 @@ up() {
   local mounts=()
   if [ -n "$TLS_DIR" ]; then mounts=(-v "$TLS_DIR:/tls:ro"); fi
 
+  # Published on loopback only: the nodes run without protected mode, and without a password by default.
   # The nodes' cluster bus ports (port + 10000) stay inside the container.
   docker run -d --name "$NAME" "${mounts[@]+"${mounts[@]}"}" \
-    -p "$FIRST_PORT-$LAST_PORT:$FIRST_PORT-$LAST_PORT" \
+    -p "127.0.0.1:$FIRST_PORT-$LAST_PORT:$FIRST_PORT-$LAST_PORT" \
     -e FIRST_PORT="$FIRST_PORT" -e PASSWORD="$PASSWORD" -e ANNOUNCE="$ANNOUNCE" -e TLS="${TLS_DIR:+1}" \
     --entrypoint sh "$IMAGE" -c '
       set -e
