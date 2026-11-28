@@ -591,20 +591,8 @@ that name instead.
 - **Authorization rows are named by a keyed hash.** With a Redis or SQLite `tokenStorage`, the rows of authorization codes, pending authorizations and refresh tokens are named `oauth:<type>:<HMAC-SHA256(k, value)>` (see `tokenStorage` under [Mode 3: Local](#mode-3-local)); up to 1.13 they were named by the value. Nobody is signed out: a row written before is still read under its old name, and moves under its new one when it is used (a code redeemed, a refresh token rotated or revoked). The rest expire on their own TTL: codes within 60 seconds, pending authorizations within 10 minutes, refresh tokens within 30 days. A code or refresh token is still redeemed once, also across instances and while its row moves.
 - **Finish a rolling upgrade.** An instance still on 1.13 does not find a row a 1.14 instance wrote: a code it issued, or a refresh token it issued or rotated, is refused there (`invalid_grant`), and that client signs in again.
 - **The secret the names derive from.** On a storage without its own encryption secret (Redis, or SQLite without `encryption`), the names derive from `JWT_SECRET`: changing it now also ends the stored refresh tokens, as it already ended the access tokens and the stored provider tokens. Setting `JWT_SECRET` on a server that ran without one renames the rows the same way. With SQLite `encryption`, the names derive from its `secret`, which already had to stay the same.
-- **Moving every row at once** (optional): once every instance runs 1.14, `moveLegacyRows()` moves the rows still under their old names, with the same `tokenStorage` and `JWT_SECRET` as the servers (rows moved under another secret's names are not found). It is safe to run beside the servers: each row is moved by one compare-and-delete.
-
-  ```typescript
-  import { createTokenStorageAdapter, StorageAuthorizationStore, tokenStorageKeyHashSecret } from '@frontmcp/auth';
-
-  const tokenStorage = { redis: { host: 'redis.internal', port: 6379 } }; // the servers' auth.tokenStorage
-  const storage = await createTokenStorageAdapter(tokenStorage);
-  const store = new StorageAuthorizationStore(storage, {
-    keyHashSecret: tokenStorageKeyHashSecret(tokenStorage, process.env.JWT_SECRET),
-  });
-  console.log(`moved ${await store.moveLegacyRows()} rows`);
-  await storage.disconnect();
-  ```
-
+- **No bulk move.** A row moves only when it is used: a redemption or rotation claims the old row with one compare-and-delete and writes the redeemed record under the new name, and a revocation writes the revoked record under the new name before it deletes the old row. A code or refresh token therefore never has a live row under both names. The rows of clients that stay away expire on their own TTL.
+- **Row names are not values.** A row is read for a code or token only when the record in it holds that code or token, so the name of a row is not accepted in its place.
 - **Constructing a store yourself.** `StorageAuthorizationStore` takes `keyHashSecret` in its options, and `RedisAuthorizationStore` takes `{ keyHashSecret }` as its third argument; without one, the names are hashed under a fixed key.
 
 ## Common Patterns

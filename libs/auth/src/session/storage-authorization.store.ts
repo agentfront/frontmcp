@@ -18,13 +18,7 @@
  * identical to the in-memory store's.
  */
 
-import {
-  escapeGlob,
-  StorageNotSupportedError,
-  TypedStorage,
-  type NamespacedStorage,
-  type StorageAdapter,
-} from '@frontmcp/utils';
+import { StorageNotSupportedError, TypedStorage, type NamespacedStorage, type StorageAdapter } from '@frontmcp/utils';
 
 import { AuthorizationRowNames, type AuthorizationKeyHashSecret } from './authorization-row-names';
 import {
@@ -220,24 +214,6 @@ export class StorageAuthorizationStore implements AuthorizationStore {
     // own; per-record expiry is also enforced lazily on read. Nothing to do.
   }
 
-  /**
-   * Move every row still named by its value (as up to 1.13) under its hashed name, at once rather than when each is
-   * used. A row is moved by the request that deletes it in one compare-and-delete step, so this can run beside the
-   * servers; run it once every instance runs 1.14, with the `keyHashSecret` the servers use, or the moved rows are not
-   * found. Rows already hashed, and rows that are not this store's, are left alone.
-   *
-   * @returns how many rows were moved (expired ones are deleted, and not counted).
-   */
-  async moveLegacyRows(): Promise<number> {
-    let moved = 0;
-    for (const type of Object.keys(NAMED_BY) as RecordType[]) {
-      for (const key of await this.base.keys(`${escapeGlob(this.prefix(type))}*`)) {
-        if (await this.moveLegacyRow(type, key)) moved += 1;
-      }
-    }
-    return moved;
-  }
-
   // ============================================
   // Internals
   // ============================================
@@ -327,25 +303,6 @@ export class StorageAuthorizationStore implements AuthorizationStore {
     const record = JSON.parse(raw) as T;
     if (!isClaimable(record) || !(await this.deleteIfEquals(from, raw))) return false;
     await store.set(to, update(record), this.ttl(record.expiresAt));
-    return true;
-  }
-
-  /** Move the row under `key` when it is named by its value; see {@link moveLegacyRows}. */
-  private async moveLegacyRow(type: RecordType, key: string): Promise<boolean> {
-    const raw = await this.base.get(key);
-    if (raw === null) return false;
-    let record: Record<string, unknown>;
-    try {
-      record = JSON.parse(raw) as Record<string, unknown>;
-    } catch {
-      return false;
-    }
-    const id = record[NAMED_BY[type]];
-    const expiresAt = record['expiresAt'];
-    if (typeof id !== 'string' || typeof expiresAt !== 'number' || key !== this.legacyKey(type, id)) return false;
-    if (!(await this.deleteIfEquals(key, raw)) || Date.now() > expiresAt) return false;
-    // A row already under the hashed name is the newer one: it stays.
-    await this.base.set(this.key(type, id), raw, { ...this.ttl(expiresAt), ifNotExists: true });
     return true;
   }
 

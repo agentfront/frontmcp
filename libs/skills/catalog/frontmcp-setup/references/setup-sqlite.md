@@ -586,7 +586,7 @@ The change in `src/main.ts`:
 
 ## Upgrading to 1.14
 
-- `auth.tokenStorage: { sqlite }` names the rows of authorization codes, pending authorizations and refresh tokens by a keyed hash of the value (`oauth:refresh:<HMAC-SHA256(k, token)>`), with `k` derived from `encryption.secret`, else `JWT_SECRET`. Up to 1.13 the rows were named by the code or token itself. Rows written before are still read, move under their new names when used, and the rest expire on their own TTL (at most 30 days, for a refresh token), so nobody is signed out; see `configure-auth` for the details and for moving them all at once.
+- `auth.tokenStorage: { sqlite }` names the rows of authorization codes, pending authorizations and refresh tokens by a keyed hash of the value (`oauth:refresh:<HMAC-SHA256(k, token)>`), with `k` derived from `encryption.secret`, else `JWT_SECRET`. Up to 1.13 the rows were named by the code or token itself. Rows written before are still read, move under their new names when used, and the rest expire on their own TTL (at most 30 days, for a refresh token), so nobody is signed out; see `configure-auth` for the details.
 
 ## Reference
 

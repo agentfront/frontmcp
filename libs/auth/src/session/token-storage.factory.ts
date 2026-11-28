@@ -60,9 +60,6 @@ export function isPersistentTokenStorage(config: TokenStorageConfig | undefined)
  * SQLite `encryption.secret` when the token storage has one, since it already guards that file and stays the same
  * for as long as the file can be read; otherwise `serverSecret`, the server's `JWT_SECRET`, which every instance
  * sharing the storage holds. Undefined when neither is set, and the rows are then named under a fixed key.
- *
- * A one-off `StorageAuthorizationStore.moveLegacyRows()` passes the same values the server uses, so the rows it
- * moves are found.
  */
 export function tokenStorageKeyHashSecret(
   config: TokenStorageConfig | undefined,
