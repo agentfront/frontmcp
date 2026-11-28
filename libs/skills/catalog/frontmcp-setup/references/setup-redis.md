@@ -198,6 +198,8 @@ For IAM auth, Sentinel, custom TLS, or a client your app already shares, pass it
 import { createCluster } from 'redis';
 
 const redisClient = createCluster({ rootNodes: [{ url: process.env['REDIS_URL'] }] });
+// node-redis throws an 'error' event that has no listener, which ends the process
+redisClient.on('error', (error) => console.error('[redis]', error));
 
 @FrontMcp({
   info: { name: 'my-server', version: '0.1.0' },

@@ -26,6 +26,10 @@ export const redisClient = createCluster({
   rootNodes: [{ url: process.env['REDIS_URL'] ?? 'redis://localhost:7000' }],
   defaults: { password: process.env['REDIS_AUTH_TOKEN'] },
 });
+
+// node-redis throws an 'error' event that has no listener, which ends the process. FrontMCP attaches
+// none to a client you pass in, so listen yourself.
+redisClient.on('error', (error) => console.error('[redis]', error));
 ```
 
 ```typescript
