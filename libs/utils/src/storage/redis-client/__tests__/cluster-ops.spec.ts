@@ -11,7 +11,13 @@ import {
   scanRedisKeys,
 } from '../cluster-ops';
 import { isRedisConnection, redisAdapterOptionsOf, redisConnectionOf } from '../config';
-import { detectRedisClientKind, isRedisClientInput } from '../detect';
+import {
+  detectRedisClientKind,
+  isRedisClientInput,
+  missingRedisClientMethods,
+  redisClientProblem,
+  REQUIRED_REDIS_CLIENT_METHODS,
+} from '../detect';
 import type { FrontMcpRedisClient } from '../types';
 
 /** A node holding `keys`, scanned two at a time. */
@@ -135,7 +141,19 @@ describe('detectRedisClientKind', () => {
     ['a string', 'redis://x', undefined],
   ])('%s -> %p', (_label, value, kind) => {
     expect(detectRedisClientKind(value)).toBe(kind);
-    expect(isRedisClientInput(value)).toBe(kind !== undefined);
+    // A custom object is a client to take only with every required method (see the next test)
+    expect(isRedisClientInput(value)).toBe(kind !== undefined && kind !== 'custom');
+  });
+
+  it('takes a custom client with every required method, and says what a partial one lacks', () => {
+    const full = Object.fromEntries(REQUIRED_REDIS_CLIENT_METHODS.map((name) => [name, () => undefined]));
+    expect(isRedisClientInput(full)).toBe(true);
+    expect(missingRedisClientMethods(full)).toEqual([]);
+    const { eval: _eval, ...partial } = full;
+    expect(isRedisClientInput(partial)).toBe(false);
+    expect(redisClientProblem(partial)).toBe('redis.client is missing FrontMcpRedisClient methods: eval');
+    expect(redisClientProblem({ ping() {} })).toMatch(/not a Redis client FrontMCP can use/);
+    expect(redisClientProblem(full)).toBeUndefined();
   });
 
   it('recognizes a class from another copy of the package by its shape', () => {

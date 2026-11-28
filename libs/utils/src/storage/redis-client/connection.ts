@@ -20,7 +20,12 @@ import {
   type RedisUrlSiblingFields,
 } from '../redis-url';
 import { borrowRedisClient } from './borrow';
-import { detectRedisClientKind, UNSUPPORTED_REDIS_CLIENT_MESSAGE } from './detect';
+import {
+  detectRedisClientKind,
+  incompleteRedisClientMessage,
+  missingRedisClientMethods,
+  UNSUPPORTED_REDIS_CLIENT_MESSAGE,
+} from './detect';
 import { NodeRedisClientAdapter, type NodeRedisLike } from './node-redis-adapter';
 import type {
   CreateRedisConnectionOptions,
@@ -125,6 +130,8 @@ interface SeedNode {
   password?: string;
   username?: string;
   tls?: boolean;
+  /** The URL scheme of a seed given as a URL. */
+  scheme?: 'redis' | 'rediss';
 }
 
 function parseSeedNode(node: RedisClusterNode): SeedNode {
@@ -143,6 +150,7 @@ function parseSeedNode(node: RedisClusterNode): SeedNode {
       password: read.password,
       username: read.username,
       tls: read.tls,
+      scheme: read.tls ? 'rediss' : 'redis',
     };
   }
   // `host:port`, `[ipv6]:port`, or a bare host
@@ -188,11 +196,20 @@ function clusterEndpoint(settings: RedisConnectionSettings): { nodes: SeedNode[]
     );
   }
 
-  // A node URL's credentials and TLS apply when the config itself states none.
-  const seedWith = seeds.find((seed) => seed.password !== undefined || seed.tls);
-  const nodePassword = fromUrl?.password ?? password ?? seedWith?.password;
-  const nodeUsername = fromUrl?.username ?? seedWith?.username;
-  const nodeTls = Boolean(fromUrl?.tls) || tls === true || Boolean(seedWith?.tls);
+  // Every node of a cluster is reached the same way, so the seed list is read as a whole: one scheme,
+  // one set of credentials. TLS is on when the url, the config or any seed asks for it, so a seed list
+  // never connects in cleartext to a node another seed reaches over TLS.
+  const schemes = new Set(seeds.map((seed) => seed.scheme).filter((scheme) => scheme !== undefined));
+  if (schemes.size > 1) {
+    throw new StorageConfigError(
+      'redis',
+      'redis.cluster.nodes mixes redis:// and rediss:// seeds; a cluster reaches every node the same way: ' +
+        'use rediss:// for all of them (TLS), or redis:// for all',
+    );
+  }
+  const nodePassword = fromUrl?.password ?? password ?? oneSeedValue(seeds, 'password');
+  const nodeUsername = fromUrl?.username ?? oneSeedValue(seeds, 'username');
+  const nodeTls = Boolean(fromUrl?.tls) || tls === true || seeds.some((seed) => seed.tls === true);
   return {
     nodes: seeds.map(({ host: seedHost, port: seedPort }) => ({ host: seedHost, port: seedPort })),
     node: {
@@ -201,6 +218,23 @@ function clusterEndpoint(settings: RedisConnectionSettings): { nodes: SeedNode[]
       ...(nodeTls ? { tls: {} } : {}),
     },
   };
+}
+
+/** The one value the seed URLs give for a credential, refusing seeds that disagree. */
+function oneSeedValue(seeds: SeedNode[], field: 'password' | 'username'): string | undefined {
+  const values = new Set(seeds.map((seed) => seed[field]).filter((value) => value !== undefined));
+  if (values.size > 1) {
+    throw new StorageConfigError(
+      'redis',
+      `redis.cluster.nodes give different ${field}s; a cluster takes one for every node`,
+    );
+  }
+  return values.values().next().value;
+}
+
+/** Options without the ones set to undefined, which must not clear what the settings say (TLS from a rediss:// seed). */
+function definedOptions(options: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(options).filter(([, value]) => value !== undefined));
 }
 
 /** An ioredis Cluster from connection settings. */
@@ -213,7 +247,7 @@ function openIoredisCluster(
 
   const clusterLevel: Record<string, unknown> = { lazyConnect: BASE_OPTIONS.lazyConnect };
   const nodeLevel: Record<string, unknown> = { maxRetriesPerRequest: BASE_OPTIONS.maxRetriesPerRequest, ...node };
-  for (const [name, value] of Object.entries(overrides)) {
+  for (const [name, value] of Object.entries(definedOptions(overrides))) {
     (CLUSTER_LEVEL_OPTIONS.has(name) ? clusterLevel : nodeLevel)[name] = value;
   }
 
@@ -227,7 +261,7 @@ function openIoredisCluster(
       reachedOnce || times <= INITIAL_CLUSTER_RETRIES ? clusterRetryDelay(times) : null,
     ...clusterLevel,
     ...userClusterOptions,
-    redisOptions: { ...nodeLevel, ...(userNodeOptions as Record<string, unknown> | undefined) },
+    redisOptions: { ...nodeLevel, ...definedOptions((userNodeOptions ?? {}) as Record<string, unknown>) },
   });
   cluster.once('ready', () => {
     reachedOnce = true;
@@ -276,6 +310,7 @@ export function adoptRedisClient(
 ): { client: FrontMcpRedisClient; kind: RedisClientKind; isCluster: boolean } {
   const kind = detectRedisClientKind(client);
   if (kind === 'node-redis' || kind === 'node-redis-cluster') {
+    refuseNodeRedisKeyPrefix(client);
     const isCluster = kind === 'node-redis-cluster';
     return {
       client: new NodeRedisClientAdapter(client as NodeRedisLike, { cluster: isCluster, owned: false }),
@@ -284,8 +319,29 @@ export function adoptRedisClient(
     };
   }
   if (kind === undefined && options.strict) throw new StorageConfigError('redis', UNSUPPORTED_REDIS_CLIENT_MESSAGE);
+  if (kind === 'custom' && options.strict) {
+    const missing = missingRedisClientMethods(client);
+    if (missing.length > 0) throw new StorageConfigError('redis', incompleteRedisClientMessage(missing));
+  }
   const adopted = borrowRedisClient(client) as FrontMcpRedisClient;
   return { client: adopted, kind: kind ?? 'custom', isCluster: adopted.isCluster === true };
+}
+
+/**
+ * node-redis (v5+) can prefix every key it sends (`keyPrefix`), but only in its own commands: the
+ * adapter sends raw `sendCommand` calls, which node-redis passes through unprefixed. Applying the
+ * prefix in the adapter would mean knowing the key positions of every command, the keys of every
+ * script and the patterns of every SCAN, and a mistake there would read or write other keys without
+ * any error, so a prefixed client is refused with a way out instead.
+ */
+function refuseNodeRedisKeyPrefix(client: object): void {
+  const { _keyPrefix: keyPrefix } = client as { _keyPrefix?: unknown };
+  if (keyPrefix === undefined || keyPrefix === null || String(keyPrefix) === '') return;
+  throw new StorageConfigError(
+    'redis',
+    `redis.client is a node-redis client with keyPrefix "${String(keyPrefix)}", which FrontMCP's commands would not get: ` +
+      "create the client without keyPrefix and set the keyPrefix of the FrontMCP option instead (redis.keyPrefix, or the store's own)",
+  );
 }
 
 /** Whether connection settings are given beside a `client`. */

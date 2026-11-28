@@ -246,6 +246,34 @@ describe('createRedisConnection', () => {
       expect(MockCluster.mock.calls[0][1]).toMatchObject({ redisOptions: { password: 'pw' } });
     });
 
+    it('turns TLS on for every node when any seed is rediss://, with the config saying tls: false or not', () => {
+      createRedisConnection({ host: 'seed', tls: false, cluster: { nodes: ['rediss://:pw@a:7000', 'b:7001'] } });
+      expect(MockCluster.mock.calls[0][1]).toMatchObject({ redisOptions: { password: 'pw', tls: {} } });
+    });
+
+    it('refuses seeds that mix redis:// and rediss://, so no node is reached in cleartext', () => {
+      expect(() =>
+        createRedisConnection({ cluster: { nodes: ['redis://:secret@a:6379', 'rediss://b:6380'] } }),
+      ).toThrow(/mixes redis:\/\/ and rediss:\/\/ seeds/);
+      expect(MockCluster).not.toHaveBeenCalled();
+    });
+
+    it('refuses seeds that give different passwords', () => {
+      expect(() =>
+        createRedisConnection({ cluster: { nodes: ['rediss://:one@a:6379', 'rediss://:two@b:6380'] } }),
+      ).toThrow('redis.cluster.nodes give different passwords; a cluster takes one for every node');
+    });
+
+    it('keeps the TLS of a rediss:// seed when ioredisOptions carry tls: undefined', () => {
+      createRedisConnection({
+        cluster: { nodes: ['rediss://a:7000'] },
+        ioredisOptions: { tls: undefined, keyPrefix: 'p:' },
+      });
+      const options = MockCluster.mock.calls[0][1] as { redisOptions: Record<string, unknown>; keyPrefix: string };
+      expect(options.redisOptions['tls']).toEqual({});
+      expect(options.keyPrefix).toBe('p:');
+    });
+
     it('takes credentials and TLS from a node url when the config has none', () => {
       createRedisConnection({ cluster: { nodes: ['rediss://user:pw@10.0.0.1:7000'] } });
       expect(MockCluster.mock.calls[0][1]).toMatchObject({
@@ -316,9 +344,22 @@ describe('createRedisConnection', () => {
       expect(cluster.client.isCluster).toBe(true);
     });
 
-    it('takes any object with get, set and del as a FrontMcpRedisClient', () => {
-      const custom = { get: jest.fn(), set: jest.fn(), del: jest.fn() };
-      expect(createRedisConnection({ client: custom })).toMatchObject({ kind: 'custom', owned: false });
+    it('takes an object with every FrontMcpRedisClient method as a client of its own', () => {
+      expect(createRedisConnection({ client: fullCustomClient() })).toMatchObject({ kind: 'custom', owned: false });
+    });
+
+    it('refuses a client of its own that lacks a required method, naming what is missing', () => {
+      const { ping: _ping, scan: _scan, ...partial } = fullCustomClient();
+      expect(() => createRedisConnection({ client: partial })).toThrow(
+        'redis.client is missing FrontMcpRedisClient methods: scan, ping',
+      );
+    });
+
+    it('refuses a node-redis client with a keyPrefix its raw commands would not get', () => {
+      const prefixed = { ...nodeRedisShaped(true), _keyPrefix: 'app:' };
+      expect(() => createRedisConnection({ client: prefixed })).toThrow(/node-redis client with keyPrefix "app:"/);
+      expect(() => adoptRedisClient({ ...nodeRedisShaped(false), _keyPrefix: 'app:' })).toThrow(StorageConfigError);
+      expect(createRedisConnection({ client: { ...nodeRedisShaped(false), _keyPrefix: '' } }).kind).toBe('node-redis');
     });
 
     it('refuses something that is not a Redis client', () => {
@@ -337,6 +378,35 @@ describe('createRedisConnection', () => {
     });
   });
 });
+
+/** An object with every method FrontMcpRedisClient requires. */
+function fullCustomClient() {
+  return Object.fromEntries(
+    [
+      'get',
+      'set',
+      'del',
+      'exists',
+      'expire',
+      'ttl',
+      'incr',
+      'decr',
+      'incrby',
+      'mget',
+      'eval',
+      'scan',
+      'publish',
+      'subscribe',
+      'unsubscribe',
+      'on',
+      'removeListener',
+      'ping',
+      'quit',
+      'disconnect',
+      'duplicate',
+    ].map((name) => [name, jest.fn()]),
+  ) as Record<string, jest.Mock>;
+}
 
 describe('adoptRedisClient', () => {
   it('uses an unrecognized object as given unless strict', () => {

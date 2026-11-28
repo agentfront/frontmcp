@@ -32,8 +32,45 @@ function isNodeRedisShape(value: Shape): boolean {
   );
 }
 
-/** The commands without which no Redis-backed store can run. */
+/** The commands without which no Redis-backed store can run: what marks an object as a client at all. */
 const CORE_COMMANDS = ['get', 'set', 'del'] as const;
+
+/**
+ * Every method {@link FrontMcpRedisClient} requires. A client of your own must have all of them to be
+ * taken by `redis: { client }`: a feature that calls a missing one would fail later with a TypeError.
+ */
+export const REQUIRED_REDIS_CLIENT_METHODS = [
+  'get',
+  'set',
+  'del',
+  'exists',
+  'expire',
+  'ttl',
+  'incr',
+  'decr',
+  'incrby',
+  'mget',
+  'eval',
+  'scan',
+  'publish',
+  'subscribe',
+  'unsubscribe',
+  'on',
+  'removeListener',
+  'ping',
+  'quit',
+  'disconnect',
+  'duplicate',
+] as const;
+
+/** The required FrontMcpRedisClient methods a custom client lacks; empty for an ioredis or node-redis client. */
+export function missingRedisClientMethods(value: unknown): string[] {
+  const kind = detectRedisClientKind(value);
+  if (kind === undefined) return [...REQUIRED_REDIS_CLIENT_METHODS];
+  if (kind !== 'custom') return [];
+  const shape = value as Shape;
+  return REQUIRED_REDIS_CLIENT_METHODS.filter((name) => typeof shape[name] !== 'function');
+}
 
 /**
  * What kind of Redis client `value` is, or `undefined` for something that is not one.
@@ -53,9 +90,24 @@ export function detectRedisClientKind(value: unknown): RedisClientKind | undefin
   return hasFunctions(value, CORE_COMMANDS) ? 'custom' : undefined;
 }
 
-/** Whether `value` is a client `redis: { client }` can take. */
+/**
+ * Whether `value` is a client `redis: { client }` can take: an ioredis or node-redis client or
+ * cluster, or an object with every method {@link REQUIRED_REDIS_CLIENT_METHODS} lists.
+ */
 export function isRedisClientInput(value: unknown): boolean {
-  return detectRedisClientKind(value) !== undefined;
+  return detectRedisClientKind(value) !== undefined && missingRedisClientMethods(value).length === 0;
+}
+
+/** Why `value` can't be taken as `redis: { client }`, or undefined when it can. */
+export function redisClientProblem(value: unknown): string | undefined {
+  if (detectRedisClientKind(value) === undefined) return UNSUPPORTED_REDIS_CLIENT_MESSAGE;
+  const missing = missingRedisClientMethods(value);
+  return missing.length > 0 ? incompleteRedisClientMessage(missing) : undefined;
+}
+
+/** Why a custom client was refused: the FrontMcpRedisClient methods it lacks. */
+export function incompleteRedisClientMessage(missing: readonly string[]): string {
+  return `redis.client is missing FrontMcpRedisClient methods: ${missing.join(', ')}`;
 }
 
 /** Why a `client` was refused. */
