@@ -12,7 +12,16 @@ import * as path from 'node:path';
 import { createSharedServerNonce, deriveSharedServerKeys } from '@frontmcp/auth';
 
 import { openStream, post } from '../../__test-utils__/helpers/shared-session-client';
-import { App, LogLevel, Tool, ToolContext, type FrontMcpConfigInput } from '../../common';
+import {
+  App,
+  HttpRoute,
+  HttpRouteContext,
+  LogLevel,
+  Tool,
+  ToolContext,
+  type FrontMcpConfigInput,
+  type HttpOutput,
+} from '../../common';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { SHARED_DRAIN_PATH, SHARED_IDENTIFY_PATH, SHARED_STATE_HEADER } from '../shared-endpoint';
 import { readServerRecord, sharedServerFiles, type SharedServerRecord } from '../shared-files';
@@ -35,6 +44,48 @@ const config: FrontMcpConfigInput = {
   apps: [ExitApp],
   logging: { level: LogLevel.Off, enableConsole: false },
 };
+
+/** A page that takes longer to answer than the server's idle time. */
+@HttpRoute({ method: 'GET', path: '/slow-page', auth: 'public' })
+class SlowPageRoute extends HttpRouteContext {
+  async handle(): Promise<HttpOutput> {
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    return { kind: 'text', status: 200, body: 'the page', contentType: 'text/plain; charset=utf-8' };
+  }
+}
+
+@App({ id: 'pages', name: 'Pages', tools: [SlowTool], routes: [SlowPageRoute] })
+class PagesApp {}
+
+const routesConfig: FrontMcpConfigInput = {
+  ...config,
+  apps: [PagesApp],
+  http: {
+    port: 1,
+    routes: [
+      {
+        method: 'GET',
+        path: '/slow-plain',
+        handler: async (_request, response) => {
+          await new Promise((resolve) => setTimeout(resolve, 1_000));
+          response.status(200).json({ plain: true });
+        },
+      },
+    ],
+  },
+};
+
+/** GET a path of a shared server on loopback HTTP, on a connection of its own. */
+function get(record: SharedServerRecord, urlPath: string): Promise<{ status: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const request = http.get({ host: '127.0.0.1', port: record.port, path: urlPath, agent: false }, (response) => {
+      let text = '';
+      response.on('data', (chunk: Buffer) => (text += chunk.toString()));
+      response.on('end', () => resolve({ status: response.statusCode ?? 0, body: text }));
+    });
+    request.on('error', reject);
+  });
+}
 
 const create = (parsed: ConstructorParameters<typeof FrontMcpInstance>[0]) => new FrontMcpInstance(parsed);
 
@@ -235,6 +286,42 @@ posixOnly('a shared local server exiting on its own', () => {
     expect(exit).not.toHaveBeenCalled();
     await waitUntil(() => exit.mock.calls.length > 0, 'the idle server to exit');
     servers.pop();
+  });
+
+  describe.each([
+    ['an http.routes handler', '/slow-plain', '"plain":true'],
+    ['an @HttpRoute', '/slow-page', 'the page'],
+  ])('while %s answers a request', (_, routePath, answered) => {
+    it('is not idle, and exits idle once it answered', async () => {
+      const record = await serve('http', { idleTimeoutMs: 300 }, { config: routesConfig });
+      const pending = get(record, routePath);
+      await new Promise((resolve) => setTimeout(resolve, 700));
+      expect(fs.existsSync(sharedServerFiles('spec').recordFile)).toBe(true);
+
+      const answer = await pending;
+      expect(answer.status).toBe(200);
+      expect(answer.body).toContain(answered);
+      await waitUntil(() => exit.mock.calls.length > 0, 'the idle server to exit');
+      servers.pop();
+    });
+
+    it('lets it finish when stopped, and refuses a new one as exiting', async () => {
+      const record = await serve('http', {}, { config: routesConfig });
+      const pending = get(record, routePath);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      const closed = (servers.pop() as SharedServerHandle).close();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const refused = await get(record, routePath);
+      const answer = await pending;
+      await closed;
+
+      expect(refused.status).toBe(503);
+      expect({ status: answer.status, answered: answer.body.includes(answered) }).toEqual({
+        status: 200,
+        answered: true,
+      });
+    });
   });
 
   it('is not idle while a session holds its notification stream, and is once the session closed it', async () => {
