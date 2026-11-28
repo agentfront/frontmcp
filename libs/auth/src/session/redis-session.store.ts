@@ -1,7 +1,15 @@
 // auth/session/redis-session.store.ts
 import type { Redis } from 'ioredis';
 
-import { randomUUID, redisAdapterOptionsOf, RedisStorageAdapter, type RedisClientInput } from '@frontmcp/utils';
+import {
+  countRedisSubscribers,
+  isRedisClusterClient,
+  randomUUID,
+  redisAdapterOptionsOf,
+  RedisStorageAdapter,
+  type FrontMcpRedisClient,
+  type RedisClientInput,
+} from '@frontmcp/utils';
 
 import type { AuthLogger } from '../common/auth-logger.interface';
 import { SessionIdEmptyError } from '../errors/auth-internal.errors';
@@ -42,6 +50,8 @@ export class RedisSessionStore implements SessionStore {
   private readonly defaultTtlMs: number;
   private readonly logger?: AuthLogger;
   private externalInstance = false;
+  /** Set once a channel was subscribed: the subscriber connection is then this store's to close. */
+  private subscribed = false;
 
   // Security features
   private readonly security: SessionSecurityConfig;
@@ -324,9 +334,33 @@ export class RedisSessionStore implements SessionStore {
    * Disconnect from Redis (only if we created the connection)
    */
   async disconnect(): Promise<void> {
-    if (!this.externalInstance) {
+    // The adapter never closes a client it was given; it closes the subscriber connection it opened
+    if (!this.externalInstance || this.subscribed) {
       await this.storage.disconnect();
     }
+  }
+
+  /**
+   * Publish `message` to the instances sharing this store, on a channel of its Redis named under the
+   * store's key prefix. Resolves how many connections listen on the channel; on a cluster that is every
+   * node's listeners, as a cluster's PUBLISH counts only those of the node it ran on.
+   */
+  async publish(channel: string, message: string): Promise<number> {
+    await this.ensureConnected();
+    const received = await this.storage.publish(channel, message);
+    const client = this.storage.getClient() as unknown as FrontMcpRedisClient | undefined;
+    if (!client || !isRedisClusterClient(client)) return received;
+    return countRedisSubscribers(client, `${this.keyPrefix}${channel}`);
+  }
+
+  /**
+   * Listen on a channel of this store's Redis, named under its key prefix, on a connection of its own.
+   * Resolves once subscribed, with a function that stops listening.
+   */
+  async subscribe(channel: string, onMessage: (message: string) => void): Promise<() => Promise<void>> {
+    await this.ensureConnected();
+    this.subscribed = true;
+    return this.storage.subscribe(channel, (message) => onMessage(message));
   }
 
   /**
