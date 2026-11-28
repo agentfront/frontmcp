@@ -1,9 +1,20 @@
+import type { WorkKind } from '@frontmcp/sdk';
+
 /** The requests whose entries a stall can be blamed on. */
 export type CallMethod = 'tools/call' | 'resources/read' | 'prompts/get';
 
+/**
+ * What else a stall can be blamed on: a work span the server opened, for an `@HttpRoute` request (`'http'`), a `@Duty`
+ * run (`'duty'`) or a `@Worker` run (`'worker'`), or one `trackWork()` opened (`'work'`).
+ */
+export type WorkMethod = WorkKind;
+
 export interface CallIdentity {
-  method: CallMethod;
-  /** The entry's full name, its app's id first (`reports:export_rows`). */
+  method: CallMethod | WorkMethod;
+  /**
+   * The entry's full name, its app's id first (`reports:export_rows`); for a work span, the route's method and
+   * declared path, the duty's or worker's name, or the `trackWork()` label.
+   */
   entry: string;
   /** The first 12 hex characters of the session's tracing id, never the session id itself. */
   session?: string;
@@ -25,11 +36,7 @@ export class InFlightCalls {
    * `stillRunning()` then returns a promise (an execution a timeout left running), when that promise settles.
    */
   async track(call: CallIdentity, body: () => Promise<void>, stillRunning: () => unknown = () => undefined) {
-    const record: CallRecord = { ...call, startedAt: this.now() };
-    this.records.add(record);
-    const end = () => {
-      record.endedAt ??= this.now();
-    };
+    const end = this.begin(call);
     try {
       await body();
     } finally {
@@ -37,6 +44,15 @@ export class InFlightCalls {
       if (execution instanceof Promise) execution.then(end, end);
       else end();
     }
+  }
+
+  /** Starts `call` in flight now; it ends when the function this returns is first called. */
+  begin(call: CallIdentity): () => void {
+    const record: CallRecord = { ...call, startedAt: this.now() };
+    this.records.add(record);
+    return () => {
+      record.endedAt ??= this.now();
+    };
   }
 
   running(): CallRecord[] {

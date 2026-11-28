@@ -128,6 +128,7 @@ export type {
   CallIdentity,
   CallMethod,
   CallRecord,
+  WorkMethod,
   GcPause,
   StallDetectorOptions,
   StallReport,
