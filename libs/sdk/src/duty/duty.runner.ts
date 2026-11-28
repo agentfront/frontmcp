@@ -12,7 +12,7 @@ import { describeThrown } from './describe-thrown';
 import { LeaseHolder } from './lease-holder';
 
 /** The store operations a duty needs; the SQLite, Redis and memory stores run each one atomically. */
-export type DutyLeaseStorage = Pick<NamespacedStorage, 'set' | 'ttl' | 'expireIfEquals' | 'deleteIfEquals'>;
+export type DutyLeaseStorage = Pick<NamespacedStorage, 'get' | 'set' | 'ttl' | 'expireIfEquals' | 'deleteIfEquals'>;
 
 export type DutyLogger = Pick<FrontMcpLogger, 'verbose' | 'info' | 'warn' | 'error'>;
 
@@ -25,6 +25,11 @@ interface DutyRunnerCommonOptions {
   logger: DutyLogger;
   /** `scheduledAt` names the run: the cron time it is for, or when an interval's run was taken. */
   run(context: DutyRunContext, scheduledAt: number): unknown;
+  /**
+   * Whether this process prefers to run the duty (`@Duty({ prefer })`): `true` takes the lease over from a process
+   * that is not preferred; `false` hands it to a preferred one. Unset, preferences are not looked at.
+   */
+  prefer?: boolean;
 }
 
 interface IntervalDutyRunnerOptions extends DutyRunnerCommonOptions {
@@ -87,6 +92,8 @@ export class DutyRunner {
       logger,
       onAcquired: () => this.hold(),
       onLost: () => this.stopRunning(),
+      prefer: options.prefer,
+      settled: () => this.inFlight?.done ?? Promise.resolve(),
     });
   }
 

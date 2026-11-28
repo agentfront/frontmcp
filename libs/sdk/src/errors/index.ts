@@ -221,6 +221,7 @@ export { InvalidDecoratorMetadataError, HookTargetNotDefinedError } from './deco
 export {
   ClusterScopeNeedsRedisError,
   DutyNameConflictError,
+  DutyLeaseKeyError,
   InvalidDutyCronError,
   UnsafeDutyStoreError,
 } from './duty.errors';
