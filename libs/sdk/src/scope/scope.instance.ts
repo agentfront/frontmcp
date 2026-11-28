@@ -76,6 +76,7 @@ import { OffloadService } from '../offload/offload.service';
 import { agentToolMetadata, findUnenforcedMetadata } from '../plugin/enforced-metadata.check';
 import PluginRegistry, { type PluginScopeInfo } from '../plugin/plugin.registry';
 import PromptRegistry from '../prompt/prompt.registry';
+import { borrowProviders } from '../provider/borrow-providers';
 import ProviderRegistry from '../provider/provider.registry';
 import { MaterializedResources } from '../resource/materialized/materialized-resources';
 import ResourceRegistry from '../resource/resource.registry';
@@ -319,7 +320,8 @@ export class Scope extends ScopeEntry {
     // FrontMcpContextStorage, FrontMcpContextProvider) write last and cannot
     // be accidentally shadowed by a user provider that happens to declare the
     // same token.
-    const userProviders = rec.metadata.providers ?? [];
+    // On a container, the server-level providers it built are used as they are, and its others are added
+    const userProviders = borrowProviders(rec.metadata.providers ?? [], globalProviders.container?.server, true);
     this.scopeProviders = new ProviderRegistry([...userProviders, ...this.defaultScopeProviders], globalProviders, {
       distributedMode,
       providerCaching,

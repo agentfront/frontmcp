@@ -3,6 +3,8 @@ import { guardConfigSchema, type GuardConfig } from '@frontmcp/guard';
 import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import type { ServerManifest } from '../../manifest/server-manifest.schema';
+import { containerHandleOf } from '../../provider/container-handle';
+import type { FrontMcpContainer } from '../../provider/create-container';
 import { MAX_CONCURRENT_TASKS_PER_SESSION, type TaskListSource } from '../../task/task.types';
 import type { AdapterType, AppType, PluginType, ProviderType, ResourceType, SkillType, ToolType } from '../interfaces';
 import {
@@ -73,6 +75,11 @@ import { MAX_JOB_TIMER_MS, timerLimitMessage } from './job.metadata';
 import { outputPolicySchema, type OutputPolicy } from './output-policy';
 import type { WidgetServingMode } from './tool-ui.metadata';
 import { widgetServingModeSchema } from './ui-serving-mode';
+
+/** `container`: a container `createContainer()` made, kept as it is. */
+const containerOptionSchema = z.custom<FrontMcpContainer>((value) => containerHandleOf(value) !== undefined, {
+  message: 'container must be a container createContainer() made',
+});
 
 export interface FrontMcpBaseMetadata {
   info: ServerInfoOptions;
@@ -188,6 +195,15 @@ export interface FrontMcpBaseMetadata {
    * @default { shutdownHookTimeoutMs: 3000 }
    */
   lifecycle?: LifecycleOptionsInput;
+
+  /**
+   * A container `createContainer()` made, which the server starts on: each provider the container built (its
+   * server-level providers, and the own providers of its apps) is used as it is instead of being built again, and the
+   * container's other server-level providers are added to `providers`. The first server that serves runs their
+   * `onReady()`, and starts their `@Duty` and `@Worker` work unless the container did (`runBackground`); their
+   * `onShutdown()` runs once neither the container nor a server on it holds them. A disposed container is refused.
+   */
+  container?: FrontMcpContainer;
 
   /**
    * The worker-thread pool that runs `this.offload()` calls and the reads of `worker: true` resources (Node only).
@@ -783,6 +799,7 @@ export const frontMcpBaseSchema = z.object({
   providers: z.array(annotatedFrontMcpProvidersSchema).optional().default([]),
   authProvidersVault: authProvidersVaultOptionsSchema.optional(),
   lifecycle: lifecycleOptionsSchema.optional(),
+  container: containerOptionSchema.optional(),
   offload: offloadOptionsSchema.optional(),
   devtools: devtoolsOptionsSchema.optional(),
   tools: z.array(annotatedFrontMcpToolsSchema).optional().default([]),
@@ -1076,6 +1093,7 @@ const frontMcpLiteSchema = z.object({
   providers: z.array(annotatedFrontMcpProvidersSchema).optional().default([]),
   authProvidersVault: authProvidersVaultOptionsSchema.optional(),
   lifecycle: lifecycleOptionsSchema.optional(),
+  container: containerOptionSchema.optional(),
   offload: offloadOptionsSchema.optional(),
   devtools: devtoolsOptionsSchema.optional(),
   tools: z.array(annotatedFrontMcpToolsSchema).optional().default([]),

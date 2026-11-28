@@ -46,6 +46,7 @@ import { isManifestMode } from '../front-mcp/manifest-mode.flag';
 import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
 import { Scope } from '../scope';
 import { STATELESS_SESSION_ID } from '../transport/transport.types';
+import { type ContainerHandle } from './container-handle';
 import {
   bootstrapProvider,
   DEFAULT_SHUTDOWN_HOOK_TIMEOUT_MS,
@@ -80,6 +81,13 @@ export interface ProviderRegistryOptions {
   providerCaching?: boolean;
   /** How long each provider's `onShutdown()` may run; a registry with a parent and no value follows its parent. */
   shutdownHookTimeoutMs?: number;
+  /**
+   * The lifecycle bookkeeping of the tree, for the root registry: `createContainer()` keeps its own, and a server
+   * started on the container shares it. A registry with a parent uses its parent's.
+   */
+  sharedLifecycles?: WeakMap<object, SharedLifecycle>;
+  /** The container a server starts on (`@FrontMcp({ container })`); a registry with a parent follows its parent. */
+  container?: ContainerHandle;
 }
 
 interface HierarchyDef {
@@ -145,6 +153,10 @@ export default class ProviderRegistry
   private readonly heldEntries: LifecycleEntry[] = [];
   /** The `@Duty` and `@Worker` lifecycles whose ready hooks run here, with the token each was built for. */
   private readonly backgroundEntries: Array<{ token: Token; lifecycle: BackgroundLifecycle }> = [];
+  /** The instances of the container this server starts on, which it readies once, unless a server on it did. */
+  private readonly borrowedEntries: Array<{ entry: LifecycleEntry; background: boolean }> = [];
+  /** The container a server of this tree starts on. */
+  readonly container?: ContainerHandle;
   /** Each instance's shared lifecycle in this tree: the first holder bootstraps and readies it, the last shuts it down. */
   private readonly sharedLifecycles: WeakMap<object, SharedLifecycle>;
   /** How long each shutdown hook may run (`lifecycle.shutdownHookTimeoutMs`), in ms. */
@@ -166,7 +178,8 @@ export default class ProviderRegistry
       !configured && parentProviders
         ? parentProviders.sessionCacheEnabled
         : shouldCacheProviders(options?.distributedMode, options?.providerCaching);
-    this.sharedLifecycles = parentProviders?.sharedLifecycles ?? new WeakMap();
+    this.sharedLifecycles = parentProviders?.sharedLifecycles ?? options?.sharedLifecycles ?? new WeakMap();
+    this.container = parentProviders?.container ?? options?.container;
     this.shutdownHookTimeoutMs =
       options?.shutdownHookTimeoutMs ?? parentProviders?.shutdownHookTimeoutMs ?? DEFAULT_SHUTDOWN_HOOK_TIMEOUT_MS;
 
@@ -369,7 +382,13 @@ export default class ProviderRegistry
     await lifecycle.bootstrapped;
     if (!shared) this.lifecycleEntries.push(entry);
     if (!shared && background) this.backgroundEntries.push({ token, lifecycle: background });
+    if (shared && this.container?.owned.has(instance)) this.borrowedEntries.push({ entry, background: !!background });
     this.heldEntries.push(entry);
+  }
+
+  /** The lifecycle hooks of the instances this registry holds, its `@Duty` and `@Worker` lifecycles included. */
+  heldLifecycles(): readonly object[] {
+    return this.heldEntries.map(({ instance }) => instance);
   }
 
   /**
@@ -411,8 +430,23 @@ export default class ProviderRegistry
 
   private async readyHereAndBelow(logger: LifecycleLogger): Promise<unknown[]> {
     const failures = await readyProviders(this.lifecycleEntries, logger);
+    failures.push(...(await readyProviders(this.borrowedDue(), logger)));
     for (const child of [...this.childRegistries]) failures.push(...(await child.runReadyHooks(logger)));
     return failures;
+  }
+
+  /**
+   * The container's instances this server readies now: those no server on the container readied yet, but the `@Duty`
+   * and `@Worker` providers a container that runs its background work started itself. Each is marked readied.
+   */
+  private borrowedDue(): LifecycleEntry[] {
+    const container = this.container;
+    if (!container) return [];
+    const due = this.borrowedEntries.filter(
+      ({ entry, background }) => !container.readied.has(entry.instance) && !(background && container.backgroundStarted),
+    );
+    for (const { entry } of due) container.readied.add(entry.instance);
+    return due.map(({ entry }) => entry);
   }
 
   /** Stop the `@Duty` and `@Worker` work readied here, without their hooks; throws at the first stop to time out. */

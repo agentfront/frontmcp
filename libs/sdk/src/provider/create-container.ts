@@ -19,6 +19,8 @@ import {
 import { ProviderNotAvailableError } from '../errors';
 import { FrontMcpConfig } from '../front-mcp/front-mcp.tokens';
 import LoggerRegistry from '../logger/logger.registry';
+import { CONTAINER_HANDLE, type ContainerHandle } from './container-handle';
+import { type SharedLifecycle } from './provider.lifecycle';
 import ProviderRegistry from './provider.registry';
 
 export interface CreateContainerOptions {
@@ -44,7 +46,11 @@ export interface CreateContainerOptions {
   redis?: RedisOptionsInput;
 }
 
-/** The providers of a server, built without its tools, resources, prompts, flows or transport. */
+/**
+ * The providers of a server, built without its tools, resources, prompts, flows or transport. A server, a fetch
+ * handler or a direct server started with `{ container }` in its config uses its instances instead of building them
+ * again.
+ */
 export interface FrontMcpContainer {
   /** The GLOBAL provider for `token`, server-level first, then each app's in order. */
   get<T>(token: Token<T>): T;
@@ -74,35 +80,43 @@ const createContainerOptionsSchema = z
 
 /**
  * Build the providers a server would (same tokens, scopes and `onBootstrap()` order) and nothing else; no `onReady()`,
- * and no duty or worker runs unless `runBackground` asks.
+ * and no duty or worker runs unless `runBackground` asks. A server started on it (`@FrontMcp({ container })`) uses
+ * these instances: the first that serves runs their `onReady()` (and starts their duties and workers, unless the
+ * container did), and `dispose()` runs their `onShutdown()` once no server on it holds them.
  */
 export async function createContainer(options: CreateContainerOptions): Promise<FrontMcpContainer> {
   const { providers, apps, logging, lifecycle, ...parsed } = createContainerOptionsSchema.parse(options);
   const runBackground = parsed.runBackground === true || parsed.runDuties === true;
   const config = { ...options, logging, lifecycle, runBackground };
+  const lifecycles = new WeakMap<object, SharedLifecycle>();
   const root = new ProviderRegistry(
     [{ name: 'frontmcp:config', provide: FrontMcpConfig, useValue: config }],
     undefined,
-    { shutdownHookTimeoutMs: lifecycle?.shutdownHookTimeoutMs },
+    { shutdownHookTimeoutMs: lifecycle?.shutdownHookTimeoutMs, sharedLifecycles: lifecycles },
   );
   await root.ready;
   const loggers = new LoggerRegistry(root);
   await loggers.ready;
   const logger = root.get(FrontMcpLogger);
 
+  let disposed = false;
   const dispose = async (): Promise<void> => {
+    disposed = true;
     await root.runShutdownHooks(logger);
     root.dispose();
   };
 
   const registries: ProviderRegistry[] = [];
+  let serverProviders: ProviderRegistry;
+  const appRegistries = new Map<unknown, ProviderRegistry>();
   try {
-    const serverProviders = new ProviderRegistry(providers, root);
+    serverProviders = new ProviderRegistry(providers, root);
     registries.push(serverProviders);
     await serverProviders.ready;
     for (const app of apps.filter(isClass)) {
       const appProviders = new ProviderRegistry(collectAppMetadata(app).providers ?? [], serverProviders);
       registries.push(appProviders);
+      appRegistries.set(app, appProviders);
       await appProviders.ready;
     }
     if (runBackground) {
@@ -140,5 +154,19 @@ export async function createContainer(options: CreateContainerOptions): Promise<
     }
   };
 
-  return { get, tryGet, dispose };
+  const owned = new WeakSet<object>(registries.flatMap((registry) => registry.heldLifecycles()));
+  const handle: ContainerHandle = {
+    server: serverProviders.getAllSingletons(),
+    apps: new Map([...appRegistries].map(([app, registry]) => [app, registry.getAllSingletons()])),
+    lifecycles,
+    owned,
+    readied: new WeakSet(),
+    backgroundStarted: runBackground,
+    get disposed() {
+      return disposed;
+    },
+  };
+  const container: FrontMcpContainer = { get, tryGet, dispose };
+  Object.defineProperty(container, CONTAINER_HANDLE, { value: handle, enumerable: false });
+  return container;
 }
