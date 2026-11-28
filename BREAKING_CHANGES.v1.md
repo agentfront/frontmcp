@@ -1381,7 +1381,7 @@ FrontMcpInstance.runShared({ ...config, http }, { key }); // MCP at /mcp, routes
 
 **Codemod available:** no
 
-## BC-066: 1.14: cancel_job cancels workflow runs, and a shutdown interrupts them
+## BC-064: 1.14: cancel_job cancels workflow runs, and a shutdown interrupts them
 
 **Package:** `@frontmcp/sdk` | **Category:** change | **Severity:** low
 

@@ -671,7 +671,7 @@
     "codemod": "no"
   },
   {
-    "id": "BC-066",
+    "id": "BC-064",
     "title": "1.14: cancel_job cancels workflow runs, and a shutdown interrupts them",
     "package": "@frontmcp/sdk",
     "category": "change",
