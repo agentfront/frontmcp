@@ -223,15 +223,15 @@ export async function readSharedServerKey(
 
 /** `value` as text for a message, whatever it is: a bigint, a circular object or a null-prototype one included. */
 function describeValue(value: unknown): string {
-  try {
-    const json = JSON.stringify(value);
-    if (json !== undefined) return json;
-  } catch {
-    // Not JSON: it is described as a string, or by its type
-  }
-  try {
+  if (typeof value === 'string') return `"${value.slice(0, 80)}"`;
+  if (value === null || ['undefined', 'number', 'boolean', 'bigint', 'symbol'].includes(typeof value))
     return String(value);
-  } catch {
-    return `a value of type ${typeof value}`;
-  }
+  if (Array.isArray(value)) return `an array of ${value.length} item(s)`;
+  if (typeof value === 'object')
+    return `an object with keys ${
+      Object.keys(value as object)
+        .slice(0, 5)
+        .join(', ') || '(none)'
+    }`;
+  return `a value of type ${typeof value}`;
 }

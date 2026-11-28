@@ -189,10 +189,10 @@ describe('a function key', () => {
     bareCircular['self'] = bareCircular;
     const answers: Array<[unknown, string]> = [
       [10n, 'answered 10'],
-      [circular, 'answered [object Object]'],
-      [bare, 'answered {}'],
+      [circular, 'answered an object with keys self'],
+      [bare, 'answered an object with keys (none)'],
       [Symbol('key'), 'answered Symbol(key)'],
-      [bareCircular, 'answered a value of type object'],
+      [bareCircular, 'answered an object with keys self'],
     ];
     for (const [answer, said] of answers) {
       await expect(readSharedServerKey(() => answer as string)).resolves.toEqual({
@@ -203,7 +203,7 @@ describe('a function key', () => {
       readSharedServerKey(() => {
         throw Object.create(null);
       }),
-    ).resolves.toEqual({ error: 'the key function failed ({})' });
+    ).resolves.toEqual({ error: 'the key function failed (an object with keys (none))' });
     await expect(
       readSharedServerKey(() => {
         throw 10n;
