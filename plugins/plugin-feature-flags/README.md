@@ -180,6 +180,10 @@ class BetaReportTool extends ToolContext {}
 FeatureFlagPlugin.init({ adapter: 'custom', adapterInstance: flags });
 ```
 
+To map many entries to flags in one place, return the sources from the server's `enabled` instead of setting `enabled`
+on each entry: `@FrontMcp({ enabled: (entry) => (entry.name.startsWith('beta_') ? featureFlagSource(flags, 'beta') : undefined) })`.
+Create each source once and return the same one for every entry of a flag.
+
 ## `this.featureFlags`
 
 `this.featureFlags` is available in tools, resources and prompts, and evaluates flags for the current caller:
