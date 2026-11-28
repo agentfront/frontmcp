@@ -99,7 +99,9 @@ export class WorkflowStepExecutor {
   /**
    * Run one attempt, racing a timer. On a timeout the attempt is rejected and its flow aborted: a job
    * not started yet never starts, and a started one sees `this.signal` aborted while its flow ends as
-   * failed (its `Did('execute')` hooks don't run). The timer does not stop `execute()` itself.
+   * failed (its `Did('execute')` hooks don't run). The timer does not stop `execute()` itself. A run
+   * that stops aborts the attempt too, and the step ends once the attempt's flow did (its job's
+   * `cleanup` and its admission slot included), with the run's reason.
    */
   private executeWithTimeout(
     job: JobEntry,
@@ -120,8 +122,11 @@ export class WorkflowStepExecutor {
       };
       const timer =
         timeout > 0 ? setTimeout(() => stop(new WorkflowJobTimeoutError(job.name, timeout)), timeout) : undefined;
-      // The run stopped (cancelled or interrupted): its attempt is aborted with that reason
-      const stopped = () => stop(run?.reason);
+      // The run stopped (cancelled or interrupted): its attempt is aborted with that reason, and waited for
+      const stopped = () => {
+        clearTimeout(timer);
+        abandon.abort(run?.reason);
+      };
       run?.addEventListener('abort', stopped, { once: true });
       const settle = () => {
         clearTimeout(timer);
@@ -146,7 +151,7 @@ export class WorkflowStepExecutor {
         })
         .catch((err) => {
           settle();
-          reject(err);
+          reject(run?.aborted ? run.reason : err);
         });
     });
   }

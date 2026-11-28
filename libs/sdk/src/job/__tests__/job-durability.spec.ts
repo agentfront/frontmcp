@@ -238,8 +238,31 @@ class SlowCleanupHangJob extends JobContext {
   }
 }
 
+@Job({
+  name: 'slow_cleanup_step_job',
+  inputSchema: {},
+  outputSchema: {},
+  timeout: 0,
+  cleanup: {
+    run: async (_job, reason) => {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      cleanups.push(`step:${reason}`);
+    },
+    timeoutMs: 5_000,
+  },
+})
+class SlowCleanupStepJob extends JobContext {
+  async execute(): Promise<Record<string, never>> {
+    entered.push('slow-cleanup-step');
+    return new Promise(() => undefined);
+  }
+}
+
 @Workflow({ name: 'gated_flow', steps: [{ id: 'wait', jobName: 'progress_job', timeout: 60_000 }] })
 class GatedFlow {}
+
+@Workflow({ name: 'slow_cleanup_flow', steps: [{ id: 'hang', jobName: 'slow_cleanup_step_job', timeout: 60_000 }] })
+class SlowCleanupFlow {}
 
 @Workflow({
   name: 'gated_then_quick_flow',
@@ -253,7 +276,7 @@ class GatedThenQuickFlow {}
 @App({
   id: 'durable',
   name: 'Durable',
-  workflows: [GatedFlow, GatedThenQuickFlow],
+  workflows: [GatedFlow, GatedThenQuickFlow, SlowCleanupFlow],
   jobs: [
     HangJob,
     DefaultTimeoutJob,
@@ -270,6 +293,7 @@ class GatedThenQuickFlow {}
     PartingProgressJob,
     ChattyHangJob,
     SlowCleanupHangJob,
+    SlowCleanupStepJob,
   ],
 })
 class DurableApp {}
@@ -599,6 +623,22 @@ describe('durable jobs', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
       expect((await store.getRun(runId))?.state).toBe('cancelled');
       await manager.dispose();
+    });
+
+    it('waits for the cleanup of the steps it interrupts before it is disposed', async () => {
+      const scope = scopeOf(server);
+      const store = new MemoryJobStateStore();
+      const manager = new JobExecutionManager(store, scope.logger, undefined, scope);
+      const workflow = scope.workflows?.findByName('slow_cleanup_flow');
+      const jobs = scope.jobs;
+      if (!workflow || !jobs) throw new Error('the workflow is not registered');
+      const { runId } = await manager.executeWorkflow(workflow, jobs, { background: true });
+      await waitFor(() => entered.includes('slow-cleanup-step'), 'the step to start');
+
+      await manager.dispose();
+
+      expect(cleanups).toEqual(['step:interrupt']);
+      expect((await store.getRun(runId))?.state).toBe('interrupted');
     });
 
     it('interrupts the workflow runs it runs when it shuts down', async () => {
