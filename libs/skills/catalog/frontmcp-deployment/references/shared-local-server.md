@@ -285,8 +285,11 @@ FrontMcpInstance.runShared(serverConfig, {
 - **When the session starts**, it reads the function once; one that fails rejects `runShared()` with
   `InvalidSharedServerOptionsError`. The server process a session starts serves the key the session named, without
   reading the function.
-- A session whose server goes away after a move reaches the next server of its current key by the same rules,
-  running the server in its own process when none can be reached (see Fallback).
+- A session whose server goes away after a move reaches the next server of its current key by the same rules. When
+  none can be reached or started (from `entries`), it moves back to its first key, logging
+  `[frontmcp shared] warn moving back to the shared server "<first key>": the server of key "<key>" can't be reached (<reason>)`:
+  to that key's server, or, as at the start, the server it runs in its own process (see Fallback). Only the first key
+  runs in the session's own process, since that is the key its config is.
 - Server-side state of the session (subscriptions, session memory) stays on the old server, as when a server is
   replaced.
 
