@@ -603,5 +603,16 @@
     "new": "// illegal_access at the script's own line; no toolInput",
     "migration": "`illegal_access` messages name the script's own lines; before, they named lines of the enclave's transformed code (2 or more past the script's line). A line that is none of the script's is omitted. `tool_error` results never include `toolInput`; the schema field is optional and deprecated.",
     "codemod": "no"
+  },
+  {
+    "id": "BC-058",
+    "title": "1.14: baseLayout styles inline, and builtInAuthPageHeaders() sends the inline CSP, by default",
+    "package": "@frontmcp/auth",
+    "category": "change",
+    "severity": "medium",
+    "old": "baseLayout(html, { title }); // Tailwind CDN + Inter\nbuiltInAuthPageHeaders(); // BUILT_IN_AUTH_PAGE_CSP (allows jsDelivr, Google Fonts)",
+    "new": "baseLayout(html, { title }); // inline stylesheet, system fonts\nbuiltInAuthPageHeaders(); // INLINE_AUTH_PAGE_CSP\n// opt back in to the CDN:\nbaseLayout(html, { title, inlineStyles: false });\nbuiltInAuthPageHeaders({ csp: 'cdn' });",
+    "migration": "A custom page built with `baseLayout` (or `createLayout`, `authLayout`, `centeredCardLayout`, `wideLayout`, `extraWideLayout`) inlines FrontMCP's stylesheet and a system font stack by default (`inlineStyles: true`), as the built-in sign-in and consent pages do since 1.13.2, and `builtInAuthPageHeaders()` sends `INLINE_AUTH_PAGE_CSP`, which allows no third-party host. Up to 1.13 the layout loaded the Tailwind CDN script from jsDelivr and Inter from Google Fonts, and the headers sent `BUILT_IN_AUTH_PAGE_CSP`, which allows them. The inline stylesheet covers only the Tailwind classes the built-in pages use, and `theme.customCss` is plain CSS there. A page that needs other classes or Inter sets `inlineStyles: false` on the layout and sends `builtInAuthPageHeaders({ csp: 'cdn' })`; `includeTailwind` and `includeFonts` apply only with `inlineStyles: false`. `{ csp: 'inline' }` and `{ csp: false }` work as before.",
+    "codemod": "no"
   }
 ]
