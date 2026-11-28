@@ -97,23 +97,6 @@ describe('MachineJobAdmission', () => {
     slot.release();
   });
 
-  it('renews the lease of a running attempt, so a long attempt keeps its slot', async () => {
-    const store = new MemoryJobStateStore();
-    const probes = { ...FAST, leaseSeconds: 1 };
-    const first = new MachineJobAdmission({ concurrency: 1, scope: 'machine' }, store, undefined, probes);
-    const second = new MachineJobAdmission({ concurrency: 1, scope: 'machine' }, store, undefined, probes);
-    const running = first.slot();
-    await running.acquire('report');
-
-    const waiting = second.slot();
-    const acquiring = waiting.acquire('report');
-    expect(await admitted(acquiring, 2_500)).toBe(false);
-    expect(running.lost?.aborted).toBe(false);
-    running.release();
-    expect(await admitted(acquiring, 2_000)).toBe(true);
-    waiting.release();
-  });
-
   it("counts only this machine's attempts", async () => {
     const store = new MemoryJobStateStore();
     const here = new MachineJobAdmission({ concurrency: 1, scope: 'machine' }, store, undefined, FAST);
@@ -168,33 +151,6 @@ describe('MachineJobAdmission', () => {
     quickSlot.release();
     expect(await admitted(slowAcquiring, 2_000)).toBe(true);
     slowSlot.release();
-  });
-
-  it('refuses at maxWaitMs while the job store does not answer, and frees a slot its late answer took', async () => {
-    const store = new MemoryJobStateStore();
-    let answer: () => void = () => undefined;
-    const answered = new Promise<void>((resolve) => (answer = resolve));
-    const lateStore: AdmissionLeaseStore = {
-      readLeases: (key) => store.readLeases(key),
-      swapLeases: async (key, expected, next, ttlSeconds) => {
-        const swapped = await store.swapLeases(key, expected, next, ttlSeconds);
-        await answered;
-        return swapped;
-      },
-    };
-    const admission = new MachineJobAdmission(
-      { concurrency: 1, maxWaitMs: 100, scope: 'machine' },
-      lateStore,
-      undefined,
-      FAST,
-    );
-    const startedAt = Date.now();
-
-    await expect(admission.slot().acquire('report')).rejects.toThrow('the job store did not answer in time');
-    expect(Date.now() - startedAt).toBeLessThan(1_000);
-    expect(await leasesOf(store)).toHaveLength(1);
-    answer();
-    await waitFor(async () => (await leasesOf(store)).length === 0, 'the late slot to be freed');
   });
 
   it('stops waiting on a job store that never answers when the attempt is aborted', async () => {
@@ -264,6 +220,87 @@ describe('MachineJobAdmission', () => {
       'the job store could not be read (the store is gone)',
     );
     expect(reported[0]).toBe('Job admission: the job store failed: the store is gone');
+  });
+
+  describe('on a clock the test moves', () => {
+    beforeEach(() => {
+      jest.useFakeTimers({ now: 1_700_000_000_000 });
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    /** Settle what the store's answers start, without moving the clock. */
+    async function settle(): Promise<void> {
+      for (let round = 0; round < 20; round++) await jest.advanceTimersByTimeAsync(0);
+    }
+
+    /** The outcome of `acquiring` once it settles: 'admitted', or what it rejected with. */
+    function outcomeOf(acquiring: Promise<void>): { value?: unknown } {
+      const outcome: { value?: unknown } = {};
+      acquiring.then(
+        () => (outcome.value = 'admitted'),
+        (error: unknown) => (outcome.value = error),
+      );
+      return outcome;
+    }
+
+    it('refuses at maxWaitMs while the job store does not answer, and frees a slot its late answer took', async () => {
+      const store = new MemoryJobStateStore();
+      let wrote: () => void = () => undefined;
+      const written = new Promise<void>((resolve) => (wrote = resolve));
+      let answer: () => void = () => undefined;
+      const answered = new Promise<void>((resolve) => (answer = resolve));
+      const lateStore: AdmissionLeaseStore = {
+        readLeases: (key) => store.readLeases(key),
+        swapLeases: async (key, expected, next, ttlSeconds) => {
+          const swapped = await store.swapLeases(key, expected, next, ttlSeconds);
+          wrote();
+          await answered;
+          return swapped;
+        },
+      };
+      const admission = new MachineJobAdmission(
+        { concurrency: 1, maxWaitMs: 100, scope: 'machine' },
+        lateStore,
+        undefined,
+        FAST,
+      );
+
+      const outcome = outcomeOf(admission.slot().acquire('report'));
+      await written;
+      await jest.advanceTimersByTimeAsync(99);
+      expect(outcome.value).toBeUndefined();
+      await jest.advanceTimersByTimeAsync(1);
+      await settle();
+      expect(outcome.value).toBeInstanceOf(JobAdmissionTimeoutError);
+      expect((outcome.value as Error).message).toContain('the job store did not answer in time');
+      expect(await leasesOf(store)).toHaveLength(1);
+
+      answer();
+      await settle();
+      expect(await leasesOf(store)).toEqual([]);
+    });
+
+    it('renews the lease of a running attempt, so a long attempt keeps its slot', async () => {
+      const store = new MemoryJobStateStore();
+      const probes = { ...FAST, leaseSeconds: 1 };
+      const first = new MachineJobAdmission({ concurrency: 1, scope: 'machine' }, store, undefined, probes);
+      const second = new MachineJobAdmission({ concurrency: 1, scope: 'machine' }, store, undefined, probes);
+      const running = first.slot();
+      await running.acquire('report');
+
+      const waiting = second.slot();
+      const outcome = outcomeOf(waiting.acquire('report'));
+      await jest.advanceTimersByTimeAsync(5_000);
+      expect(outcome.value).toBeUndefined();
+      expect(running.lost?.aborted).toBe(false);
+      running.release();
+      await jest.advanceTimersByTimeAsync(100);
+      expect(outcome.value).toBe('admitted');
+      waiting.release();
+    });
   });
 
   describe('on a SQLite job store two processes share', () => {
