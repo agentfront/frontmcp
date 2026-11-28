@@ -143,8 +143,10 @@ record names another process, of its own transport and `info.name`. So a quiet s
 newer server that replaced its own. A server that was stopped is not started again by a quiet session: it is left
 to the session's next request.
 
-A shared session that runs the server in its own process gets no channel event: that server is built per request
-and offers no notification stream.
+A shared session that runs the server in its own process gets the channel events of that server: since 1.14 it
+listens on a socket or loopback port of its own (`bootEmbeddedServer()` in `shared/shared-embedded.ts`), and the
+session opens its notification stream there as on the shared server. Only when the socket path of its own would be
+longer than a socket address holds is it served per request, with no stream.
 
 ### HTTP: declaration required
 

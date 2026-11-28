@@ -30,7 +30,7 @@ global rate limit, a same-origin check on mutations, people or bearer auth, the 
 - The caller is an MCP client: write a tool or a resource (`create-tool`, `create-resource`)
 - A raw handler is enough (a webhook, a file download): `http.routes` in `frontmcp-config` (`configure-http`)
 - A signed webhook only starts a workflow: give the workflow `trigger: 'webhook'` (`create-workflow`)
-- The server runs only over stdio or `createDirect()`: routes need an HTTP adapter
+- The server runs only over stdio or `createDirect()`: routes need an HTTP adapter (a shared local server, `runShared()`, has one: see `shared-local-server` in `frontmcp-deployment`)
 
 > **Decision:** Use `@HttpRoute` when a person, through a browser or a script, reads or changes what your tools work on.
 
