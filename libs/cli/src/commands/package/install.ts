@@ -123,9 +123,9 @@ export async function runInstall(opts: ParsedArgs): Promise<void> {
     if (!fs.existsSync(path.join(installDir, 'package.json'))) {
       await runTool(packageManagerCommand('npm', ['init', '-y', '--silent']), { cwd: installDir });
     }
-    await runTool(packageManagerCommand('npm', ['install', ...packagesToInstall, '--save', '--silent']), {
-      cwd: installDir,
-    });
+    // A file: spec points into tmpDir, which is deleted below: --install-links installs a copy, not a symlink.
+    const installArgs = ['install', ...packagesToInstall, '--save', '--install-links', '--silent'];
+    await runTool(packageManagerCommand('npm', installArgs), { cwd: installDir });
     await installOptionalPackages(runtimePackages.optional, installDir);
 
     // 6. Set up SQLite data dir if needed
@@ -178,7 +178,7 @@ export async function runInstall(opts: ParsedArgs): Promise<void> {
 async function installOptionalPackages(specs: string[], installDir: string): Promise<void> {
   for (const spec of specs) {
     try {
-      await runTool(packageManagerCommand('npm', ['install', spec, '--save-optional', '--silent']), {
+      await runTool(packageManagerCommand('npm', ['install', spec, '--save-optional', '--install-links', '--silent']), {
         cwd: installDir,
       });
     } catch (err) {

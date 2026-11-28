@@ -402,6 +402,39 @@ describe('runInstall', () => {
       expect(installArgs.filter((arg) => arg.startsWith('better-sqlite3'))).toEqual(['better-sqlite3']);
     });
 
+    it('installs file: packages from the fetched source as copies, which outlive its deletion', async () => {
+      writePackage({ name: 'demo-app', bundle: 'bundle.js' }, { 'bundle.js': '1;' });
+      for (const vendored of ['vendor/better-sqlite3', 'vendor/storage-sqlite']) {
+        fs.mkdirSync(path.join(packageDir, vendored), { recursive: true });
+      }
+      fs.writeFileSync(
+        path.join(packageDir, 'package.json'),
+        JSON.stringify({
+          dependencies: { 'better-sqlite3': 'file:./vendor/better-sqlite3' },
+          optionalDependencies: { '@frontmcp/storage-sqlite': 'file:./vendor/storage-sqlite' },
+        }),
+        'utf-8',
+      );
+
+      await install();
+
+      const installCalls = (runCmd as jest.Mock).mock.calls.filter(
+        ([cmd, args]) => cmd === 'npm' && args[0] === 'install',
+      );
+      expect(installCalls.map(([, args]) => args)).toEqual([
+        expect.arrayContaining([
+          `better-sqlite3@file:${path.join(packageDir, 'vendor/better-sqlite3')}`,
+          '--save',
+          '--install-links',
+        ]),
+        expect.arrayContaining([
+          `@frontmcp/storage-sqlite@file:${path.join(packageDir, 'vendor/storage-sqlite')}`,
+          '--save-optional',
+          '--install-links',
+        ]),
+      ]);
+    });
+
     it('installs the externalized runtime packages next to the bundle', async () => {
       writePackage({ name: 'demo-app', bundle: 'bundle.js' }, { 'bundle.js': '1;' });
 
@@ -455,7 +488,7 @@ describe('runInstall', () => {
       expect(installCalls[0][1].some((arg: string) => arg.startsWith('@frontmcp/storage-sqlite@'))).toBe(false);
       expect(installCalls[1]).toEqual([
         'npm',
-        ['install', '@frontmcp/storage-sqlite@^1.8.7', '--save-optional', '--silent'],
+        ['install', '@frontmcp/storage-sqlite@^1.8.7', '--save-optional', '--install-links', '--silent'],
         { cwd: installDir },
       ]);
     });
