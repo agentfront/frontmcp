@@ -320,8 +320,9 @@ class KeepDataFile {
 - A preferred process marks the lease as wanted (`<key>:prefer`, holding its id for as long as a lease lasts, renewed
   at each lease check) and contends for it as usual.
 - A holder that is not preferred sees the mark at its next lease check (every third of `leaseMs`): it stops, aborts its
-  run in flight and waits for it to end, then releases the lease, logging
-  `Duty "<name>" hands its lease over to a preferred process`. The preferred process takes the lease at its next check.
+  run in flight and waits for it to end, renewing the lease meanwhile and starting no run, then releases the lease,
+  logging `Duty "<name>" hands its lease over to a preferred process`. The preferred process takes the lease at its next
+  check, so it never starts while the run it took over from still runs, however long that run takes to end.
 - While a preferred process wants the lease, a process that is not preferred doesn't take it, even when it is free.
 - A preferred process that stops removes its mark, so another takes the duty over at once; one that dies leaves its
   mark to expire with its lease (`leaseMs`).

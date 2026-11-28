@@ -45,6 +45,8 @@ export class LeaseHolder {
   private settled = false;
   private reportedHeldElsewhere = false;
   private leaseCheck?: Promise<void>;
+  /** The hand-over to a preferred process, while what ran under the lease ends: the lease is renewed meanwhile. */
+  private handingOver?: Promise<void>;
   private leaseTimer?: ReturnType<typeof setTimeout>;
   private leaseDeadline?: ReturnType<typeof setTimeout>;
 
@@ -87,6 +89,7 @@ export class LeaseHolder {
     this.settled = true;
     clearTimeout(this.leaseTimer);
     await this.leaseCheck;
+    await this.handingOver;
     clearTimeout(this.leaseDeadline);
     // A preferred process that stops no longer wants the lease: the others take it at once
     if (this.options.prefer === true) {
@@ -134,8 +137,10 @@ export class LeaseHolder {
     let nextCheckMs = this.options.leaseMs / 3;
     try {
       if (this.options.prefer === true && !this.stopped) await this.markPreferred();
-      if (this.held && (await this.preferredElsewhere())) {
-        await this.handOver();
+      if (this.handingOver) {
+        await this.options.storage.expireIfEquals(this.options.key, this.id, this.leaseSeconds);
+      } else if (this.held && (await this.preferredElsewhere())) {
+        this.handOver();
       } else if (this.held) {
         if (!(await this.renew())) this.lose('lost its lease; another process runs it now');
       } else if (!this.stopped) {
@@ -168,14 +173,21 @@ export class LeaseHolder {
     return marked !== null && marked !== this.id;
   }
 
-  /** Stop what runs under the lease, wait for it to end, and release the lease to the preferred process. */
-  private async handOver(): Promise<void> {
+  /**
+   * Stop what runs under the lease, and release the lease to the preferred process once that ended; the checks renew
+   * it meanwhile, and start nothing under it.
+   */
+  private handOver(): void {
     this.held = false;
     clearTimeout(this.leaseDeadline);
     this.options.onLost();
-    await this.options.settled?.();
-    await this.options.storage.deleteIfEquals(this.options.key, this.id);
-    this.options.logger.info(`${this.options.label} hands its lease over to a preferred process`);
+    this.handingOver = (async () => {
+      await this.options.settled?.();
+      await this.options.storage.deleteIfEquals(this.options.key, this.id);
+      this.options.logger.info(`${this.options.label} hands its lease over to a preferred process`);
+    })()
+      .catch((error: unknown) => this.reportStoreFailure(error))
+      .finally(() => (this.handingOver = undefined));
   }
 
   /** Write the lease if no one holds it, then renew it to learn whether this holder's id is stored. */

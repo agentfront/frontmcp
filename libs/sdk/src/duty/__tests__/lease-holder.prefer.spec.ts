@@ -84,6 +84,36 @@ describe('LeaseHolder with prefer', () => {
     expect(await storage.get(KEY)).toBe(preferred.holder.id);
   });
 
+  it('keeps renewing the lease while the work it hands over outlasts the lease, and starts no new work meanwhile', async () => {
+    let finishWork: () => void = () => undefined;
+    const work = new Promise<void>((resolve) => (finishWork = resolve));
+    const other = probe(false, () => work);
+    const preferred = probe(true);
+    await start(other, preferred);
+
+    await jest.advanceTimersByTimeAsync(LEASE_MS * 2);
+    expect(other.events).toContain(`stopped at ${LEASE_MS / 3}`);
+    expect(preferred.holder.holding).toBe(false);
+    expect(await storage.get(KEY)).toBe(other.holder.id);
+    expect(other.events.filter((event) => event.startsWith('acquired'))).toEqual(['acquired at 0']);
+
+    finishWork();
+    await jest.advanceTimersByTimeAsync(LEASE_MS / 3);
+    expect(preferred.holder.holding).toBe(true);
+    expect(other.holder.holding).toBe(false);
+  });
+
+  it('hands the lease over at once when the work under it ends at once', async () => {
+    const other = probe(false, () => Promise.resolve());
+    const preferred = probe(true);
+    await start(other, preferred);
+
+    await jest.advanceTimersByTimeAsync(LEASE_MS / 3);
+    expect(await storage.get(KEY)).not.toBe(other.holder.id);
+    await jest.advanceTimersByTimeAsync(LEASE_MS / 3);
+    expect(preferred.holder.holding).toBe(true);
+  });
+
   it('leaves a free lease to the preferred process while it wants it', async () => {
     const preferred = probe(true);
     await start(preferred);
