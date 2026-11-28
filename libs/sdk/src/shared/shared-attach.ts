@@ -163,6 +163,7 @@ async function connect(
       replaceOlder: options.replaceOlder,
       budgetMs: options.attachBudgetMs,
       mayStart: mayStartServerOf(options, key),
+      startsOwnVersion: key === options.key,
       spawnServer: spawnerOf(options, key),
       openLock: async () => {
         const storage = await openStartLockStorage(files);

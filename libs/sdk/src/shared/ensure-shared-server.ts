@@ -62,6 +62,8 @@ export interface EnsureSharedServerOptions {
   budgetMs: number;
   /** Whether it may start, or replace, a server; without it, it only attaches to one that runs. @default true */
   mayStart?: boolean;
+  /** Whether the server it starts runs its own version, so it may drain an older one first: only its own entry does. */
+  startsOwnVersion?: boolean;
   openLock(): Promise<StartLockHandle>;
   spawnServer(startLockHolder: string): SpawnedServer;
   pollMs?: number;
@@ -120,10 +122,13 @@ function skewOf(found: FoundServer, options: EnsureSharedServerOptions): { embed
     };
   }
   if (order >= 0) return 'attach';
-  if (options.replaceOlder) return 'replace';
-  return {
-    embedded: `the shared server runs version ${version}, older than this session's ${options.version}, and replaceOlder is off`,
-  };
+  const older = `the shared server runs version ${version}, older than this session's ${options.version}`;
+  if (!options.replaceOlder) return { embedded: `${older}, and replaceOlder is off` };
+  // Draining it is safe only when the server started next is known to run a version the session takes
+  if (options.startsOwnVersion === false) {
+    return { embedded: `${older}, and the entry that would replace it may run an older one, so it is left running` };
+  }
+  return 'replace';
 }
 
 /**

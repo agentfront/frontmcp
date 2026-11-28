@@ -97,6 +97,22 @@ posixOnly('ensureSharedServer', () => {
     expect(openLock).not.toHaveBeenCalled();
   });
 
+  it('leaves an older server running when the server it would start may run an older version too', async () => {
+    const secret = createSharedServerSecret();
+    const older = await startRecordedServer(secret, 77, { version: '0.9.0' });
+    const openLock = jest.fn();
+    const spawnServer = jest.fn();
+
+    expect(await ensureSharedServer(options({ startsOwnVersion: false, openLock, spawnServer }))).toEqual({
+      embedded:
+        "the shared server runs version 0.9.0, older than this session's 1.0.0, and the entry that would replace it " +
+        'may run an older one, so it is left running',
+    });
+    expect(older.requests.map(({ path: at }) => at)).not.toContain(SHARED_DRAIN_PATH);
+    expect(openLock).not.toHaveBeenCalled();
+    expect(spawnServer).not.toHaveBeenCalled();
+  });
+
   describe('when it may not start a server', () => {
     it('waits for one to prove itself, and takes no start lock', async () => {
       const secret = createSharedServerSecret();
