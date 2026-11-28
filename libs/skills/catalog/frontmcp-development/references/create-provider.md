@@ -434,8 +434,9 @@ const direct = await FrontMcpInstance.createDirect({ ...serverConfig, container 
   `@Duty` and `@Worker` work, unless the container started it (`runBackground: true`).
 - A server's shutdown leaves them running. `dispose()` runs their `onShutdown()` once no server on the container still
   holds them; when the container is disposed first, the last server to shut down runs it.
-- A disposed container is refused with `ContainerDisposedError` (`CONTAINER_DISPOSED`), and a `container` that
-  `createContainer()` did not make with `container must be a container createContainer() made`.
+- A disposed container is refused with `ContainerDisposedError` (`CONTAINER_DISPOSED`), also when it is disposed while
+  a server on it is still starting, and a `container` that `createContainer()` did not make with
+  `container must be a container createContainer() made`.
 - The instances were built with the container's config: a provider that injects `FrontMcpConfig` or `FrontMcpLogger`
   got the container's.
 
