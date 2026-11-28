@@ -25,7 +25,7 @@ import { App, LogLevel, Tool, ToolContext, type FrontMcpConfigInput } from '../.
 import { SharedServerStartError } from '../../errors';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { attachSharedSession, type AttachSharedSessionOptions } from '../shared-attach';
-import { runEmbeddedServer } from '../shared-embedded';
+import { bootEmbeddedServer } from '../shared-embedded';
 import { SHARED_DRAIN_PATH, SHARED_IDENTIFY_PATH } from '../shared-endpoint';
 import { prepareSharedDirectory, readServerRecord, sharedServerFiles, type SharedServerRecord } from '../shared-files';
 import { serveShared, type ServeSharedOptions, type SharedServerHandle } from '../shared-serve';
@@ -84,7 +84,7 @@ function sessionOptions(
     version: '1.0.0',
     input,
     output,
-    embed: () => runEmbeddedServer(config, 'spec', create),
+    bootEmbedded: () => bootEmbeddedServer(config, sharedOptions(transport), create),
     ...overrides,
   };
 }
@@ -227,7 +227,7 @@ posixOnly('a shared local server', () => {
       const session = attachSharedSession(
         sessionOptions(transport, input, output, {
           spawnServer: () => ({ exitReason: 'it exited with code 1' }),
-          embed: () => Promise.reject(new Error('the app failed to start')),
+          bootEmbedded: () => Promise.reject(new Error('the app failed to start')),
         }),
       );
       const client = clientOf(input, output);
@@ -415,12 +415,12 @@ posixOnly('a shared local server', () => {
       expect((await post(record, SHARED_IDENTIFY_PATH, {}, { nonce: 'short' })).status).toBe(400);
     });
 
-    it('refuses a request from a web page: any Origin, or a Host that is not loopback', async () => {
+    it('refuses a request from a web page of another origin, or with a Host that is not loopback', async () => {
       const record = await serve('http');
       const { token } = deriveSharedServerKeys(record.secret);
       const credential = { authorization: `Bearer ${token}` };
 
-      for (const origin of ['https://evil.example', `http://127.0.0.1:${record.port}`, 'null']) {
+      for (const origin of ['https://evil.example', `http://127.0.0.1:${(record.port ?? 0) + 1}`, 'null']) {
         expect((await post(record, record.path, { ...credential, origin }, initialize)).status).toBe(403);
         expect(
           (await post(record, SHARED_IDENTIFY_PATH, { origin }, { nonce: createSharedServerNonce() })).status,
@@ -429,6 +429,16 @@ posixOnly('a shared local server', () => {
       expect(
         (await post(record, record.path, { ...credential, host: `evil.example:${record.port}` }, initialize)).status,
       ).toBe(403);
+    });
+
+    it('takes a request from a page of its own origin, which still needs the token for MCP', async () => {
+      const record = await serve('http');
+      const { token } = deriveSharedServerKeys(record.secret);
+      for (const origin of [`http://127.0.0.1:${record.port}`, `http://localhost:${record.port}`]) {
+        expect((await post(record, record.path, { origin }, initialize)).status).toBe(401);
+        const answer = await post(record, record.path, { authorization: `Bearer ${token}`, origin }, initialize);
+        expect(answer.status).toBe(200);
+      }
     });
 
     it('listens on loopback only', async () => {

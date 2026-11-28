@@ -25,7 +25,7 @@ import {
 import { App, FlowHooksOf, LogLevel, Tool, ToolContext, type FrontMcpConfigInput } from '../../common';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { attachSharedSession, type AttachSharedSessionOptions, type SharedSession } from '../shared-attach';
-import { runEmbeddedServer } from '../shared-embedded';
+import { bootEmbeddedServer } from '../shared-embedded';
 import { readServerRecord, sharedServerFiles, writeServerRecord } from '../shared-files';
 import { serveShared, type SharedServerHandle } from '../shared-serve';
 import { parseSharedServerOptions } from '../shared-server.options';
@@ -128,7 +128,7 @@ posixOnly('a shared session across servers', () => {
       version: '1.0.0',
       input,
       output,
-      embed: () => runEmbeddedServer(configOf('embedded'), 'spec', create),
+      bootEmbedded: () => bootEmbeddedServer(configOf('embedded'), options, create),
       spawnServer: (holder) => {
         if (!serves) throw new Error('no server should be started');
         void serve(transport, serves, jest.fn(), holder);
@@ -260,7 +260,7 @@ posixOnly('a shared session across servers', () => {
     ]);
   });
 
-  it('runs the server itself, with no listener, once its attach budget runs out, announced once', async () => {
+  it('runs the server itself, on a loopback port of its own and with no record, once its attach budget runs out, announced once', async () => {
     const listen = jest.spyOn(net.Server.prototype, 'listen');
     const started = Date.now();
     const { session, client } = attach('http', {
@@ -272,8 +272,13 @@ posixOnly('a shared session across servers', () => {
     await session.attached;
     expect(Date.now() - started).toBeLessThan(5_000);
     expect(await whoami(client, 2)).toBe('embedded');
-    expect(listen).not.toHaveBeenCalled();
+    const ports = listen.mock.calls.map((args) => {
+      const [port, host] = args as unknown[];
+      return host === '127.0.0.1' ? port : undefined;
+    });
     listen.mockRestore();
+    expect(ports.filter((port) => typeof port === 'number' && port > 0)).toHaveLength(1);
+    expect(await readServerRecord(sharedServerFiles('spec'))).toBeUndefined();
     expect(stderrLines().filter((line) => line.includes('in this process'))).toEqual([
       '[frontmcp shared] warn running the shared server "spec" in this process: The shared server "spec" did not ' +
         'start: no server proved its identity within 300 ms\n',
@@ -294,7 +299,7 @@ posixOnly('a shared session across servers', () => {
     const { client } = attach('unix', {
       attachBudgetMs: 200,
       spawnServer: () => ({ exitReason: undefined }),
-      embed: () => runEmbeddedServer(watched, 'spec', create),
+      bootEmbedded: () => bootEmbeddedServer(watched, { key: 'spec', transport: 'unix' }, create),
     });
 
     expect((await client.request(initialize)).result).toBeDefined();

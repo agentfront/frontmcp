@@ -28,6 +28,12 @@ export interface SharedServerOptions {
   idleTimeoutMs?: number | false;
   /** The folder the server runs from: it exits once that folder is removed; `false` never. @default the entry's folder */
   checkout?: string | false;
+  /**
+   * Boot the server in the session's own process while the session attaches, so a session that can't attach serves its
+   * client at once, without booting it then. The spare serves nothing until it is needed, and is shut down once the
+   * session attached. @default false
+   */
+  spare?: boolean;
 }
 
 export interface ResolvedSharedServerOptions {
@@ -37,6 +43,7 @@ export interface ResolvedSharedServerOptions {
   replaceOlder: boolean;
   idleTimeoutMs: number | false;
   checkout: string | false;
+  spare: boolean;
 }
 
 const DEFAULT_ATTACH_BUDGET_MS = 15_000;
@@ -51,6 +58,7 @@ const WINDOWS_DEVICE = "key can't be a device name Windows reserves (con, prn, a
 const ATTACH_BUDGET = `attachBudgetMs must be a whole number of milliseconds from 1 to ${MAX_ATTACH_BUDGET_MS}`;
 const IDLE_TIMEOUT = `idleTimeoutMs must be a whole number of milliseconds from 1 to ${MAX_IDLE_TIMEOUT_MS}, or false`;
 const CHECKOUT = 'checkout must be the path of a folder, or false';
+const SPARE = 'spare must be true or false';
 
 function milliseconds(max: number, message: string) {
   return z.number({ message }).int(message).min(1, message).max(max, message);
@@ -80,6 +88,7 @@ const sharedServerOptionsSchema = z
         { message: CHECKOUT },
       )
       .optional(),
+    spare: z.boolean({ message: SPARE }).optional(),
   })
   .strict();
 
@@ -112,5 +121,6 @@ export function parseSharedServerOptions(
     replaceOlder: result.data.replaceOlder ?? true,
     idleTimeoutMs: result.data.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS,
     checkout: checkout === false ? false : path.resolve(checkout ?? (entry ? path.dirname(entry) : process.cwd())),
+    spare: result.data.spare ?? false,
   };
 }

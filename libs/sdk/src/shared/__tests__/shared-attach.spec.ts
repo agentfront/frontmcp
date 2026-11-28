@@ -125,7 +125,7 @@ posixOnly('attachSharedSession against a server that keeps refusing its token', 
       version: '1.0.0',
       input,
       output,
-      embed: () => Promise.reject(new Error('the session should not run the server itself')),
+      bootEmbedded: () => Promise.reject(new Error('the session should not run the server itself')),
       spawnServer: () => {
         throw new Error('no server should be started');
       },

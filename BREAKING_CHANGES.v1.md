@@ -1358,3 +1358,25 @@ With `observability.stalls` on, a stall names the `@HttpRoute` requests (`http G
 ```
 
 **Codemod available:** no
+
+## BC-063: 1.14: runShared() serves the config's HTTP routes and people pages, and its fallback listens
+
+**Package:** `@frontmcp/sdk` | **Category:** change | **Severity:** low
+
+The shared local server keeps `entryPath`, `routes`, `auth` (people sign-in), `bodyLimit`, `urlencodedLimit`, `securityHeaders` and `forwardHeaders` of the config's `http`; up to 1.13 it replaced `http` whole, so its MCP endpoint was at `/`, `http.routes` were not served and an `@HttpRoute` with `auth: 'people'` failed the start. Sessions read the MCP path from the server's record, so nothing changes for MCP clients. On loopback HTTP the server accepts a request carrying its own `Origin` (`http://127.0.0.1:<port>`, `http://localhost:<port>`), so its pages post back to it; every other `Origin` is still refused. A session that runs the server in its own process listens on a socket of its own in the key's folder (`s-<random>.sock`), or a loopback port with transport `'http'`, and writes no record; up to 1.13 it was served per request, with no notification stream. `@Job({ runner: 'detached' })` runs on both, where it was refused with `JOB_RUNNER_UNAVAILABLE`. Remove from `http` what the shared server should not serve.
+
+**Before:**
+
+```typescript
+const http = { entryPath: '/mcp', routes, auth: { people: 'loopback-token' } };
+FrontMcpInstance.runShared({ ...config, http }, { key }); // MCP at /, no routes or people pages
+```
+
+**After:**
+
+```typescript
+const http = { entryPath: '/mcp', routes, auth: { people: 'loopback-token' } };
+FrontMcpInstance.runShared({ ...config, http }, { key }); // MCP at /mcp, routes and people pages served
+```
+
+**Codemod available:** no

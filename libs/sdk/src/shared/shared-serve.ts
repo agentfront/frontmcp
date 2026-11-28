@@ -13,9 +13,10 @@ import {
 } from '../common';
 import { InternalMcpError } from '../errors';
 import { SharedServerStartError } from '../errors/shared-server.errors';
+import { markEntryServer } from '../front-mcp/detached-job.flag';
 import { FileLogTransportInstance } from '../logger/instances/instance.file-logger';
 import type { Scope } from '../scope/scope.instance';
-import { deriveAllowedHosts } from '../server/security/resolve-allowed-hosts';
+import { deriveAllowedHosts, deriveAllowedOrigins } from '../server/security/resolve-allowed-hosts';
 import SharedDrainFlow from './flows/shared.drain.flow';
 import SharedIdentifyFlow from './flows/shared.identify.flow';
 import { httpEndpoint, unixEndpoint } from './shared-endpoint';
@@ -56,7 +57,7 @@ export interface SharedServerHandle {
 }
 
 /** A port nothing listens on now; a process that takes it first makes the listen fail, and gets no token. */
-function freeLoopbackPort(): Promise<number> {
+export function freeLoopbackPort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const probe = net.createServer();
     probe.once('error', reject);
@@ -67,10 +68,41 @@ function freeLoopbackPort(): Promise<number> {
   });
 }
 
-/** An owner-only socket, or loopback with Host checked against the loopback names and every Origin refused. */
-function sharedHttpOptions(files: SharedServerFiles, port: number | undefined): HttpOptionsInput {
-  if (port === undefined) return { socketPath: files.socketPath, cors: false };
+/**
+ * What a shared server keeps of the config's `http`: its MCP path, its routes, how people sign in to its pages, its body
+ * limits and its headers. Where it listens, its CORS and its Host and Origin checks are the shared server's own.
+ */
+export function keptHttpOptions(http: HttpOptionsInput | undefined): HttpOptionsInput {
+  if (!http) return {};
+  const { entryPath, routes, auth, bodyLimit, urlencodedLimit, securityHeaders, forwardHeaders } = http;
+  const kept: HttpOptionsInput = {
+    entryPath,
+    routes,
+    auth,
+    bodyLimit,
+    urlencodedLimit,
+    securityHeaders,
+    forwardHeaders,
+  };
+  for (const name of Object.keys(kept) as Array<keyof HttpOptionsInput>) {
+    if (kept[name] === undefined) delete kept[name];
+  }
+  return kept;
+}
+
+/**
+ * An owner-only socket, or loopback with Host checked against the loopback names and every Origin refused but the
+ * server's own (a page it serves posting back to it), with what the config's `http` keeps (see {@link keptHttpOptions}).
+ */
+export function sharedHttpOptions(
+  endpoint: { socketPath: string; port?: undefined } | { port: number; socketPath?: undefined },
+  http: HttpOptionsInput | undefined,
+): HttpOptionsInput {
+  const kept = keptHttpOptions(http);
+  const { port } = endpoint;
+  if (port === undefined) return { ...kept, socketPath: endpoint.socketPath, cors: false };
   return {
+    ...kept,
     port,
     cors: false,
     security: {
@@ -78,7 +110,7 @@ function sharedHttpOptions(files: SharedServerFiles, port: number | undefined): 
       dnsRebindingProtection: {
         enabled: true,
         allowedHosts: deriveAllowedHosts({ bindAddress: LOOPBACK, port }),
-        allowedOrigins: [],
+        allowedOrigins: deriveAllowedOrigins({ port }).filter((origin) => origin.startsWith('http:')),
       },
     },
   };
@@ -146,30 +178,31 @@ async function startSharedServer(
   const port = options.transport === 'http' ? await freeLoopbackPort() : undefined;
   const endpoint = port === undefined ? unixEndpoint(files.socketPath) : httpEndpoint(port);
   const lifecycle = new SharedServerLifecycle();
-  const instance = serve.create(
-    frontMcpMetadataSchema.parse({
-      ...config,
-      serve: true,
-      http: sharedHttpOptions(files, port),
-      auth: { mode: 'static', tokens: [keys.token] },
-      logging: withFileLogging(config.logging),
-      providers: [
-        ...(config.providers ?? []),
-        {
-          name: 'frontmcp:shared-server-identity',
-          provide: SharedServerIdentity,
-          scope: ProviderScope.GLOBAL,
-          useValue: new SharedServerIdentity(keys, endpoint.id, config.info.version),
-        },
-        {
-          name: 'frontmcp:shared-server-lifecycle',
-          provide: SharedServerLifecycle,
-          scope: ProviderScope.GLOBAL,
-          useValue: lifecycle,
-        },
-      ],
-    }),
-  );
+  const parsed = frontMcpMetadataSchema.parse({
+    ...config,
+    serve: true,
+    http: sharedHttpOptions(port === undefined ? { socketPath: files.socketPath } : { port }, config.http),
+    auth: { mode: 'static', tokens: [keys.token] },
+    logging: withFileLogging(config.logging),
+    providers: [
+      ...(config.providers ?? []),
+      {
+        name: 'frontmcp:shared-server-identity',
+        provide: SharedServerIdentity,
+        scope: ProviderScope.GLOBAL,
+        useValue: new SharedServerIdentity(keys, endpoint.id, config.info.version),
+      },
+      {
+        name: 'frontmcp:shared-server-lifecycle',
+        provide: SharedServerLifecycle,
+        scope: ProviderScope.GLOBAL,
+        useValue: lifecycle,
+      },
+    ],
+  });
+  // A detached job's runner runs this entry again, which hands it over to its run (see `FrontMcpInstance.runShared`)
+  markEntryServer(parsed);
+  const instance = serve.create(parsed);
   await instance.ready;
   let scope: Scope;
   try {

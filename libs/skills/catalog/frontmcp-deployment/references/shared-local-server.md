@@ -1,6 +1,6 @@
 ---
 name: shared-local-server
-description: Serve every stdio session of a server on one machine from one shared local process with FrontMCP's FrontMcpInstance.runShared - one start per key, an owner-only Unix socket or loopback HTTP with a token, a server identity and version proof before the token is sent, a newer session replacing an older server under live sessions, a fallback to running in the session's own process, and exit when idle or when the checkout is removed
+description: Serve every stdio session of a server on one machine from one shared local process with FrontMCP's FrontMcpInstance.runShared - one start per key, an owner-only Unix socket or loopback HTTP with a token, a server identity and version proof before the token is sent, a newer session replacing an older server under live sessions, the config's HTTP routes and people sign-in pages, detached jobs, a fallback to running in the session's own process with a spare booted while it attaches, and exit when idle or when the checkout is removed
 ---
 
 # Shared Local Server
@@ -73,6 +73,7 @@ npm needs no native build (see `setup-sqlite`, "The SQLite library").
 | `replaceOlder`   | `boolean`           | `true`                         | A session that finds a server older than its `info.version` replaces it; `false` runs the server in its process   |
 | `idleTimeoutMs`  | `number` / `false`  | `600000`                       | The server exits after this long without a request or an attached session; `false` keeps it running               |
 | `checkout`       | `string` / `false`  | the entry file's folder        | The server exits once this folder is removed (a deleted checkout or worktree); `false` never; relative to the cwd |
+| `spare`          | `boolean`           | `false`                        | Boot the server in the session's process while it attaches, so a session that falls back serves at once           |
 
 The default `checkout` is the folder of the file the process runs, as the client started it (`process.argv[1]`): for
 a package bin that is the folder of the bin link (`node_modules/.bin`, or the global bin folder), so removing an `npx`
@@ -96,6 +97,7 @@ starts, for example
 `runShared() options are invalid: replaceOlder: replaceOlder must be true or false`,
 `runShared() options are invalid: idleTimeoutMs: idleTimeoutMs must be a whole number of milliseconds from 1 to 604800000, or false`,
 `runShared() options are invalid: checkout: checkout must be the path of a folder, or false`,
+`runShared() options are invalid: spare: spare must be true or false`,
 `runShared() options are invalid: checkout: <path> is not a folder` (it must exist when the session starts),
 `runShared() options are invalid: info.version: a shared server states its version, which must be 1 to 256 printable ASCII characters`
 (the config's `info.version` is the version sessions compare), or, on Windows,
@@ -145,21 +147,33 @@ With the Unix socket, a socket path longer than a socket address holds (103 byte
 5. **Fallback.** When a session hasn't attached within `attachBudgetMs` (the server is wedged or unreachable), when the
    server it started exits, when it may not replace an older one, or when its key is taken by a server of another
    `info.name`, it runs the server in its own process: the same config with the same flows and hooks, static-token
-   auth for a fresh token, served in-process with no listener. Its duties take the same leases as the shared server's,
-   so one that still runs doesn't run them twice. It says so once on stderr:
-   `[frontmcp shared] warn running the shared server "<key>" in this process: <reason>`, and stays that way for the rest
-   of the session.
+   auth for a fresh token, and a listener of its own that no other session finds (it writes no record): a socket
+   `s-<random>.sock` in the key's folder, or a loopback port with transport `'http'`. The session opens its notification
+   stream there, as on the shared server, so its client gets `list_changed`, log lines and channel events. Only when
+   that socket path would be longer than a socket address holds is the server served per request, with no stream. Its
+   duties take the same leases as the shared server's, so one that still runs doesn't run them twice. It says so once
+   on stderr: `[frontmcp shared] warn running the shared server "<key>" in this process: <reason>`, and stays that way
+   for the rest of the session.
+   With `spare: true`, the session boots that server (its providers, `onBootstrap()` included) while it first attaches.
+   It serves nothing, and no `onReady()`, duty or worker runs in it, until the session falls back to it; a session that
+   attached shuts it down. So the fallback costs no boot: lower `attachBudgetMs` below the time your client waits for
+   `initialize` (often 10 s), and a session whose server is slow or wedged still answers in time. The spare boots once
+   per session, at its first attach: a session that moves to the next server later boots none.
 6. **Serve.** The server generates a fresh secret, listens, and only then writes the record. It serves the config
-   through the normal HTTP flows (`http:request`, `session:verify`, the MCP handlers, every hook), with `auth`
-   replaced by static-token auth for that token and `http` replaced by the shared endpoint, so a configured `auth`,
-   `http.routes` or CORS does not apply to it. An app with `auth` of its own (an `@App({ auth })` that gets an
+   through the normal HTTP flows (`http:request`, `session:verify`, the MCP handlers, every hook), with `auth` replaced
+   by static-token auth for that token. Of `http` it keeps `entryPath` (the MCP path, which the record carries),
+   `routes`, `auth` (people sign-in, see [Pages and HTTP routes](#pages-and-http-routes)), `bodyLimit`,
+   `urlencodedLimit`, `securityHeaders` and `forwardHeaders`; where it listens, its CORS (none) and its Host and Origin
+   checks are the shared server's own, so `port`, `socketPath`, `cors`, `security`, `hostFactory` and `userContent` do
+   not apply to it. A detached job runs as on any server started from its entry (see
+   [Detached jobs](#detached-jobs)). An app with `auth` of its own (an `@App({ auth })` that gets an
    endpoint of its own, with `splitByApp` or `standalone`) would keep that auth and answer without the token, so the
    server refuses to start (and so does a session running it in its own process):
    `The shared server "<key>" did not start: app "<id>" has auth of its own (mode <mode>), which the shared server's token would not guard; remove auth from its @App, or serve it without runShared()`.
    The identity challenge and the drain are flows of their own, `shared:identify`
    (`POST /.well-known/frontmcp-shared-server`) and `shared:drain`, hookable like any other.
-7. **Exit.** The server exits once it had no request carrying the token (or identity challenge), and no session
-   holding its notification stream, for `idleTimeoutMs`, once its `checkout` folder is removed, when a newer session
+7. **Exit.** The server exits once it had no request carrying the token (or identity challenge), no request to one of
+   its routes, and no session holding its notification stream, for `idleTimeoutMs`, once its `checkout` folder is removed, when a newer session
    drains it, or on `SIGTERM` / `SIGINT`. Each way, it refuses new requests as `exiting` (and closes their
    connection), cuts off the notification streams its sessions hold, removes its record and its socket, lets the
    requests in flight finish, and logs `The shared server "<key>" exits: <reason>` to its log file. A session that
@@ -184,6 +198,46 @@ With the Unix socket, a socket path longer than a socket address holds (103 byte
     `initialize`, and it declares `experimental['claude/channel']` on the `initialize` it forwards. An event reaches
     every session of the server.
 
+## Pages and HTTP routes
+
+The shared server serves the config's `http.routes` and its apps' `@HttpRoute` pages beside MCP, and `http.auth.people`
+signs people in to them (see `create-http-route` in `frontmcp-development`). Give MCP a path of its own when a page
+takes `/`:
+
+```typescript
+export const serverConfig = {
+  info: { name: 'my-server', version: '1.4.0' },
+  apps: [DashboardApp],
+  http: { entryPath: '/mcp', auth: { people: 'loopback-token' } },
+};
+
+FrontMcpInstance.runShared(serverConfig, { key: 'my-server', transport: 'http' });
+```
+
+- A browser reaches only loopback HTTP: pages for people need `transport: 'http'`. Over the Unix socket a route answers
+  local processes that speak HTTP on the socket (`curl --unix-socket`).
+- The port is new at each start of the server, so hand people a link rather than an address to keep. A tool makes one:
+  `this.get(LoopbackTokenAuth).createCode()` gives the code of `/_frontmcp/people/login?code=…`, and
+  `this.context.metadata.serverUrl` is the server's address as the session's request reached it
+  (`http://127.0.0.1:<port>`). The sign-in token people auth prints at startup goes to the server's stderr, which no
+  terminal reads: use codes.
+- The server refuses every request whose `Origin` is another origin; its own (`http://127.0.0.1:<port>`,
+  `http://localhost:<port>`) is taken, so its pages post back to it, as the people sign-in page does. MCP still needs
+  the token.
+- A request to a route is activity, as a session's is: the server does not exit idle while a route answers one, an
+  event stream included, and an exiting server refuses new ones as `exiting` and waits for those in flight (up to 5 s).
+- A session that runs the server in its own process serves the same routes on its own listener (see Fallback), which
+  people don't find: hand them a link from a tool there too.
+
+## Detached jobs
+
+A `@Job({ runner: 'detached' })` runs on the shared server, and on the server a session runs in its own process, as
+on any server started from its entry (see `create-job` in `frontmcp-development`, Runners): the job runs in a process
+of its own, which runs the shared entry again with `FRONTMCP_RUN_JOB_ID` set; `runShared()` hands that process over to
+its run instead of starting a session. Give the jobs a store other processes share (`jobs.store.sqlite`, a top-level
+`sqlite`, or Redis). The run outlives the shared server, which may exit idle while it runs; any server on the store
+reads and cancels it.
+
 ## Files and security
 
 | Path (under `~/.frontmcp/shared/<key>/`) | Mode   | Holds                                                       |
@@ -191,6 +245,7 @@ With the Unix socket, a socket path longer than a socket address holds (103 byte
 | the folder                               | `0700` | created owner-only                                          |
 | `server.json`                            | `0600` | `info.name`, transport, port, MCP path, pid, and the secret |
 | `server.sock`                            | `0600` | the Unix socket (transport `'unix'`)                        |
+| `s-<random>.sock`                        | `0600` | the socket of a session running the server itself           |
 | `start-lock.sqlite`                      | `0600` | the start lock                                              |
 
 - A folder that the group or others can write to, or that belongs to another user, or one above it that does (unless
@@ -205,7 +260,7 @@ With the Unix socket, a socket path longer than a socket address holds (103 byte
   claiming another version is refused, so a squatter can't pass for a newer server either. Only a holder of the token
   can make a server drain, and only for a newer version.
 - **Web pages** can't reach the socket. On loopback HTTP the server accepts only the loopback names as `Host` (DNS
-  rebinding) and refuses every request that carries an `Origin`.
+  rebinding) and refuses every request that carries an `Origin` other than its own (up to 1.13, its own too).
 - The record is what a session trusts: a server proves it holds the record's secret, not that it is yours. That is
   why the folder checks above matter, and why `FRONTMCP_HOME` must be a folder only you can write to.
 - Endpoints that need no token on any FrontMCP server still answer other users on loopback HTTP: the health routes
@@ -253,9 +308,11 @@ next server.
   gets no notification until then. A session that follows a server older than its own `info.version` replaces it,
   or runs the server itself, as it does at a request. Server-side state of that session (subscriptions, session
   memory) isn't carried over, nor is work the server runs in the background after a call returned.
-- A session that runs the server in its own process (see Fallback) gets no notification stream: that server is
-  built per request. Its client gets the answers to its requests, and no `list_changed`, log line or channel event
-  the server sends on its own.
+- A session that runs the server in its own process (see Fallback) gets a notification stream since 1.14. Only one
+  whose socket path of its own would be longer than a socket address holds is served per request, and its client then
+  gets the answers to its requests, and no `list_changed`, log line or channel event the server sends on its own.
+- A session stays on its key: it can't move to the server of another key (another checkout of the project, under a
+  key of its own) without its client starting it again.
 - The version compared is `info.version`: a code change that doesn't bump it is not an upgrade. A session that runs the
   server in its own process stays that way until its client restarts it.
 - The server runs with the environment, working folder and Node flags of the session that started it (an inspector
@@ -269,11 +326,22 @@ next server.
   share a server whatever folder they run from, two checkouts or worktrees of one project included (the newer version
   replacing the older): give each checkout a key of its own to keep them apart.
 
+## New in 1.14
+
+- `http.routes`, `http.auth` (people sign-in), `entryPath`, the body limits, `securityHeaders` and `forwardHeaders`
+  are served by the shared server, and a page it serves may post back to it. Up to 1.13 the shared server replaced
+  `http` whole, so its routes were not served, a people page failed the start, and MCP was at `/`.
+- Detached jobs run on the shared server: up to 1.13 they were refused with `JOB_RUNNER_UNAVAILABLE`.
+- A session that runs the server in its own process listens on a socket or port of its own and gets a notification
+  stream; up to 1.13 it was served per request, with none.
+- `spare: true` boots that server while the session attaches.
+
 ## Troubleshooting
 
 | Problem                                                  | Fix                                                                                                                                    |
 | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | `did not start: it exited with code 1`                   | Run the entry with `FRONTMCP_SHARED_SERVE=<key>` in a terminal to see why the server can't start; its log is under `~/.frontmcp/logs/` |
+| A browser can't open the server's pages                  | Pages need `transport: 'http'`, and a link a tool makes (`createCode()` and `this.context.metadata.serverUrl`): the port changes       |
 | `running the shared server "<key>" in this process: …`   | The reason follows: a wedged server (stop the pid in `server.json`), an older server with `replaceOlder: false`, or a start failure    |
 | `which can't be ordered against this session's …`        | Use semver `info.version`s, or the same version, in every checkout that shares the key                                                 |
 | `app "<id>" has auth of its own`                         | Remove `auth` from that `@App`: on a shared server the token guards every app                                                          |

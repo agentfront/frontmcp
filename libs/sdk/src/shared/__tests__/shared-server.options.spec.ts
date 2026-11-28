@@ -18,6 +18,7 @@ describe('parseSharedServerOptions', () => {
     replaceOlder: true,
     idleTimeoutMs: 600_000,
     checkout: '/work/checkout/dist',
+    spare: false,
   };
 
   it('serves on an owner-only Unix socket by default, and on loopback HTTP on Windows', () => {
@@ -33,10 +34,17 @@ describe('parseSharedServerOptions', () => {
     });
   });
 
-  it('takes the attach budget, the upgrade policy, the idle time and the checkout it is given', () => {
+  it('takes the attach budget, the upgrade policy, the idle time, the checkout and the spare it is given', () => {
     expect(
       parseSharedServerOptions(
-        { key: 'notes', attachBudgetMs: 500, replaceOlder: false, idleTimeoutMs: false, checkout: 'relative/dir' },
+        {
+          key: 'notes',
+          attachBudgetMs: 500,
+          replaceOlder: false,
+          idleTimeoutMs: false,
+          checkout: 'relative/dir',
+          spare: true,
+        },
         'linux',
         ENTRY,
       ),
@@ -45,6 +53,7 @@ describe('parseSharedServerOptions', () => {
       replaceOlder: false,
       idleTimeoutMs: false,
       checkout: path.resolve('relative/dir'),
+      spare: true,
     });
     expect(parseSharedServerOptions({ key: 'notes', checkout: false }, 'linux', ENTRY).checkout).toBe(false);
   });
@@ -74,6 +83,7 @@ describe('parseSharedServerOptions', () => {
     [{ key: 'notes', checkout: '' }, CHECKOUT],
     [{ key: 'notes', checkout: 'a\u0000b' }, CHECKOUT],
     [{ key: 'notes', checkout: true }, CHECKOUT],
+    [{ key: 'notes', spare: 'yes' }, 'spare: spare must be true or false'],
   ])('refuses %j', (input, message) => {
     expect(() => parseSharedServerOptions(input, 'linux', ENTRY)).toThrow(InvalidSharedServerOptionsError);
     expect(() => parseSharedServerOptions(input, 'linux', ENTRY)).toThrow(message);

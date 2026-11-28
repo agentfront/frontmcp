@@ -18,7 +18,7 @@ import {
   type SharedServerAttachment,
   type SpawnedServer,
 } from './ensure-shared-server';
-import type { EmbeddedSharedServer } from './shared-embedded';
+import type { BootedEmbeddedServer, EmbeddedSharedServer } from './shared-embedded';
 import { SHARED_EXITING, SHARED_STATE_HEADER } from './shared-endpoint';
 import {
   assertSocketPathFits,
@@ -47,8 +47,11 @@ export interface AttachSharedSessionOptions extends ResolvedSharedServerOptions 
   name: string;
   /** The session's own version, `info.version`: it never attaches to an older server. */
   version: string;
-  /** Run the server in this process, when the session can't, or may not, attach to the key's server. */
-  embed(): Promise<EmbeddedSharedServer>;
+  /**
+   * Boot the server in this process, for when the session can't, or may not, attach to the key's server; with `spare`,
+   * while the session attaches. It serves nothing until it is started.
+   */
+  bootEmbedded(): Promise<BootedEmbeddedServer>;
   spawnServer?: (startLockHolder: string) => SpawnedServer;
 }
 
@@ -154,6 +157,10 @@ export function attachSharedSession(options: AttachSharedSessionOptions): Shared
   const log = stderrLogger();
   let upstream: HttpUpstreamClient | undefined;
   let embedded: EmbeddedSharedServer | undefined;
+  /** The server booting in this process while the session first attaches, with `spare`. */
+  let spare: Promise<BootedEmbeddedServer> | undefined;
+  /** The dropped spare's shutdown, which the session's stop waits for. */
+  let spareClosed: Promise<void> | undefined;
   let stopping: Promise<void> | undefined;
   let clientInitialize: JsonRpcFrame | undefined;
   let clientInitialized = false;
@@ -247,23 +254,54 @@ export function attachSharedSession(options: AttachSharedSessionOptions): Shared
     fsm.onReloadDeadline({ error: message });
   }
 
-  async function serverToReach(): Promise<ServerToReach> {
+  /** The server to send the requests to; none once the session stops. */
+  async function serverToReach(): Promise<ServerToReach | undefined> {
     if (embedded) return embedded;
-    const attachment = await connect(options, log);
+    let attachment: SharedServerAttachment;
+    try {
+      attachment = await connect(options, log);
+    } catch (error) {
+      dropSpare();
+      throw error;
+    }
+    if (stopping) {
+      dropSpare();
+      return undefined;
+    }
     if ('server' in attachment) {
+      dropSpare();
       const { url, token, fetch: send, pid } = attachment.server;
       return { url, headers: { authorization: `Bearer ${token}` }, fetch: send, pid };
     }
     log.warn(`running the shared server "${options.key}" in this process: ${attachment.embedded}`);
-    embedded = await options.embed();
+    // Kept as the spare until it booted, so a stop meanwhile shuts it down instead of starting it
+    spare ??= options.bootEmbedded();
+    const booted = await spare;
+    if (stopping) return undefined;
+    spare = undefined;
+    embedded = await booted.start();
     return embedded;
+  }
+
+  /** Shut the spare down: the session reached the key's server, or stops. A spare that failed to boot is let go. */
+  function dropSpare(): void {
+    const booting = spare;
+    if (!booting) return;
+    spare = undefined;
+    spareClosed = booting.then(
+      (booted) =>
+        booted
+          .close()
+          .catch((error: unknown) => log.warn('the spare server did not shut down', { error: messageOf(error) })),
+      () => undefined,
+    );
   }
 
   /** Reach a server and replay the client's `initialize` on it; one that goes away during the replay is replaced. */
   async function reach(): Promise<void> {
     for (let replays = 0; ; replays++) {
       const server = await serverToReach();
-      if (stopping) {
+      if (!server || stopping) {
         await embedded?.close();
         return;
       }
@@ -294,6 +332,11 @@ export function attachSharedSession(options: AttachSharedSessionOptions): Shared
 
   framer.start();
   fsm.onBootStart();
+  if (options.spare) {
+    // Booted while the session first attaches; a boot that fails is told when the session falls back to it
+    spare = options.bootEmbedded();
+    spare.catch(() => undefined);
+  }
   const attached = reach().catch((error: unknown) => {
     fail(error);
     throw error;
@@ -302,10 +345,12 @@ export function attachSharedSession(options: AttachSharedSessionOptions): Shared
 
   async function shutdown(): Promise<void> {
     endSuccessorWatch();
+    dropSpare();
     await fsm.stop();
     await upstream?.endSession();
     await upstream?.close();
     await embedded?.close();
+    await spareClosed;
     framer.stop();
   }
 
