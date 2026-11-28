@@ -59,6 +59,7 @@ export {
   isRedisClusterClient,
   redisMasterNodes,
   scanRedisKeys,
+  publishRedisMessage,
   deleteRedisKeys,
   getRedisKeys,
 } from './redis-client';

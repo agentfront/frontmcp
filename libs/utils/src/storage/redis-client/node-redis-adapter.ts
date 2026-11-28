@@ -40,6 +40,7 @@ export interface NodeRedisLike {
   disconnect?(): Promise<unknown>;
   /** A cluster's masters, and the client of one of them. */
   readonly masters?: unknown[];
+  readonly replicas?: unknown[];
   nodeClient?(node: unknown): NodeRedisLike | Promise<NodeRedisLike>;
 }
 
@@ -62,8 +63,16 @@ function toHash(reply: unknown): Record<string, string> {
   return (reply ?? {}) as Record<string, string>;
 }
 
+/** `host:port` of a node-redis cluster node. */
+function addressOf(node: unknown): string | undefined {
+  const { host, port } = (node ?? {}) as { host?: string; port?: number };
+  return host === undefined ? undefined : `${host}:${port ?? ''}`;
+}
+
 export class NodeRedisClientAdapter implements FrontMcpRedisClient {
   readonly isCluster: boolean;
+  /** `host:port` of a cluster node this adapter stands for (see {@link NodeRedisClientAdapter.nodes}). */
+  readonly address?: string;
   private readonly owned: boolean;
   private resolved?: NodeRedisLike;
   private connecting?: Promise<void>;
@@ -78,10 +87,11 @@ export class NodeRedisClientAdapter implements FrontMcpRedisClient {
    */
   constructor(
     private readonly target: NodeRedisLike | (() => NodeRedisLike | Promise<NodeRedisLike>),
-    options: NodeRedisClientAdapterOptions,
+    options: NodeRedisClientAdapterOptions & { address?: string },
   ) {
     this.isCluster = options.cluster;
     this.owned = options.owned;
+    this.address = options.address;
     if (typeof target !== 'function') this.resolved = target;
   }
 
@@ -136,16 +146,18 @@ export class NodeRedisClientAdapter implements FrontMcpRedisClient {
     return new NodeRedisClientAdapter(copy, { cluster: this.isCluster, owned: true });
   }
 
-  /** The masters of a cluster (the only role FrontMCP asks for). */
-  nodes(): FrontMcpRedisClient[] {
+  /** A cluster's masters, or all its nodes (masters and replicas). */
+  nodes(role: 'master' | 'all' = 'master'): FrontMcpRedisClient[] {
     const cluster = this.resolved;
     if (!this.isCluster || !cluster || !Array.isArray(cluster.masters)) return [];
-    return cluster.masters.map(
+    const replicas = role === 'all' && Array.isArray(cluster.replicas) ? cluster.replicas : [];
+    return [...cluster.masters, ...replicas].map(
       (master) =>
         new NodeRedisClientAdapter(() => (cluster.nodeClient as (node: unknown) => NodeRedisLike)(master), {
           cluster: false,
           // The cluster opened its node clients and closes them.
           owned: false,
+          address: addressOf(master),
         }),
     );
   }
@@ -169,6 +181,10 @@ export class NodeRedisClientAdapter implements FrontMcpRedisClient {
 
   async publish(channel: string, message: string): Promise<number> {
     return Number(await this.send(['PUBLISH', channel, message]));
+  }
+
+  async pubsub(subcommand: string, ...args: RedisArgument[]): Promise<unknown> {
+    return this.send(['PUBSUB', subcommand, ...args], undefined, true);
   }
 
   async subscribe(...channels: string[]): Promise<number> {

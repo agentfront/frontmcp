@@ -470,6 +470,7 @@ export {
   isRedisClusterClient,
   redisMasterNodes,
   scanRedisKeys,
+  publishRedisMessage,
   deleteRedisKeys,
   getRedisKeys,
 } from './storage';

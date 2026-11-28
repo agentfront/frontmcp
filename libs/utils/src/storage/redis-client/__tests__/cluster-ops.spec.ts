@@ -2,7 +2,14 @@
  * The cluster-aware helpers: today's call on a single node, per-key or per-master on a cluster (#1503).
  */
 import { borrowRedisClient, isBorrowedRedisClient } from '../borrow';
-import { deleteRedisKeys, getRedisKeys, isRedisClusterClient, redisMasterNodes, scanRedisKeys } from '../cluster-ops';
+import {
+  deleteRedisKeys,
+  getRedisKeys,
+  isRedisClusterClient,
+  publishRedisMessage,
+  redisMasterNodes,
+  scanRedisKeys,
+} from '../cluster-ops';
 import { isRedisConnection, redisAdapterOptionsOf, redisConnectionOf } from '../config';
 import { detectRedisClientKind, isRedisClientInput } from '../detect';
 import type { FrontMcpRedisClient } from '../types';
@@ -228,5 +235,71 @@ describe('redisAdapterOptionsOf', () => {
     expect(redisAdapterOptionsOf({ host: 'cache', port: 6379, db: 0, tls: false })).toEqual({
       config: { host: 'cache', port: 6379, db: 0, tls: false },
     });
+  });
+});
+
+describe('publishRedisMessage', () => {
+  it('returns what a single node counts', async () => {
+    const client = { publish: jest.fn().mockResolvedValue(0) };
+    await expect(publishRedisMessage(client, 'ch', 'm')).resolves.toBe(0);
+    expect(client.publish).toHaveBeenCalledWith('ch', 'm');
+  });
+
+  /** A cluster whose masters are ordered differently on each call, as a topology refresh may. */
+  function clusterOf(masters: Array<{ address: string; publish: jest.Mock; pubsub?: jest.Mock }>, all = masters) {
+    let flip = false;
+    return {
+      publish: jest.fn(),
+      isCluster: true,
+      nodes: jest.fn((role: string) => {
+        if (role === 'all') return all;
+        flip = !flip;
+        return flip ? [...masters] : [...masters].reverse();
+      }),
+    };
+  }
+
+  it('sends every message on a channel through the same master, so they keep their order', async () => {
+    const masters = ['10.0.0.2:7000', '10.0.0.1:7000', '10.0.0.3:7000'].map((address) => ({
+      address,
+      publish: jest.fn().mockResolvedValue(1),
+    }));
+    const client = clusterOf(masters);
+    for (let i = 0; i < 4; i++) await publishRedisMessage(client as never, 'mcp:ha:notify:node-1', `frame ${i}`);
+
+    const used = masters.filter((master) => master.publish.mock.calls.length > 0);
+    expect(used).toHaveLength(1);
+    expect(used[0].publish.mock.calls.map(([, message]) => message)).toEqual([
+      'frame 0',
+      'frame 1',
+      'frame 2',
+      'frame 3',
+    ]);
+    expect(client.publish).not.toHaveBeenCalled();
+  });
+
+  it("counts the channel's subscribers on every node when the cluster's PUBLISH reports none", async () => {
+    const master = { address: 'a', publish: jest.fn().mockResolvedValue(0) };
+    const all = [
+      { address: 'a', publish: jest.fn(), pubsub: jest.fn().mockResolvedValue(['ch', 0]) },
+      { address: 'b', publish: jest.fn(), pubsub: jest.fn().mockResolvedValue(['ch', 1]) },
+      { address: 'c', publish: jest.fn(), pubsub: jest.fn().mockRejectedValue(new Error('failing over')) },
+      { address: 'd', publish: jest.fn() },
+    ];
+    const client = clusterOf([master], all);
+    await expect(publishRedisMessage(client as never, 'ch', 'm')).resolves.toBe(1);
+    expect(client.nodes).toHaveBeenCalledWith('all');
+    expect(all[1].pubsub).toHaveBeenCalledWith('NUMSUB', 'ch');
+  });
+
+  it('orders ioredis node clients by their host and port', async () => {
+    const masters = [
+      { options: { host: 'b', port: 1 }, publish: jest.fn().mockResolvedValue(1) },
+      { options: { host: 'a', port: 1 }, publish: jest.fn().mockResolvedValue(1) },
+    ];
+    const client = { publish: jest.fn(), isCluster: true, nodes: jest.fn(() => masters) };
+    await publishRedisMessage(client as never, 'x', 'm');
+    await publishRedisMessage(client as never, 'x', 'm');
+    expect(masters.filter((m) => m.publish.mock.calls.length === 2)).toHaveLength(1);
   });
 });

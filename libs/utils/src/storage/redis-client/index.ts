@@ -21,5 +21,12 @@ export { detectRedisClientKind, isRedisClientInput, UNSUPPORTED_REDIS_CLIENT_MES
 export { borrowRedisClient, isBorrowedRedisClient } from './borrow';
 export { NodeRedisClientAdapter } from './node-redis-adapter';
 export type { NodeRedisClientAdapterOptions, NodeRedisLike } from './node-redis-adapter';
-export { deleteRedisKeys, getRedisKeys, isRedisClusterClient, redisMasterNodes, scanRedisKeys } from './cluster-ops';
+export {
+  deleteRedisKeys,
+  getRedisKeys,
+  isRedisClusterClient,
+  publishRedisMessage,
+  redisMasterNodes,
+  scanRedisKeys,
+} from './cluster-ops';
 export type { RedisScanClient } from './cluster-ops';
