@@ -60,6 +60,7 @@ import {
 } from '../../common';
 import { InternalMcpError } from '../../errors';
 import { initialAuthorizedApps, withoutSkippedApps } from '../authorized-apps.utils';
+import { resolveClientDisplayName } from '../client-display-name';
 import { projectConsentTools } from '../consent-tools.helper';
 import { LocalPrimaryAuth, validateAuthorizationIssuer } from '../instances/instance.local-primary-auth';
 import { requiredProviderIds } from '../required-providers.utils';
@@ -796,7 +797,9 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
               );
               await this.keepConsentCsrf(session);
               this.respond(
-                this.htmlPage(this.renderConsentScreen(session, consentConfig, undefined, remembered.selectedToolIds)),
+                this.htmlPage(
+                  await this.renderConsentScreen(session, consentConfig, undefined, remembered.selectedToolIds),
+                ),
               );
               return;
             }
@@ -806,7 +809,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
         if (selectedToolIds === undefined) {
           this.logger.info('Federated auth: all providers linked, rendering consent screen');
           await this.keepConsentCsrf(session);
-          this.respond(this.htmlPage(this.renderConsentScreen(session, consentConfig)));
+          this.respond(this.htmlPage(await this.renderConsentScreen(session, consentConfig)));
           return;
         }
       }
@@ -835,7 +838,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
           this.logger.info('Federated consent: empty submit with requireSelection — re-rendering');
           this.respond(
             this.htmlPage(
-              this.renderConsentScreen(session, consentConfig, 'Please select at least one tool to continue.'),
+              await this.renderConsentScreen(session, consentConfig, 'Please select at least one tool to continue.'),
             ),
           );
           return;
@@ -959,7 +962,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
    * {@link handleConsentSubmission} completes the mint. Honors the same
    * `auth.consent` flags as the non-federated path.
    */
-  private renderConsentScreen(
+  private async renderConsentScreen(
     session: FederatedAuthSession,
     consentConfig: ConsentConfig,
     error?: string,
@@ -969,13 +972,14 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
      * prior selection on a new-tool re-prompt.
      */
     preSelectedTools?: string[],
-  ): string {
+  ): Promise<string> {
     const callbackPath = `${this.scope.fullPath}/oauth/provider/_consent/callback`;
     const { toolCards } = projectConsentTools(this.scope, consentConfig.excludedTools);
 
     return buildToolConsentPage({
       tools: toolCards,
-      clientName: session.clientId,
+      // The name the sign-in page showed (#1505).
+      clientName: await resolveClientDisplayName(this.scope, session),
       // The pending_auth_id input is unused on the federated round-trip (we key
       // off `consent_session`), but the builder requires it; reuse the session id.
       pendingAuthId: session.id,
