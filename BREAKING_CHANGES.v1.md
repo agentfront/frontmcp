@@ -1336,3 +1336,25 @@ server.scope.events?.listSubscriptions();
 ```
 
 **Codemod available:** no
+
+## BC-065: 1.14: a stall names the HTTP routes, duties and workers in flight
+
+**Package:** `@frontmcp/observability` | **Category:** change | **Severity:** low
+
+With `observability.stalls` on, a stall names the `@HttpRoute` requests (`http GET /board/:id`, the declared path), `@Duty` runs (`duty <name>`) and `@Worker` runs (`worker <name>`) in flight, and the work `trackWork(label)` marks (`work <label>`), as it names calls. Up to 1.13 a stall during them read `with no call in flight` and counted under `cause="unknown"`; it now counts under `cause="http"`, `"duty"`, `"worker"` or `"work"`, with the name as `entry`, and a dev events `stall` lists them in `calls` with that kind as `method`. A worker is in flight for its whole `run()`, so it is named in every stall while it runs. Alerts or dashboards on `cause="unknown"` see only the stalls nothing explains. `CallIdentity.method` is typed `CallMethod | WorkMethod`.
+
+**Before:**
+
+```typescript
+// Event loop stalled for 450 ms with no call in flight
+// frontmcp_event_loop_stall_seconds_total{cause="unknown",entry=""} 0.45
+```
+
+**After:**
+
+```typescript
+// Event loop stalled for 450 ms while running duty nightly-ingest (448 ms)
+// frontmcp_event_loop_stall_seconds_total{cause="duty",entry="nightly-ingest"} 0.45
+```
+
+**Codemod available:** no

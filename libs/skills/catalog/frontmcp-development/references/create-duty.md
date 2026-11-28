@@ -302,6 +302,12 @@ duties add no check.
 A production server therefore answers `ready` or `not_ready` without `holdsLease` or the lease store's error: set
 `@FrontMcp({ health: { includeDetails: true } })` to see them there.
 
+## Stalls
+
+Each run is a work span named by the duty, so with `observability.stalls` on, a stall while it runs names it:
+`Event loop stalled for 450 ms while running duty nightly-ingest (448 ms)`, counted under `cause="duty"`. See
+`frontmcp-observability` → `stall-detection`.
+
 ## Log Lines
 
 | Level   | Message                                                                                                                                   |

@@ -421,7 +421,8 @@ left running (found by parent PID).
 
 `frontmcp dev` empties `.frontmcp/dev-events.jsonl` in the project root when it starts, and the server appends one JSON
 line per event to it: the timing and outcome of each `tools/call`, `resources/read` and `prompts/get`, and each
-event-loop stall when `observability.stalls` is on (see `frontmcp-observability`'s `stall-detection` reference). The
+event-loop stall when `observability.stalls` is on, with the calls and work spans (`@HttpRoute` requests, `@Duty` and
+`@Worker` runs, `trackWork()`) in flight during it (see `frontmcp-observability`'s `stall-detection` reference). The
 events never hold a call's input or answer. When the file cannot be created (`.frontmcp` is not writable, say),
 `frontmcp dev` prints a warning and starts with the events off.
 

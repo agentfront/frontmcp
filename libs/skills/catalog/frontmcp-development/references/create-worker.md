@@ -176,6 +176,14 @@ Found when the server starts:
   again and `/readyz` shows the worker `unhealthy` meanwhile (see Health), so the new version is swapped in and its
   leased workers run once the store opens.
 
+## Stalls
+
+Each run is a work span named by the worker, from `run()` until it returns or throws, so with `observability.stalls`
+on, a stall while it runs names it (`worker inbox (3600000 ms)`), counted under `cause="worker"`. A worker that loops
+until its signal aborts is named in every stall for as long as it runs: wrap each unit of work inside it in
+`trackWork('inbox:message')` from `@frontmcp/sdk` to see which one was running. See `frontmcp-observability` →
+`stall-detection`.
+
 ## Health
 
 Each worker adds a check named `worker:<name>` to `/readyz` (see `health-readiness-endpoints`):
