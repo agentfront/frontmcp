@@ -7,7 +7,13 @@
  */
 
 import { StorageConfigError, StorageConnectionError } from '../errors';
-import { deleteRedisKeys, getRedisKeys, isRedisClusterClient, scanRedisKeys } from '../redis-client/cluster-ops';
+import {
+  deleteRedisKeys,
+  getRedisKeys,
+  isRedisClusterClient,
+  publishRedisMessage,
+  scanRedisKeys,
+} from '../redis-client/cluster-ops';
 import { hasRedisClusterNodes } from '../redis-client/config';
 import { adoptRedisClient, createRedisConnection, urlConnectionOptions } from '../redis-client/connection';
 import type { FrontMcpRedisClient, RedisConnectionSettings } from '../redis-client/types';
@@ -393,7 +399,8 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
 
   override async publish(channel: string, message: string): Promise<number> {
     const prefixedChannel = this.prefixKey(channel);
-    return this.getConnectedClient().publish(prefixedChannel, message);
+    // On a cluster PUBLISH counts only one node's subscribers; this counts every node's
+    return publishRedisMessage(this.getConnectedClient(), prefixedChannel, message);
   }
 
   override async subscribe(channel: string, handler: MessageHandler): Promise<Unsubscribe> {

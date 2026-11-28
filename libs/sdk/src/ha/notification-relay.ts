@@ -7,6 +7,8 @@
  * sessions (see {@link HaRelayMessage}).
  */
 
+import { publishRedisMessage, type FrontMcpRedisClient } from '@frontmcp/utils';
+
 import { DEFAULT_HA_CONFIG, type HaConfig } from './ha.types';
 import type { HaRelayMessage, NotificationRelayMessage } from './relay-messages';
 
@@ -24,7 +26,7 @@ export type RelayHandler = (message: HaRelayMessage) => void | Promise<void>;
  * Minimal Redis pub/sub client interface.
  * Requires a dedicated connection for subscribing (ioredis pattern).
  */
-export interface RelayRedisClient {
+export interface RelayRedisClient extends Partial<Pick<FrontMcpRedisClient, 'isCluster' | 'nodes'>> {
   subscribe(channel: string): Promise<unknown>;
   unsubscribe(channel: string): Promise<unknown>;
   publish(channel: string, message: string): Promise<number>;
@@ -95,7 +97,9 @@ export class NotificationRelay {
    * @returns How many subscribers received it — 0 when nothing listens on that pod's channel.
    */
   async send(targetNodeId: string, message: HaRelayMessage): Promise<number> {
-    return this.publisher.publish(this.channelOf(targetNodeId), JSON.stringify(message));
+    // On a cluster PUBLISH counts only one node's subscribers; this counts every node's, so a
+    // reply of 0 still means the pod does not listen
+    return publishRedisMessage(this.publisher, this.channelOf(targetNodeId), JSON.stringify(message));
   }
 
   private onMessage = (channel: string, raw: string): void => {

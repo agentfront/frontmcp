@@ -6,6 +6,8 @@
  * given session, and to relay a request for it to that pod.
  */
 
+import { publishRedisMessage, type FrontMcpRedisClient } from '@frontmcp/utils';
+
 import type { ServerRequest, ServerResponse } from '../../common';
 import { SessionOwnerUnreachableError } from '../../errors/transport.errors';
 import { isRelayedRequest, serializeRelayRequest } from '../relay/relay-http';
@@ -16,7 +18,7 @@ import type { RemoteLocation, TransportBus, TransportKey } from '../transport.ty
  * Minimal Redis client interface for the transport bus.
  * Subset of ioredis — allows plugging any compatible client.
  */
-export interface BusRedisClient {
+export interface BusRedisClient extends Partial<Pick<FrontMcpRedisClient, 'isCluster' | 'nodes'>> {
   hgetall(key: string): Promise<Record<string, string>>;
   del(key: string): Promise<number>;
   publish(channel: string, message: string): Promise<number>;
@@ -235,7 +237,8 @@ export class RedisTransportBus implements TransportBus {
       timestamp: Date.now(),
     });
 
-    const receivers = await this.redis.publish(entry.channel, message);
+    // Counted on every node of a cluster, whose PUBLISH counts only its own node's subscribers
+    const receivers = await publishRedisMessage(this.redis, entry.channel, message);
 
     // Let the owning node revoke after it destroys the transport.
     // Don't blindly delete — another node may have already taken ownership.

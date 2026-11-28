@@ -69,6 +69,7 @@ describe('NodeRedisClientAdapter on a client', () => {
     ['xadd', ['st', 'MAXLEN', '~', 10, '*', 'msg', '{}'], ['XADD', 'st', 'MAXLEN', '~', '10', '*', 'msg', '{}'], '1-0'],
     ['xrange', ['st', '(1-0', '+'], ['XRANGE', 'st', '(1-0', '+'], [['2-0', ['msg', '{}']]]],
     ['publish', ['ch', 'hi'], ['PUBLISH', 'ch', 'hi'], 1],
+    ['pubsub', ['NUMSUB', 'ch'], ['PUBSUB', 'NUMSUB', 'ch'], ['ch', 1]],
     ['ping', [], ['PING'], 'PONG'],
   ])('%s sends %p', async (method, args, command, reply) => {
     const { client } = fakeNodeRedis();
@@ -240,10 +241,11 @@ describe('NodeRedisClientAdapter on a cluster', () => {
     node.state.isOpen = true;
     node.client.sendCommand.mockResolvedValue(['0', ['x']]);
     const nodeClient = jest.fn(async () => node.client);
-    const { client } = fakeNodeRedis({ masters: [{ id: 'm1' }, { id: 'm2' }], nodeClient });
+    const { client } = fakeNodeRedis({ masters: [{ id: 'm1' }, { id: 'm2' }], replicas: [{ id: 'r1' }], nodeClient });
     const adapter = new NodeRedisClientAdapter(client as unknown as NodeRedisLike, { cluster: true, owned: false });
     const masters = adapter.nodes();
     expect(masters).toHaveLength(2);
+    expect(adapter.nodes('all')).toHaveLength(3);
     await expect(masters[0].scan('0')).resolves.toEqual(['0', ['x']]);
     expect(nodeClient).toHaveBeenCalledWith({ id: 'm1' });
     expect(node.client.sendCommand).toHaveBeenCalledWith(['SCAN', '0']);

@@ -8,7 +8,7 @@
  */
 import type { FrontMcpRedisClient } from './types';
 
-/** What the cluster checks read: the `isCluster` flag and the masters. */
+/** What the cluster checks read: the `isCluster` flag and the nodes. */
 type ClusterShape = Partial<Pick<FrontMcpRedisClient, 'isCluster' | 'nodes' | 'ping'>>;
 
 /** A client the key enumeration can run on: SCAN, and the cluster's masters when it is one. */
@@ -54,6 +54,65 @@ export async function scanRedisKeys(client: RedisScanClient, pattern: string, co
   if (!isRedisClusterClient(client)) return scanNode(client, pattern, count);
   const perMaster = await Promise.all((await redisMasterNodes(client)).map((node) => scanNode(node, pattern, count)));
   return [...new Set(perMaster.flat())];
+}
+
+/**
+ * PUBLISH a message and resolve how many subscribers it reached. A single node answers that itself.
+ * A cluster delivers the message to the subscribers of every node but counts only those of the node
+ * the PUBLISH ran on, so when it reports none the channel's subscribers are counted on every node
+ * (`PUBSUB NUMSUB`): a caller that treats 0 as "nobody listens" then stays right on a cluster.
+ */
+export async function publishRedisMessage(
+  client: Pick<FrontMcpRedisClient, 'publish'> & ClusterShape,
+  channel: string,
+  message: string,
+): Promise<number> {
+  if (!isRedisClusterClient(client) || typeof client.nodes !== 'function') {
+    return Number(await client.publish(channel, message));
+  }
+  // A cluster client sends a keyless PUBLISH to any node, and messages that enter the cluster at
+  // different nodes can reach a subscriber out of order: a relayed response's frames arrived with
+  // its end before its body. Every message on one channel goes through one node instead.
+  const node = await pubsubNodeFor(client, channel);
+  const received = Number(await node.publish(channel, message));
+  if (received > 0) return received;
+  const counts = await Promise.all(
+    client.nodes('all').map(async (node) => {
+      if (typeof node.pubsub !== 'function') return 0;
+      try {
+        const reply = (await node.pubsub('NUMSUB', channel)) as unknown[];
+        return Number(reply?.[1] ?? 0);
+      } catch {
+        // A node that can't answer (failing over) counts none
+        return 0;
+      }
+    }),
+  );
+  return counts.reduce((total, count) => total + count, 0);
+}
+
+/** The address a node client connects to, to order a cluster's masters the same way every time. */
+function nodeAddress(node: object): string {
+  const { options, address } = node as { options?: { host?: string; port?: number }; address?: string };
+  return address ?? `${options?.host ?? ''}:${options?.port ?? ''}`;
+}
+
+/** A small, stable hash of a channel name, to spread channels over the masters. */
+function channelHash(channel: string): number {
+  let hash = 0;
+  for (let i = 0; i < channel.length; i++) hash = (Math.imul(hash, 31) + channel.charCodeAt(i)) >>> 0;
+  return hash;
+}
+
+/** The master every PUBLISH on `channel` goes through, so its messages keep their order. */
+async function pubsubNodeFor(
+  client: Pick<FrontMcpRedisClient, 'publish'> & ClusterShape,
+  channel: string,
+): Promise<Pick<FrontMcpRedisClient, 'publish'>> {
+  const masters = (await redisMasterNodes(client)) as Array<Pick<FrontMcpRedisClient, 'publish'>>;
+  if (masters.length === 0) return client;
+  const ordered = [...masters].sort((a, b) => nodeAddress(a).localeCompare(nodeAddress(b)));
+  return ordered[channelHash(channel) % ordered.length];
 }
 
 /** Delete `keys`: one DEL on a single node, as before; one DEL per key on a cluster. Resolves how many existed. */

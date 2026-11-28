@@ -75,6 +75,12 @@ export interface FrontMcpRedisClient {
 
   // ---- Pub/sub -------------------------------------------------------------------------
   publish(channel: string, message: string): Promise<number>;
+  /**
+   * `PUBSUB subcommand ...args`: on a cluster FrontMCP counts a channel's subscribers on every node
+   * (`PUBSUB NUMSUB channel`, replying `[channel, count]`) when PUBLISH reports none, because a
+   * cluster's PUBLISH counts only the subscribers of the node it ran on.
+   */
+  pubsub?(subcommand: string, ...args: RedisArgument[]): Promise<unknown>;
   /** Subscribe this connection; messages arrive as `on('message', (channel, message) => ...)`. */
   subscribe(...channels: string[]): Promise<unknown>;
   unsubscribe(...channels: string[]): Promise<unknown>;
@@ -102,8 +108,8 @@ export interface FrontMcpRedisClient {
   // ---- Cluster ---------------------------------------------------------------------------
   /** True for a Redis Cluster client. */
   readonly isCluster?: boolean;
-  /** A cluster's nodes of one role; FrontMCP asks for the masters, to scan each of them. */
-  nodes?(role: 'master'): FrontMcpRedisClient[];
+  /** A cluster's nodes: its masters (to scan each of them), or all of them (to count subscribers). */
+  nodes?(role: 'master' | 'all'): FrontMcpRedisClient[];
 }
 
 /** A seed node of a cluster: `{ host, port }`, `'host:port'`, or a `redis://` / `rediss://` URL. */
