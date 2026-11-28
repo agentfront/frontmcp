@@ -11,6 +11,8 @@
  * - orchestrated.schema.ts (localAuthSchema, remoteAuthSchema)
  */
 
+import { REQUIRED_REDIS_CLIENT_METHODS } from '@frontmcp/utils';
+
 import { localAuthSchema, remoteAuthSchema } from '../orchestrated.schema';
 import { publicAuthOptionsSchema } from '../public.schema';
 import { authOptionsSchema } from '../schema';
@@ -33,6 +35,11 @@ import { transparentAuthOptionsSchema } from '../transparent.schema';
 // ============================================
 // publicAccessConfigSchema
 // ============================================
+
+/** An object with every method a FrontMcpRedisClient requires. */
+function fullRedisClient(): Record<string, () => undefined> {
+  return Object.fromEntries(REQUIRED_REDIS_CLIENT_METHODS.map((name) => [name, () => undefined]));
+}
 
 describe('publicAccessConfigSchema', () => {
   it('should apply defaults when given an empty object', () => {
@@ -358,7 +365,7 @@ describe('secureStoreConfigSchema', () => {
       'secureStore.redis.url: redis.url must be a redis:// or rediss:// URL',
     ],
     [
-      { redis: { host: 'cache', client: { get() {}, set() {}, del() {} } } },
+      { redis: { host: 'cache', client: fullRedisClient() } },
       'secureStore.redis.client: redis.client carries its own connection; drop host beside it',
     ],
     [
@@ -409,11 +416,18 @@ describe('secureStoreConfigSchema', () => {
     ['a url', { url: 'rediss://:pw@cache.internal:6380' }],
     ['a cluster endpoint', { host: 'cfg.example', tls: true, cluster: true }],
     ['cluster seed nodes', { cluster: { nodes: ['10.0.0.1:7000', { host: '10.0.0.2', port: 7001 }] } }],
-    ['a client', { client: { get() {}, set() {}, del() {} } }],
+    ['a client', { client: fullRedisClient() }],
   ])('takes a Redis backing given by %s (#1503)', (_label, redis) => {
     const result = secureStoreConfigSchema.safeParse({ redis });
 
     expect(result.success).toBe(true);
+  });
+
+  it('refuses a client of its own that lacks required methods, naming them', () => {
+    const result = secureStoreConfigSchema.safeParse({ redis: { client: { get() {}, set() {}, del() {} } } });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.message).toContain('redis.client is missing FrontMcpRedisClient methods: exists');
   });
 
   it('keeps a host config as before: port 6379, db 0, no TLS', () => {
@@ -425,7 +439,7 @@ describe('secureStoreConfigSchema', () => {
   });
 
   it('keeps the client a backing was given as the same object', () => {
-    const client = { get() {}, set() {}, del() {} };
+    const client = fullRedisClient();
     const result = secureStoreConfigSchema.safeParse({ redis: { client } });
 
     expect(result.success && (result.data as { redis: { client: unknown } }).redis.client).toBe(client);

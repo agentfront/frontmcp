@@ -146,7 +146,8 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
                   port: redis.port ?? 6379,
                   password: redis.password,
                   db: redis.db,
-                  tls: redis.tls ? {} : undefined,
+                  // Left out unless set: an undefined tls must not clear the TLS a rediss:// seed asks for
+                  ...(redis.tls ? { tls: {} } : {}),
                   keyPrefix: redis.keyPrefix,
                   ...(redis.cluster !== undefined ? { cluster: redis.cluster } : {}),
                 },

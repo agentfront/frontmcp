@@ -1,6 +1,7 @@
 /**
  * CacheRedisProvider on a Redis Cluster, and with a client the app made (#1503).
  */
+import CachePlugin from '../cache.plugin';
 import CacheRedisProvider from '../providers/cache-redis.provider';
 
 const mockNode = () => ({
@@ -121,5 +122,34 @@ describe("CacheRedisProvider with the app's own client", () => {
 
     expect(nodeRedis.sendCommand).toHaveBeenCalledWith(['SET', 'k', '{"a":1}', 'EX', '60']);
     expect(nodeRedis.close).not.toHaveBeenCalled();
+  });
+});
+
+describe('CachePlugin global-store on a cluster named by rediss:// seeds', () => {
+  beforeEach(() => {
+    MockCluster.mockClear();
+  });
+
+  it('keeps the TLS the seeds ask for when the server redis says tls: false', () => {
+    const provider = CachePlugin.dynamicProviders({ type: 'global-store' })[0] as unknown as {
+      useFactory: (config: unknown) => unknown;
+    };
+    provider.useFactory({
+      redis: {
+        provider: 'redis',
+        host: 'seed.example',
+        port: 6379,
+        db: 0,
+        tls: false,
+        keyPrefix: 'mcp:',
+        defaultTtlMs: 3_600_000,
+        cluster: { nodes: ['rediss://:secret@seed.example:6379'] },
+      },
+    });
+
+    expect(MockCluster).toHaveBeenCalledWith(
+      [{ host: 'seed.example', port: 6379 }],
+      expect.objectContaining({ redisOptions: expect.objectContaining({ password: 'secret', tls: {} }) }),
+    );
   });
 });

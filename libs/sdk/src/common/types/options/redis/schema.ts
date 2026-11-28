@@ -6,6 +6,7 @@ import {
   describeRedisUrlConflicts,
   isRedisClientInput,
   mergeRedisUrlFields,
+  redisClientProblem,
   UNSUPPORTED_REDIS_CLIENT_MESSAGE,
   type RedisClientInput,
   type RedisClusterOption,
@@ -339,7 +340,8 @@ export const redisClusterNodesSchema = z
       port: seed.port,
       ...(val.password !== undefined ? { password: val.password } : {}),
       db: 0,
-      tls: val.tls ?? false,
+      // A rediss:// seed means TLS for the whole cluster, so the parsed option says so too
+      tls: val.tls ?? val.cluster.nodes.some((node) => typeof node === 'string' && /^rediss:\/\//i.test(node)),
       cluster: val.cluster,
       keyPrefix: val.keyPrefix,
       defaultTtlMs: val.defaultTtlMs,
@@ -363,7 +365,7 @@ export const redisClientSchema = z
   .object({
     provider: z.literal('redis').optional(),
     client: z.custom<RedisClientInput>((value) => isRedisClientInput(value), {
-      error: UNSUPPORTED_REDIS_CLIENT_MESSAGE,
+      error: (issue) => redisClientProblem(issue.input) ?? UNSUPPORTED_REDIS_CLIENT_MESSAGE,
     }),
     host: z.undefined().optional(),
     port: z.undefined().optional(),
@@ -412,7 +414,8 @@ function redisUnionError(issue: UnionIssueLike): string | undefined {
       (field) => input[field] !== undefined,
     );
     if (beside.length > 0) return `redis.client carries its own connection; drop ${beside.join(', ')} beside it`;
-    if (!isRedisClientInput(input['client'])) return UNSUPPORTED_REDIS_CLIENT_MESSAGE;
+    const problem = redisClientProblem(input['client']);
+    if (problem) return problem;
   }
   for (const branch of issue.errors ?? []) {
     const own = branch.find((entry) => entry.code === 'custom' && OWN_MESSAGE_FIELDS.has(entry.path?.[0] ?? ''));

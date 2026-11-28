@@ -7,7 +7,12 @@
  * @see https://datatracker.ietf.org/doc/html/draft-ietf-oauth-client-id-metadata-document-00
  */
 import { internalZ as z } from '@frontmcp/lazy-zod';
-import { isRedisClientInput, UNSUPPORTED_REDIS_CLIENT_MESSAGE, type RedisClientInput } from '@frontmcp/utils';
+import {
+  isRedisClientInput,
+  redisClientProblem,
+  UNSUPPORTED_REDIS_CLIENT_MESSAGE,
+  type RedisClientInput,
+} from '@frontmcp/utils';
 
 // ============================================
 // CLIENT METADATA DOCUMENT SCHEMA
@@ -193,7 +198,7 @@ export const cimdRedisCacheConfigSchema = z.object({
    */
   client: z
     .custom<RedisClientInput>((value) => value === undefined || isRedisClientInput(value), {
-      error: UNSUPPORTED_REDIS_CLIENT_MESSAGE,
+      error: (issue) => redisClientProblem(issue.input) ?? UNSUPPORTED_REDIS_CLIENT_MESSAGE,
     })
     .optional(),
 

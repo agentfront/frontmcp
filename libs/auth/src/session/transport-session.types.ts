@@ -5,6 +5,7 @@ import {
   describeRedisUrlConflicts,
   isRedisClientInput,
   mergeRedisUrlFields,
+  redisClientProblem,
   UNSUPPORTED_REDIS_CLIENT_MESSAGE,
   type RedisClientInput,
   type RedisConnectionConfig,
@@ -444,7 +445,7 @@ export const redisConfigSchema = z
     cluster: redisClusterSchema.optional(),
     client: z
       .custom<RedisClientInput>((value) => value === undefined || isRedisClientInput(value), {
-        error: UNSUPPORTED_REDIS_CLIENT_MESSAGE,
+        error: (issue) => redisClientProblem(issue.input) ?? UNSUPPORTED_REDIS_CLIENT_MESSAGE,
       })
       .optional(),
     keyPrefix: z.string().optional().default('mcp:session:'),
