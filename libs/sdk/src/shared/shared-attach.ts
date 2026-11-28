@@ -456,6 +456,32 @@ export function attachSharedSession(options: AttachSharedSessionOptions): Shared
     );
   }
 
+  /** What of the client's handshake a server was sent: its `initialize`, and whether `initialized` followed. */
+  interface Replayed {
+    frame?: JsonRpcFrame;
+    initialized: boolean;
+  }
+
+  /** Whether `replayed` is all of the client's handshake so far: checked with no await before a server is taken. */
+  function caughtUp(replayed: Replayed): boolean {
+    return clientInitialize === replayed.frame && (!replayed.frame || !clientInitialized || replayed.initialized);
+  }
+
+  /** Send `next` what of the client's handshake it lacks: an `initialize` sent during a move, or its `initialized`. */
+  async function replayHandshake(
+    next: HttpUpstreamClient,
+    replayed: Replayed,
+  ): Promise<Record<string, unknown> | undefined> {
+    if (clientInitialize !== replayed.frame) {
+      replayed.frame = clientInitialize;
+      replayed.initialized = clientInitialized;
+      return replayed.frame ? next.reinitialize(replayed.frame, replayed.initialized) : undefined;
+    }
+    replayed.initialized = true;
+    await next.send({ jsonrpc: '2.0', method: 'notifications/initialized' });
+    return undefined;
+  }
+
   /** Take `next` as the server to send the requests to. */
   function useUpstream(next: HttpUpstreamClient): boolean {
     upstream = next;
@@ -483,8 +509,9 @@ export function attachSharedSession(options: AttachSharedSessionOptions): Shared
         onNotificationStreamLost: () => watchForSuccessor(next, server.pid),
       });
       let result: Record<string, unknown> | undefined;
+      const replayed: Replayed = { initialized: false };
       try {
-        if (clientInitialize) result = await next.reinitialize(clientInitialize, clientInitialized);
+        while (!caughtUp(replayed)) result = (await replayHandshake(next, replayed)) ?? result;
       } catch (error) {
         await next.close();
         if (error instanceof SharedServerLostError && replays < MAX_RESENDS) continue;
