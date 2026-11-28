@@ -4,7 +4,8 @@ import type { FrontMcpLogger } from '../common';
 import { describeThrown } from './describe-thrown';
 
 /** The store operations a lease needs; the SQLite, Redis and memory stores run each one atomically. */
-export type LeaseStorage = Pick<NamespacedStorage, 'set' | 'expireIfEquals' | 'deleteIfEquals'>;
+export type LeaseStorage = Pick<NamespacedStorage, 'set' | 'expireIfEquals' | 'deleteIfEquals'> &
+  Partial<Pick<NamespacedStorage, 'get'>>;
 
 export interface LeaseHolderOptions {
   /** What holds the lease, as logs name it: `Duty "sweep"`, `Worker "inbox"`. */
@@ -17,6 +18,14 @@ export interface LeaseHolderOptions {
   onAcquired(): void | Promise<void>;
   /** This process no longer holds the lease, which it did not release itself: stop what runs under it. */
   onLost(): void;
+  /**
+   * Whether this process prefers to hold the lease: `true` marks the lease as wanted by it while it runs, and a holder
+   * that is not preferred hands the lease over; `false` hands it over to a preferred process, and takes it while none
+   * wants it. Unset, preferences are not looked at. Needs `storage.get`.
+   */
+  prefer?: boolean;
+  /** Resolves once what runs under the lease ended, after `onLost()`: a holder that hands the lease over waits for it. */
+  settled?(): Promise<unknown>;
 }
 
 /**
@@ -56,6 +65,11 @@ export class LeaseHolder {
     return this.stopped;
   }
 
+  /** Where a preferred process marks that it wants the lease. */
+  private get preferKey(): string {
+    return `${this.options.key}:prefer`;
+  }
+
   /** Contend for the lease once now, then renew or contend again every third of the lease. */
   async start(): Promise<void> {
     this.leaseCheck = this.checkLease();
@@ -74,6 +88,12 @@ export class LeaseHolder {
     clearTimeout(this.leaseTimer);
     await this.leaseCheck;
     clearTimeout(this.leaseDeadline);
+    // A preferred process that stops no longer wants the lease: the others take it at once
+    if (this.options.prefer === true) {
+      await this.options.storage.deleteIfEquals(this.preferKey, this.id).catch((error: unknown) => {
+        this.reportStoreFailure(error);
+      });
+    }
     if (!this.held) return;
     this.held = false;
     if (!ended) return;
@@ -113,7 +133,10 @@ export class LeaseHolder {
   private async checkLease(): Promise<void> {
     let nextCheckMs = this.options.leaseMs / 3;
     try {
-      if (this.held) {
+      if (this.options.prefer === true && !this.stopped) await this.markPreferred();
+      if (this.held && (await this.preferredElsewhere())) {
+        await this.handOver();
+      } else if (this.held) {
         if (!(await this.renew())) this.lose('lost its lease; another process runs it now');
       } else if (!this.stopped) {
         const acquired = await this.acquire();
@@ -132,9 +155,34 @@ export class LeaseHolder {
     this.leaseTimer.unref?.();
   }
 
+  /** Mark the lease as wanted by this preferred process, for as long as a lease lasts; renewed at each check. */
+  private async markPreferred(): Promise<void> {
+    await this.options.storage.set(this.preferKey, this.id, { ttlSeconds: this.leaseSeconds });
+  }
+
+  /** Whether this process is not preferred and a preferred one wants the lease. */
+  private async preferredElsewhere(): Promise<boolean> {
+    const { prefer, storage } = this.options;
+    if (prefer !== false || !storage.get) return false;
+    const marked = await storage.get(this.preferKey);
+    return marked !== null && marked !== this.id;
+  }
+
+  /** Stop what runs under the lease, wait for it to end, and release the lease to the preferred process. */
+  private async handOver(): Promise<void> {
+    this.held = false;
+    clearTimeout(this.leaseDeadline);
+    this.options.onLost();
+    await this.options.settled?.();
+    await this.options.storage.deleteIfEquals(this.options.key, this.id);
+    this.options.logger.info(`${this.options.label} hands its lease over to a preferred process`);
+  }
+
   /** Write the lease if no one holds it, then renew it to learn whether this holder's id is stored. */
   private async acquire(): Promise<boolean> {
     const { key, storage } = this.options;
+    // While a preferred process wants the lease, one that is not leaves it to that one
+    if (await this.preferredElsewhere()) return false;
     await storage.set(key, this.id, { ttlSeconds: this.leaseSeconds, ifNotExists: true });
     this.held = await this.renew();
     return this.held;
