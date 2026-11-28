@@ -651,6 +651,23 @@ describe('TransportService — distributed sessions (#680)', () => {
       expect(haManager.isNodeAlive).toHaveBeenCalledWith('node-owner');
     });
 
+    it("checks the heartbeat of the owner the bus asked, when the session moved after this node's lookup", async () => {
+      const notListening = (holder: string) =>
+        new SessionEndUnconfirmedError(holder, 30, 'nobody listens', 'not-listening');
+      const bus = createBus({
+        lookup: jest.fn().mockResolvedValue(owner),
+        destroyRemote: jest.fn().mockRejectedValue(notListening('node-moved')),
+      });
+      const haManager = createHaManager({ 'node-owner': false, 'node-moved': true });
+      const { service } = await createService({ haManager, bus });
+
+      await expect(service.destroyTransporter('streamable-http', TOKEN, SESSION_ID)).rejects.toBeInstanceOf(
+        SessionEndUnconfirmedError,
+      );
+      expect(haManager.isNodeAlive).toHaveBeenCalledWith('node-moved');
+      expect(haManager.isNodeAlive).not.toHaveBeenCalledWith('node-owner');
+    });
+
     it('listens on no session store channel: the bus reaches the owner', async () => {
       const pubsub = { publish: jest.fn().mockResolvedValue(1), subscribe: jest.fn().mockResolvedValue(jest.fn()) };
       Object.assign(mockStore, pubsub);

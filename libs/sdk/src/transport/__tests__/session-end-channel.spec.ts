@@ -182,6 +182,30 @@ describe('SessionEndChannel', () => {
     expect(redis.published).toEqual([]);
   });
 
+  it('answers a retryable 503 when the request cannot be published, or its listeners not all counted', async () => {
+    const redis = new FakeRedis();
+    const log = logger();
+    const pubsub = redis.pubsub();
+    const channel = new SessionEndChannel({
+      pubsub: { ...pubsub, publish: jest.fn().mockRejectedValue(new Error('PUBSUB NUMSUB failed')) },
+      endLocal: jest.fn(),
+      logger: log,
+    });
+    await channel.start();
+
+    const error = (await channel
+      .endElsewhere('sess-1')
+      .catch((caught: unknown) => caught)) as SessionEndUnconfirmedError;
+
+    expect(error).toBeInstanceOf(SessionEndUnconfirmedError);
+    expect(error.kind).toBe('uncounted');
+    expect(error.retryAfterSeconds).toBe(5);
+    expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('Could not ask the other instances'), {
+      sessionId: 'sess-1',
+      error: 'PUBSUB NUMSUB failed',
+    });
+  });
+
   it('logs an answer it could not publish', async () => {
     const redis = new FakeRedis();
     const log = logger();

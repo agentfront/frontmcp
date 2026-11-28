@@ -122,6 +122,9 @@ export class SessionOwnerUnreachableError extends PublicMcpError {
   }
 }
 
+/** Why a session's end is unconfirmed; see {@link SessionEndUnconfirmedError.kind}. */
+export type SessionEndUnconfirmedKind = 'not-listening' | 'timed-out' | 'uncounted';
+
 /**
  * Answer to a client's DELETE when an instance of the server that holds the session did not confirm in
  * time that it closed the session's transport, which stops the session's calls in flight (#1446).
@@ -137,10 +140,10 @@ export class SessionEndUnconfirmedError extends PublicMcpError {
   readonly holder: string;
   /** Why it is unconfirmed. Logged, never sent to the client. */
   readonly reason: string;
-  /** `not-listening`: no instance listened for the request, so none was asked; `timed-out`: one was asked and did not answer. */
-  readonly kind: 'not-listening' | 'timed-out';
+  /** `not-listening`: none was asked; `timed-out`: one did not answer; `uncounted`: who to ask is unknown. */
+  readonly kind: SessionEndUnconfirmedKind;
 
-  constructor(holder: string, retryAfterSeconds: number, reason: string, kind: 'not-listening' | 'timed-out') {
+  constructor(holder: string, retryAfterSeconds: number, reason: string, kind: SessionEndUnconfirmedKind) {
     const retryAfter = Math.max(1, Math.ceil(retryAfterSeconds));
     super(
       'This MCP session is ending, but an instance of the server that holds it did not confirm that it ' +

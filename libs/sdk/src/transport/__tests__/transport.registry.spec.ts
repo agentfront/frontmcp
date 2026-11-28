@@ -10,8 +10,10 @@ import type { TransportPersistenceConfigInput } from '../../common';
 import { askPersistentQuestion } from '../../elicitation/questions/ask-question';
 import { createQuestionStore } from '../../elicitation/questions/question-store.factory';
 import { QuestionPendingError } from '../../elicitation/questions/question.errors';
+import { InvalidTransportSessionError } from '../../errors/transport.errors';
 import { loadSseTransport } from '../adapters/transport.sse.adapter';
 import { loadStreamableHttpTransport } from '../adapters/transport.streamable-http.adapter';
+import { LocalTransporter } from '../transport.local';
 import { TransportService } from '../transport.registry';
 
 // Mock dependencies
@@ -1110,20 +1112,58 @@ describe('TransportService', () => {
       delete (mockRedisSessionStore as { subscribe?: unknown }).subscribe;
     });
 
-    it('serves on, and a DELETE asks no other instance (they end the session on their next request)', async () => {
-      const publish = jest.fn();
-      Object.assign(mockRedisSessionStore, { publish, subscribe: jest.fn().mockRejectedValue(new Error('NOPERM')) });
+    it('answers a DELETE unconfirmed until a retry of the subscription succeeds, then asks the others', async () => {
+      jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] });
+      try {
+        const publish = jest.fn().mockResolvedValue(1);
+        const subscribe = jest.fn().mockRejectedValueOnce(new Error('NOPERM')).mockResolvedValue(jest.fn());
+        Object.assign(mockRedisSessionStore, { publish, subscribe });
+        service = createServiceWithEnabledFlag(mockScope, { enabled: true, redis: { host: 'localhost' } });
+        await service.ready;
+        await jest.advanceTimersByTimeAsync(0);
+
+        await expect(service.endSessionOnOtherInstances('gone')).rejects.toEqual(
+          expect.objectContaining({ kind: 'not-listening', statusCode: 503 }),
+        );
+        expect(publish).not.toHaveBeenCalled();
+        expect(mockScope.logger.warn).toHaveBeenCalledWith(
+          expect.stringContaining('Could not listen for sessions deleted through other instances — retrying in 1000ms'),
+          { error: 'NOPERM' },
+        );
+
+        await jest.advanceTimersByTimeAsync(1_000);
+        await service.endSessionOnOtherInstances('gone');
+        expect(subscribe).toHaveBeenCalledTimes(2);
+        expect(publish).toHaveBeenCalledWith('session-end', expect.stringContaining('"end-session"'));
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('waits for a subscription still being made before it asks the others', async () => {
+      let subscribed: (stop: () => Promise<void>) => void = () => undefined;
+      const publish = jest.fn().mockResolvedValue(1);
+      Object.assign(mockRedisSessionStore, {
+        publish,
+        subscribe: jest.fn(() => new Promise((resolve) => (subscribed = resolve))),
+      });
       service = createServiceWithEnabledFlag(mockScope, { enabled: true, redis: { host: 'localhost' } });
       await service.ready;
+
+      const ended = service.endSessionOnOtherInstances('gone');
       await new Promise((resolve) => setImmediate(resolve));
-
-      await service.endSessionOnOtherInstances('gone');
-
       expect(publish).not.toHaveBeenCalled();
-      expect(mockScope.logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('Could not listen for sessions deleted through other instances'),
-        { error: 'NOPERM' },
-      );
+      subscribed(jest.fn().mockResolvedValue(undefined));
+
+      await expect(ended).resolves.toBeUndefined();
+      expect(publish).toHaveBeenCalledTimes(1);
+    });
+
+    it('asks no one on a session store without a channel (SQLite, Vercel KV), as before', async () => {
+      service = createServiceWithEnabledFlag(mockScope, { enabled: true, redis: { host: 'localhost' } });
+      await service.ready;
+
+      await expect(service.endSessionOnOtherInstances('gone')).resolves.toBeUndefined();
     });
 
     it('stops listening when it was destroyed while subscribing', async () => {
@@ -1141,6 +1181,73 @@ describe('TransportService', () => {
       await new Promise((resolve) => setImmediate(resolve));
 
       expect(stop).toHaveBeenCalled();
+    });
+  });
+
+  describe('a DELETE while this instance recreates the session (#1446)', () => {
+    const stored = {
+      session: { id: 'busy', authorizationId: sha256Hex('test-token'), protocol: 'streamable-http', createdAt: 1 },
+      authorizationId: sha256Hex('test-token'),
+      createdAt: 1,
+      lastAccessedAt: 1,
+    };
+
+    beforeEach(async () => {
+      service = createServiceWithEnabledFlag(mockScope, { enabled: true, redis: { host: 'localhost' } });
+      await service.ready;
+    });
+
+    /** Recreate the session, with its new transport not ready until `ready()` is called. */
+    function recreateUntilReady() {
+      let ready: () => void = () => undefined;
+      const destroy = jest.fn().mockResolvedValue(undefined);
+      jest.mocked(LocalTransporter).mockImplementationOnce(
+        () =>
+          ({
+            ready: () => new Promise<void>((resolve) => (ready = resolve)),
+            destroy,
+            markAsInitialized: jest.fn(),
+          }) as never,
+      );
+      const recreation = service.recreateTransporter(
+        'streamable-http',
+        'test-token',
+        'busy',
+        stored as never,
+        mockResponse as never,
+      );
+      return { recreation, destroy, ready: () => ready() };
+    }
+
+    it.each([
+      ['asked by another instance or node', (sessionId: string) => service.destroyLocalSession(sessionId)],
+      [
+        'received here',
+        (sessionId: string) => service.destroyTransporter('streamable-http', 'test-token', sessionId).catch(() => true),
+      ],
+    ] as const)('does not let a recreation in flight restore a session ended by a DELETE %s', async (_where, end) => {
+      const { recreation, destroy, ready } = recreateUntilReady();
+      const failed = recreation.catch((error: unknown) => error);
+      await new Promise((resolve) => setImmediate(resolve));
+
+      await expect(end('busy')).resolves.toBe(true);
+      ready();
+
+      expect(await failed).toBeInstanceOf(InvalidTransportSessionError);
+      expect(destroy).toHaveBeenCalled();
+      expect(mockRedisSessionStore.set).not.toHaveBeenCalled();
+      mockRedisSessionStore.exists.mockResolvedValue(true);
+      expect(await service.getTransporter('streamable-http', 'test-token', 'busy')).toBeUndefined();
+    });
+
+    it('restores a session no DELETE ended while it was recreated, and forgets an end once done', async () => {
+      const { recreation, ready } = recreateUntilReady();
+      await new Promise((resolve) => setImmediate(resolve));
+      ready();
+      await recreation;
+      expect(mockRedisSessionStore.set).toHaveBeenCalledWith('busy', expect.any(Object), expect.any(Number));
+
+      await expect(service.destroyLocalSession('unknown')).resolves.toBe(false);
     });
   });
 

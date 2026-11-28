@@ -22,7 +22,13 @@ import HandleSseFlow from './flows/handle.sse.flow';
 import HandleStatelessHttpFlow from './flows/handle.stateless-http.flow';
 import HandleStreamableHttpFlow from './flows/handle.streamable-http.flow';
 import { isRelayedRequest } from './relay/relay-http';
-import { isSessionEndPubSub, SessionEndChannel } from './session-end-channel';
+import {
+  isSessionEndPubSub,
+  SESSION_END_CONFIRM_TIMEOUT_MS,
+  SESSION_END_RETRY_AFTER_SECONDS,
+  SessionEndChannel,
+  type SessionEndPubSub,
+} from './session-end-channel';
 import { LocalTransporter } from './transport.local';
 import { RemoteTransporter } from './transport.remote';
 import {
@@ -55,6 +61,16 @@ const MAX_ROUTABLE_SESSION_ID_LENGTH = 4096;
 
 /** Session protocols that live on one node and can be relayed to it. */
 const RELAYABLE_TYPES: ReadonlySet<TransportType> = new Set<TransportType>(['streamable-http', 'sse']);
+
+/** Wait for `work`, at most `ms`; its failure is not waited on either. */
+async function withinMs(work: Promise<unknown>, ms: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const elapsed = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, ms);
+    timer.unref?.();
+  });
+  await Promise.race([work.catch(() => undefined), elapsed]).finally(() => clearTimeout(timer));
+}
 
 export class TransportService {
   readonly ready: Promise<void>;
@@ -188,6 +204,17 @@ export class TransportService {
    * instances sharing the store to close the session, and waits for them (#1446).
    */
   private sessionEndChannel?: SessionEndChannel;
+  /** Whether the store carries the channel (Redis): without a subscription, a DELETE's end is then unconfirmed. */
+  private sessionEndChannelExpected = false;
+  /** The subscription to the channel while it is being made. */
+  private sessionEndChannelStart?: Promise<void>;
+  private sessionEndRetryTimer: ReturnType<typeof setTimeout> | undefined;
+  private sessionEndRetryAttempt = 0;
+
+  /** Sessions this node is recreating from the store, with how many recreations are in flight. */
+  private readonly recreatingSessions = new Map<string, number>();
+  /** Sessions a DELETE ended while this node was recreating them: the recreation does not restore them. */
+  private readonly endedWhileRecreating = new Set<string>();
 
   /**
    * Redis key prefix under which session records are stored.
@@ -260,7 +287,7 @@ export class TransportService {
       // SQLite is a local file: a failure there does not heal by waiting.
       if (!connected && this.backendKind !== 'sqlite') this.scheduleSessionStoreRetry();
       // Not awaited: a subscription that hangs must not hold the server's start
-      if (connected) void this.startSessionEndChannel();
+      if (connected) this.startSessionEndChannel();
     }
 
     await this.scope.registryFlows(
@@ -339,21 +366,24 @@ export class TransportService {
     if (connected) {
       this.storeRetryAttempt = 0;
       this.scope.logger.info('[TransportService] Session store recovered after startup failure');
-      void this.startSessionEndChannel();
+      this.startSessionEndChannel();
       return;
     }
     this.scheduleSessionStoreRetry();
   }
 
-  /**
-   * Listen for DELETEs of sessions this instance may hold too: outside distributed mode (where the
-   * transport bus reaches a session's owner instead), on a session store with pub/sub (Redis). When the
-   * subscription fails, a DELETE through another instance ends the session here only on its next request,
-   * and a persistent question checks the store before it hands an answer over (`sessionEndCheck`).
-   */
-  private async startSessionEndChannel(): Promise<void> {
+  /** Listen for DELETEs through other instances on a Redis store; a failed subscription is retried with backoff. */
+  private startSessionEndChannel(): void {
     const store = this.sessionStore;
-    if (this.distributed || this.sessionEndChannel || !isSessionEndPubSub(store)) return;
+    if (this.distributed || this.destroyed || this.sessionEndChannel || this.sessionEndChannelStart) return;
+    if (!isSessionEndPubSub(store)) return;
+    this.sessionEndChannelExpected = true;
+    this.sessionEndChannelStart = this.openSessionEndChannel(store).finally(() => {
+      this.sessionEndChannelStart = undefined;
+    });
+  }
+
+  private async openSessionEndChannel(store: SessionEndPubSub): Promise<void> {
     const channel = new SessionEndChannel({
       pubsub: store,
       endLocal: (sessionId) => this.destroyLocalSession(sessionId),
@@ -362,16 +392,28 @@ export class TransportService {
     try {
       await channel.start();
     } catch (error) {
+      const delay = Math.min(
+        SESSION_STORE_RETRY_MAX_MS,
+        SESSION_STORE_RETRY_BASE_MS * 2 ** this.sessionEndRetryAttempt,
+      );
+      this.sessionEndRetryAttempt++;
       this.scope.logger.warn(
-        '[TransportService] Could not listen for sessions deleted through other instances — they end here on their next request',
+        `[TransportService] Could not listen for sessions deleted through other instances — retrying in ${delay}ms`,
         { error: error instanceof Error ? error.message : String(error) },
       );
+      if (this.destroyed) return;
+      this.sessionEndRetryTimer = setTimeout(() => {
+        this.sessionEndRetryTimer = undefined;
+        this.startSessionEndChannel();
+      }, delay);
+      this.sessionEndRetryTimer.unref?.();
       return;
     }
     if (this.destroyed) {
       await channel.close().catch(() => void 0);
       return;
     }
+    this.sessionEndRetryAttempt = 0;
     this.sessionEndChannel = channel;
   }
 
@@ -380,6 +422,10 @@ export class TransportService {
     if (this.storeRetryTimer) {
       clearTimeout(this.storeRetryTimer);
       this.storeRetryTimer = undefined;
+    }
+    if (this.sessionEndRetryTimer) {
+      clearTimeout(this.sessionEndRetryTimer);
+      this.sessionEndRetryTimer = undefined;
     }
     const channel = this.sessionEndChannel;
     this.sessionEndChannel = undefined;
@@ -599,10 +645,10 @@ export class TransportService {
 
   /**
    * Destroy this node's transports for a session (asked by another node through the relay).
-   * @returns Whether a transport was found.
+   * @returns Whether a transport was found, or a recreation in flight was stopped from restoring it.
    */
   async destroyLocalSession(sessionId: string, reason?: string): Promise<boolean> {
-    let found = false;
+    let found = reason === undefined && this.endRecreation(sessionId);
     for (const [type, typeBucket] of [...this.byType.entries()]) {
       if (!RELAYABLE_TYPES.has(type)) continue;
       for (const tokenBucket of [...typeBucket.values()]) {
@@ -855,6 +901,7 @@ export class TransportService {
     }
 
     // Recreate the transport with mutex protection
+    this.recreatingSessions.set(sessionId, (this.recreatingSessions.get(sessionId) ?? 0) + 1);
     const recreationPromise = this.doRecreateTransporter(key, sessionId, storedSession, res);
     this.creationMutex.set(mutexKey, recreationPromise);
 
@@ -869,6 +916,12 @@ export class TransportService {
       throw error;
     } finally {
       this.creationMutex.delete(mutexKey);
+      const recreating = (this.recreatingSessions.get(sessionId) ?? 1) - 1;
+      if (recreating > 0) this.recreatingSessions.set(sessionId, recreating);
+      else {
+        this.recreatingSessions.delete(sessionId);
+        this.endedWhileRecreating.delete(sessionId);
+      }
     }
   }
 
@@ -946,6 +999,12 @@ export class TransportService {
     );
 
     await transporter.ready();
+
+    // A DELETE ended the session meanwhile: close what was recreated instead of restoring the session
+    if (this.endedWhileRecreating.has(sessionId)) {
+      await transporter.destroy();
+      throw new InvalidTransportSessionError('Invalid session: it was ended while this node was recreating it.');
+    }
 
     // Mark the transport as initialized since we're recreating from an initialized session
     // This sets the MCP SDK's _initialized flag so subsequent requests are not rejected
@@ -1095,6 +1154,7 @@ export class TransportService {
 
   async destroyTransporter(type: TransportType, token: string, sessionId: string, reason?: string): Promise<void> {
     const key = this.keyOf(type, token, sessionId);
+    if (reason === undefined) this.endRecreation(sessionId);
 
     const local = this.lookupLocal(key);
     if (local) {
@@ -1112,7 +1172,7 @@ export class TransportService {
           const ownerStopped =
             error instanceof SessionEndUnconfirmedError &&
             error.kind === 'not-listening' &&
-            !(await this.isNodeAlive(location.nodeId));
+            !(await this.isNodeAlive(error.holder));
           if (!ownerStopped) throw error;
         }
         return;
@@ -1122,15 +1182,28 @@ export class TransportService {
     throw new InvalidTransportSessionError('Invalid session: cannot destroy non-existent transporter.');
   }
 
-  /**
-   * Outside distributed mode, ask the other instances sharing the session store to close a session a
-   * client deleted here, and wait until they did (#1446). Does nothing in distributed mode (the transport
-   * bus reaches the owner), or without a channel to the other instances.
-   *
-   * @throws SessionEndUnconfirmedError when an instance did not confirm within the bounded wait.
-   */
+  /** Have the instances sharing a Redis store close a deleted session; SessionEndUnconfirmedError when unconfirmed. */
   async endSessionOnOtherInstances(sessionId: string): Promise<void> {
-    await this.sessionEndChannel?.endElsewhere(sessionId);
+    if (this.distributed || !this.sessionEndChannelExpected) return;
+    const starting = this.sessionEndChannelStart;
+    if (starting && !this.sessionEndChannel) await withinMs(starting, SESSION_END_CONFIRM_TIMEOUT_MS);
+    const channel = this.sessionEndChannel;
+    if (!channel?.listening) {
+      throw new SessionEndUnconfirmedError(
+        'the instances sharing the session store',
+        SESSION_END_RETRY_AFTER_SECONDS,
+        'this instance does not listen on the session store channel yet, so it cannot hear the others confirm',
+        'not-listening',
+      );
+    }
+    await channel.endElsewhere(sessionId);
+  }
+
+  /** Mark a recreation of the session in flight as ended, so it does not restore it; whether one was. */
+  private endRecreation(sessionId: string): boolean {
+    if (!this.recreatingSessions.has(sessionId)) return false;
+    this.endedWhileRecreating.add(sessionId);
+    return true;
   }
 
   /**

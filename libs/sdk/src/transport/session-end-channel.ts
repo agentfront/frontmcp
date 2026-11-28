@@ -33,8 +33,10 @@ export function isSessionEndPubSub(store: unknown): store is SessionEndPubSub {
 /** The channel, named under the session store's key prefix. */
 export const SESSION_END_CHANNEL = 'session-end';
 
-const DEFAULT_CONFIRM_TIMEOUT_MS = 5_000;
-const DEFAULT_RETRY_AFTER_SECONDS = 5;
+/** How long a DELETE waits for the other instances to answer. */
+export const SESSION_END_CONFIRM_TIMEOUT_MS = 5_000;
+/** `Retry-After` of a DELETE whose end is unconfirmed outside distributed mode. */
+export const SESSION_END_RETRY_AFTER_SECONDS = 5;
 
 type SessionEndMessage =
   | { kind: 'end-session'; requestId: string; sessionId: string; instanceId: string }
@@ -91,8 +93,8 @@ export class SessionEndChannel {
   private closed = false;
 
   constructor(private readonly options: SessionEndChannelOptions) {
-    this.confirmTimeoutMs = options.confirmTimeoutMs ?? DEFAULT_CONFIRM_TIMEOUT_MS;
-    this.retryAfterSeconds = options.retryAfterSeconds ?? DEFAULT_RETRY_AFTER_SECONDS;
+    this.confirmTimeoutMs = options.confirmTimeoutMs ?? SESSION_END_CONFIRM_TIMEOUT_MS;
+    this.retryAfterSeconds = options.retryAfterSeconds ?? SESSION_END_RETRY_AFTER_SECONDS;
   }
 
   /** Whether this instance listens on the channel: only then can it hear the others answer. */
@@ -133,7 +135,7 @@ export class SessionEndChannel {
     this.pending.set(requestId, { answered, onAnswer: () => onAnswer() });
     try {
       const message: SessionEndMessage = { kind: 'end-session', requestId, sessionId, instanceId: this.instanceId };
-      const listeners = await this.options.pubsub.publish(SESSION_END_CHANNEL, JSON.stringify(message));
+      const listeners = await this.publishRequest(sessionId, JSON.stringify(message));
       // This instance listens too, and does not answer itself
       const others = listeners - 1;
       if (others <= 0) return;
@@ -165,6 +167,25 @@ export class SessionEndChannel {
       );
     } finally {
       this.pending.delete(requestId);
+    }
+  }
+
+  /** Publish the request; one that fails, or whose listeners cannot all be counted, leaves the end unconfirmed. */
+  private async publishRequest(sessionId: string, message: string): Promise<number> {
+    try {
+      return await this.options.pubsub.publish(SESSION_END_CHANNEL, message);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      this.options.logger.warn('[TransportService] Could not ask the other instances to close the session', {
+        sessionId: sessionId.slice(0, 20),
+        error: reason,
+      });
+      throw new SessionEndUnconfirmedError(
+        'the instances sharing the session store',
+        this.retryAfterSeconds,
+        `the request to close the session was not published, or its listeners not all counted: ${reason}`,
+        'uncounted',
+      );
     }
   }
 
