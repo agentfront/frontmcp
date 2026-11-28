@@ -3,7 +3,7 @@
  */
 import { borrowRedisClient, isBorrowedRedisClient } from '../borrow';
 import { deleteRedisKeys, getRedisKeys, isRedisClusterClient, redisMasterNodes, scanRedisKeys } from '../cluster-ops';
-import { isRedisConnection, redisConnectionOf } from '../config';
+import { isRedisConnection, redisAdapterOptionsOf, redisConnectionOf } from '../config';
 import { detectRedisClientKind, isRedisClientInput } from '../detect';
 import type { FrontMcpRedisClient } from '../types';
 
@@ -214,5 +214,19 @@ describe('redisConnectionOf', () => {
   it('gives a client alone', () => {
     const client = { get() {} };
     expect(redisConnectionOf({ client, keyPrefix: 'x' } as never)).toEqual({ client });
+  });
+});
+
+describe('redisAdapterOptionsOf', () => {
+  it('maps each form onto the storage adapter options', () => {
+    const client = { get() {} };
+    expect(redisAdapterOptionsOf({ client })).toEqual({ client });
+    expect(redisAdapterOptionsOf({ url: 'redis://cache', password: 'pw', cluster: true })).toEqual({
+      url: 'redis://cache',
+      config: { password: 'pw', cluster: true },
+    });
+    expect(redisAdapterOptionsOf({ host: 'cache', port: 6379, db: 0, tls: false })).toEqual({
+      config: { host: 'cache', port: 6379, db: 0, tls: false },
+    });
   });
 });
