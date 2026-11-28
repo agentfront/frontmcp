@@ -106,6 +106,7 @@ Each stall adds to `frontmcp_event_loop_stall_seconds_total`, labelled `cause` a
 
 ```text
 frontmcp_event_loop_stall_seconds_total{cause="tools/call",entry="reports:export"} 1.82
+frontmcp_event_loop_stall_seconds_total{cause="http",entry="GET /reports/:id"} 0.61
 frontmcp_event_loop_stall_seconds_total{cause="gc",entry=""} 0.26
 frontmcp_event_loop_stall_seconds_total{cause="unknown",entry=""} 0.25
 ```
@@ -113,8 +114,9 @@ frontmcp_event_loop_stall_seconds_total{cause="unknown",entry=""} 0.25
 - `cause` is the method of a call in flight, the kind of a work span (`http`, `duty`, `worker`, `work`), `gc` for
   garbage-collection time, or `unknown` when nothing was in flight.
 - A stall counts once for each entry in flight during it, so the sum across entries can exceed the time stalled.
-- `entry` is a registered entry's name, a route's declared path, a duty's or worker's name, or a `trackWork()` label,
-  so the label values are bounded by your server as long as your labels are.
+- `entry` is a registered entry's name; for an `@HttpRoute`, its method and declared path together
+  (`entry="GET /reports/:id"`, never the path asked for such as `/reports/42`); a duty's or worker's name; or a
+  `trackWork()` label. The label values are bounded by your server as long as your labels are.
 - Served on `/metrics` under the `process` category (see `metrics-endpoint`).
 
 ## GC pauses
