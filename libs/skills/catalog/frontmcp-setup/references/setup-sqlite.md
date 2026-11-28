@@ -69,7 +69,7 @@ interface SqliteOptionsInput {
   /** Enable WAL mode for better read concurrency (default: true) */
   walMode?: boolean;
 
-  /** Encryption config for at-rest encryption of values (optional) */
+  /** At-rest encryption of the values (optional). Keys are stored as written. */
   encryption?: {
     /** Secret key material for AES-256-GCM encryption via HKDF-SHA256 */
     secret: string;
@@ -135,12 +135,14 @@ Configuration reference:
 | `path`                 | `string`             | (optional)  | Absolute or `~`-prefixed path to the `.sqlite` file. Auto-resolved when omitted — see the default-path policy below.                                                             |
 | `walMode`              | `boolean`            | `true`      | Enable WAL mode for better read concurrency                                                                                                                                      |
 | `busyTimeoutMs`        | `number`             | `5000`      | How long a connection waits on a lock held by another process before `SQLITE_BUSY`. Set before WAL and table creation, so two processes starting on one file wait for each other |
-| `encryption`           | `{ secret: string }` | `undefined` | AES-256-GCM encryption for values at rest                                                                                                                                        |
+| `encryption`           | `{ secret: string }` | `undefined` | AES-256-GCM encryption of the values at rest; the keys are stored as written                                                                                                     |
 | `ttlCleanupIntervalMs` | `number`             | `60000`     | Interval for purging expired keys (milliseconds)                                                                                                                                 |
 
 ### With at-rest encryption
 
-If the database stores sensitive session data (tokens, credentials), enable encryption:
+Encryption seals each value. The keys, the names of the rows, are stored as written, since a lookup needs them: whoever can read the file (a backup, a copy of the home folder) can list them. FrontMCP's auth stores keep no code or token in a key: `auth.tokenStorage` names the rows of authorization codes, pending authorizations and refresh tokens by a keyed hash of the value (see `configure-auth`); up to 1.13 it named them by the code or token itself (see [Upgrading to 1.14](#upgrading-to-114)). Keys your own code writes to the file are stored as you write them: don't put a secret in one.
+
+To encrypt the values of a database that holds session data, tokens or credentials:
 
 ```typescript
 @FrontMcp({
@@ -161,7 +163,7 @@ export default class Server {}
 
 Reading a value written under a different secret throws `SqliteDecryptionError` (code `SQLITE_DECRYPTION_FAILED`) whose message names the secret as the likely cause; restore the original secret or delete the database file.
 
-The encryption uses HKDF-SHA256 for key derivation and AES-256-GCM for value encryption. The secret should be at least 32 characters. Store it in environment variables, never in source code.
+The encryption uses HKDF-SHA256 for key derivation and AES-256-GCM for value encryption. The secret should be at least 32 characters. Store it in environment variables, never in source code. In `auth.tokenStorage: { sqlite: { encryption } }`, the same secret also keys the hash the authorization rows are named by, so keep it for as long as the file is in use.
 
 ### For a unix-socket daemon
 
@@ -375,7 +377,7 @@ await storage.set('lock:reindex', process.pid.toString(), { ifNotExists: true, t
 | `walMode`                                                     | `true`               | See [Choosing a journal mode](#choosing-a-journal-mode)           |
 | `busyTimeoutMs`                                               | `5000`               | See [Busy timeout](#busy-timeout)                                 |
 | `ttlCleanupIntervalMs`                                        | `60000`              | How often expired keys are purged; `0` turns the sweep off        |
-| `encryption`                                                  | `undefined`          | `{ secret }` encrypts values at rest (AES-256-GCM)                |
+| `encryption`                                                  | `undefined`          | `{ secret }` encrypts values at rest (AES-256-GCM), not keys      |
 | `prefix` (provider only)                                      | `''`                 | Prefix for every key the storage reads and writes                 |
 | `provide` (provider only)                                     | `SqliteStorageToken` | Register under another token to hold more than one SQLite storage |
 
@@ -576,11 +578,15 @@ The change in `src/main.ts`:
 | Example                                                                            | Level        | Description                                                                                       |
 | ---------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------- |
 | [`basic-sqlite-setup`](../examples/setup-sqlite/basic-sqlite-setup.md)             | Basic        | Configure a FrontMCP server with SQLite for local session storage with WAL mode enabled.          |
-| [`encrypted-sqlite-storage`](../examples/setup-sqlite/encrypted-sqlite-storage.md) | Intermediate | Enable AES-256-GCM at-rest encryption for sensitive session data stored in SQLite.                |
+| [`encrypted-sqlite-storage`](../examples/setup-sqlite/encrypted-sqlite-storage.md) | Intermediate | Enable AES-256-GCM at-rest encryption of the values stored in SQLite.                             |
 | [`unix-socket-daemon`](../examples/setup-sqlite/unix-socket-daemon.md)             | Advanced     | Configure a FrontMCP daemon that listens on a unix socket and uses SQLite for persistent storage. |
 | [`multi-process-storage`](../examples/setup-sqlite/multi-process-storage.md)       | Intermediate | Share counters and a lock between several local processes through one SQLite file.                |
 
 > See all examples in [`examples/setup-sqlite/`](../examples/setup-sqlite/)
+
+## Upgrading to 1.14
+
+- `auth.tokenStorage: { sqlite }` names the rows of authorization codes, pending authorizations and refresh tokens by a keyed hash of the value (`oauth:refresh:<HMAC-SHA256(k, token)>`), with `k` derived from `encryption.secret`, else `JWT_SECRET`. Up to 1.13 the rows were named by the code or token itself. Rows written before are still read, move under their new names when used, and the rest expire on their own TTL (at most 30 days, for a refresh token), so nobody is signed out; see `configure-auth` for the details and for moving them all at once.
 
 ## Reference
 
