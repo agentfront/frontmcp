@@ -162,7 +162,7 @@ const idp = new MockOAuthServer(new TestTokenFactory(), {
   validRedirectUris: ['http://127.0.0.1:*/callback'],
   resourceIndicators: ['https://notes.example.com/mcp'],
 });
-// /oauth/authorize?...&code_challenge=<S256>&login_hint=bob&resource=https://notes.example.com/mcp
+// /oauth/authorize?...&code_challenge=<S256 challenge>&code_challenge_method=S256&login_hint=bob&resource=https://notes.example.com/mcp
 //   -> an access token with sub 'bob', aud 'https://notes.example.com/mcp', auth_time
 ```
 
@@ -218,7 +218,7 @@ const clientAssertion = await new SignJWT({ jti: crypto.randomUUID() })
 ## Upgrading to 1.14
 
 - **`MockOAuthServer` checks PKCE strictly by default.** An authorization request without an S256 `code_challenge` is redirected back with `error=invalid_request`, where up to 1.13 the mock accepted it (1.13.2 also warned once). Send one (`generatePkcePair()` from `@frontmcp/utils`) and its `code_verifier` at the token endpoint, or set `pkce: 'lenient'` on a mock whose test isn't about PKCE. FrontMCP's own federated and remote sign-ins, `signInNative` and `frontmcp login` already send S256.
-- **`MockOAuthServer` honours resource indicators by default.** A `resource` (RFC 8707) or `audience` on the authorization or token request becomes the access token's `aud`, where up to 1.13 it was ignored (1.13.2 warned once) and every token got the token factory's audience. A server that checks the audience then needs to expect that value; set `resourceIndicators: false` to keep the factory's audience. A request naming neither still gets the factory's audience.
+- **`MockOAuthServer` honours resource indicators by default.** The `resource` (RFC 8707) and `audience` values of the authorization request become the access token's `aud`, where up to 1.13 they were ignored (1.13.2 warned once) and every token got the token factory's audience. A token request can only narrow the values the authorization request named: one it didn't name is refused with `invalid_target`. When the authorization request named none, the token request may name them instead. A server that checks the audience then needs to expect that value; set `resourceIndicators: false` to keep the factory's audience. A sign-in that names none at either endpoint still gets the factory's audience.
 - `pkce: 'strict'` and `resourceIndicators: true` are now the defaults, so a mock that set them can drop them. Neither default warns any more.
 
 ## Examples
