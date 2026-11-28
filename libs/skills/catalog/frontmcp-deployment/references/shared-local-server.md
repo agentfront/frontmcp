@@ -277,6 +277,10 @@ FrontMcpInstance.runShared(serverConfig, {
   folder. It never starts a path or a command it read from a file or got from a server: the key a function answers is
   only a name, which must be a valid `key`. When the new key's server doesn't run and `entries` names no entry for it,
   the session waits up to `attachBudgetMs` for one to prove itself, starts none, and stays where it is. Nor does it replace an older server of such a key. It doesn't run that key's server in its own process either.
+  A session drains an older server only for its first key, whose replacement is its own entry and runs its own
+  version: an older server of a key it moves to is left running, since the entry `entries` names may run an older
+  version too, and the session stays where it is (`... and the entry that would replace it may run an older one, so it
+is left running`).
 - **When it stays.** A key function that throws, or answers something that is not a key, keeps the current key:
   `[frontmcp shared] warn keeping the shared server key "<key>": the key function failed (<message>)`. A new server
   that can't be reached, or doesn't prove itself, keeps the current server:
