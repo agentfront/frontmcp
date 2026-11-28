@@ -60,6 +60,8 @@ const stateSchema = z.object({
   prompt: z.any().optional() as z.ZodType<PromptEntry | undefined>,
   resource: z.any().optional() as z.ZodType<ResourceEntry | undefined>,
   widgetTools: z.array(z.instanceof(ToolEntry)).optional(),
+  // The referenced resource is turned off (its own `enabled` or the server's), so its widget tool names complete nothing
+  referenceOff: z.boolean().optional(),
   output: outputSchema,
 });
 
@@ -223,7 +225,10 @@ export default class CompleteFlow extends FlowBase<typeof name> {
     this.logger.verbose('findReference:done');
   }
 
-  /** A prompt or resource whose `enabled` is off completes nothing, like one `availableWhen` excludes. */
+  /**
+   * A prompt or resource whose `enabled` is off completes nothing, like one `availableWhen` excludes; for a
+   * `ui://widget/` resource that is off, no widget tool name either.
+   */
   @Stage('checkEnabled')
   async checkEnabled() {
     const { prompt, resource } = this.state;
@@ -232,7 +237,7 @@ export default class CompleteFlow extends FlowBase<typeof name> {
       this.state.set('prompt', undefined);
     }
     if (resource && !(await isEntryEnabled(switchesOf(this.scope, 'resources', resource), context, this.logger))) {
-      this.state.set('resource', undefined);
+      this.state.set({ resource: undefined, referenceOff: true });
     }
   }
 
@@ -305,7 +310,7 @@ export default class CompleteFlow extends FlowBase<typeof name> {
   @Stage('findWidgetTools')
   async findWidgetTools() {
     const { ref, argument } = this.state.required;
-    if (!isWidgetToolNameCompletion(ref, argument.name)) return;
+    if (!isWidgetToolNameCompletion(ref, argument.name) || this.state.referenceOff) return;
     this.logger.verbose('findWidgetTools:start');
 
     const uiTools = this.scope.tools.getTools().filter((tool) => hasUIConfig(tool.metadata));
@@ -388,7 +393,8 @@ export default class CompleteFlow extends FlowBase<typeof name> {
 
       // ui:// widget URIs complete with the UI tools findWidgetTools kept for this caller
       if (isWidgetToolNameCompletion(ref, argName)) {
-        const toolNames = (this.state.widgetTools ?? []).map((t) => t.metadata.id ?? t.metadata.name);
+        const widgetTools = this.state.referenceOff ? [] : (this.state.widgetTools ?? []);
+        const toolNames = widgetTools.map((t) => t.metadata.id ?? t.metadata.name);
 
         // Filter by prefix if value is provided
         const prefix = argValue.toLowerCase();

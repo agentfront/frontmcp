@@ -100,3 +100,27 @@ describe('completion of ui://widget/{toolName} (#596)', () => {
     await expect(completeToolName('zzz')).resolves.toEqual({ values: [], total: 0 });
   });
 });
+
+describe("completion of ui://widget/{toolName} under the server's enabled", () => {
+  async function completeWith(enabled: boolean): Promise<unknown> {
+    const server = await createTestFetchServer({
+      info: { name: 'widget-completion-enabled', version: '1.0.0' },
+      apps: [OrdersApp],
+      enabled: (entry) => (entry.uriTemplate === 'ui://widget/{toolName}.html' ? enabled : undefined),
+    });
+    const { message } = await rpc20260728(server.handler, 'completion/complete', {
+      ref: { type: 'ref/resource', uri: 'ui://widget/{toolName}.html' },
+      argument: { name: 'toolName', value: '' },
+    });
+    expect(message.error).toBeUndefined();
+    return message.result?.['completion'];
+  }
+
+  it('offers no widget tool name while it turns the widget resource off', async () => {
+    await expect(completeWith(false)).resolves.toEqual({ values: [], total: 0 });
+  });
+
+  it('offers the widget tool names while it keeps the widget resource on', async () => {
+    await expect(completeWith(true)).resolves.toEqual({ values: ['orders_widget'], total: 1 });
+  });
+});
