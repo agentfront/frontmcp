@@ -196,6 +196,9 @@ CodeCall contributes 4 tools to your server:
 - `codecall:execute` -- Runs an AgentScript program in the sandboxed VM. Input: `{ script: string }` (AgentScript code). Use `callTool(name, args)` to invoke tools within scripts. The script can call multiple tools, branch on results, and compose outputs.
 - `codecall:invoke` -- Direct single-tool invocation (available when `directCalls` is enabled). Bypasses the VM for simple one-shot calls.
 
+With `runs.resume` (on by default) it also lists `codecall:resume`, `codecall:status` and `codecall:cancel`, for runs
+that pause (see [Pause and resume](#pause-and-resume)).
+
 ### Run records
 
 Each `codecall:execute` that has an owner (a session, or a signed-in caller) leaves a run record, and its result
@@ -227,6 +230,39 @@ CodeCallPlugin.init({
 A store that fails is logged as a warning, and the result goes out without `runId`; so does a record whose metadata
 alone (a very long session id, say) is over `runs.maxRecordBytes`. In a browser, a `runs.storage` on
 Redis or SQLite is refused at startup.
+
+### Pause and resume
+
+With `runs.resume` (on by default), a run that stops **before** a call ran is kept `paused` instead of failing: a
+call-phase decision refused it (review's or a budget's `needs_approval`, or an uncaught `needs_changes` or `denied`),
+or the call flow refused it, uncaught, before its tool ran (its input, or a budget as the tool started). The result
+keeps its status and adds `paused: { call: { position, tool }, expiresAt }`. Fix the cause (a person approves, or send
+corrected arguments), then call `codecall:resume { runId, arguments? }` instead of sending the script again: it runs the
+same script, answers each call that ran from the record (matched by position, tool and arguments), replays the
+script's `Date` and `Math.random()` values, and runs the paused call live, with `arguments` replacing that call's
+only. The answer is a `codecall:execute` result, which may pause again. `codecall:status` reads a run, and
+`codecall:cancel` ends a paused one. A run resumes once (a claim in `runs.storage`), only for its owner, within
+`runs.pause.waitSeconds` and `runs.pause.lifetimeSeconds` (30 minutes each).
+
+```typescript
+CodeCallPlugin.init({
+  runs: { resume: true, pause: { waitSeconds: 1800, lifetimeSeconds: 1800 } }, // the defaults
+});
+```
+
+Inside `parallel()` (or any calls running at once), the answer that stops the run is held until the other calls that
+reached the host finish, so each is recorded with its result: they are neither cancelled nor run again. The run then
+pauses at that call, and a resume answers the others from the record and runs only the paused one. A `parallel()` of
+five calls whose third needs approval resolves, once a person approves it, to the same five results, and only the third
+call runs. Several calls that stop: the run pauses at the first in call order (a `needs_approval` first); the others did
+not run and are asked again on resume, so it may pause again at the next, one approval at a time. A refusal the script
+got (refused input, `needs_changes`, `denied`) pauses the run only when the script ended with it, alone or in the failed
+`parallel()`'s error, and made no call after; on `node-vm` such a run answers `tool_error` (its first failure), on
+`interpreter` `runtime_error` (the list of failures). The wait ends before the review hook times out
+(`review.timeoutMs`, 30 s by default) and with `vm.timeoutMs`; a call still running then keeps the run from pausing,
+and it answers as before. A record with calls after the paused one pauses only when the run made them within 5 s of its
+first call, fewer than 100 of them, within `vm.rapidEnumerationThreshold`. Up to 1.13 a stopping call inside a
+`parallel()` beside other calls never paused, and sending the script again ran the other calls again.
 
 ### Trace
 
