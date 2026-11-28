@@ -9,6 +9,7 @@
  */
 import { frontMcpMetadataSchema } from '../front-mcp.metadata';
 import { frontMcpJobMetadataSchema } from '../job.metadata';
+import { frontMcpWorkflowMetadataSchema } from '../workflow.metadata';
 
 function parseJobs(jobs: Record<string, unknown>): Record<string, unknown> | undefined {
   const parsed = frontMcpMetadataSchema.parse({
@@ -115,6 +116,47 @@ describe('frontMcpMetadataSchema — job runners', () => {
   it('refuses an unknown runner with the runners it takes', () => {
     expect(() => parseJobs({ enabled: true, runner: 'thread' })).toThrow(
       /jobs\.runner must be 'inline', 'worker' or 'detached'/,
+    );
+  });
+});
+
+describe('frontMcpMetadataSchema — machine-wide admission and detached boots', () => {
+  it.each(['process', 'machine'])('keeps admission scope %s', (scope) => {
+    expect(parseJobs({ enabled: true, admission: { concurrency: 1, scope } })?.['admission']).toEqual({
+      concurrency: 1,
+      scope,
+    });
+  });
+
+  it('refuses an unknown admission scope with the scopes it takes', () => {
+    expect(() => parseJobs({ enabled: true, admission: { scope: 'cluster' } })).toThrow(
+      /jobs\.admission\.scope must be 'process' or 'machine'/,
+    );
+  });
+
+  it.each(['server', 'app'])('keeps detached boot %s', (boot) => {
+    expect(parseJobs({ enabled: true, detached: { boot } })?.['detached']).toEqual({ boot });
+  });
+
+  it('refuses an unknown detached boot, and an unknown detached option', () => {
+    expect(() => parseJobs({ enabled: true, detached: { boot: 'job' } })).toThrow(
+      /jobs\.detached\.boot must be 'server' or 'app'/,
+    );
+    expect(() => parseJobs({ enabled: true, detached: { boots: 'app' } })).toThrow();
+  });
+});
+
+describe('frontMcpWorkflowMetadataSchema — runner', () => {
+  const steps = [{ id: 'one', jobName: 'report' }];
+
+  it.each(['inline', 'detached'])('keeps runner %s', (runner) => {
+    expect(frontMcpWorkflowMetadataSchema.parse({ name: 'flow', steps, runner }).runner).toBe(runner);
+  });
+
+  it('runs inline when it sets no runner, and refuses the worker runner, which only a job has', () => {
+    expect(frontMcpWorkflowMetadataSchema.parse({ name: 'flow', steps }).runner).toBeUndefined();
+    expect(() => frontMcpWorkflowMetadataSchema.parse({ name: 'flow', steps, runner: 'worker' })).toThrow(
+      "runner must be 'inline' or 'detached'",
     );
   });
 });

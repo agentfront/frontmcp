@@ -15,7 +15,7 @@ import {
   PublicMcpError,
 } from '../errors';
 import { outlasts } from '../provider/provider.lifecycle';
-import { type JobAdmission, type JobAdmissionSlot } from './job-admission';
+import { type JobAdmissionGate, type JobAdmissionSlot } from './job-admission';
 import { type JobRunProgress } from './store/job-state.interface';
 
 /** The flow that runs one attempt of a job. */
@@ -84,7 +84,7 @@ export interface JobAttemptRequest {
   /** How long the job's `execute()` may run, in ms; unset or 0 for no limit. */
   timeoutMs?: number;
   /** The scope's admission; the attempt waits for a slot before its job is built. */
-  admission?: JobAdmission;
+  admission?: JobAdmissionGate;
 }
 
 /** What a successful attempt returns. */

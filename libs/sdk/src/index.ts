@@ -326,10 +326,13 @@ export type {
   InlineJobResult,
   BackgroundJobResult,
   JobExecutionManagerOptions,
+  JobAdmissionGate,
   JobAdmissionOptions,
+  JobAdmissionScope,
   JobAdmissionSlot,
   JobsConfig,
   JobsStoreConfig,
+  JobsDetachedConfig,
 } from './job';
 export type {
   JobStateStore,

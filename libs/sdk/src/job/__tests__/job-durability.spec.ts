@@ -29,7 +29,6 @@ import {
   JobAdmissionTimeoutError,
   JobCancelledError,
   JobRunFinishedError,
-  JobRunNotCancellableError,
   JobRunNotFoundError,
   JobTimeoutError,
   ResourceNotFoundError,
@@ -236,10 +235,19 @@ class SlowCleanupHangJob extends JobContext {
 @Workflow({ name: 'gated_flow', steps: [{ id: 'wait', jobName: 'progress_job', timeout: 60_000 }] })
 class GatedFlow {}
 
+@Workflow({
+  name: 'gated_then_quick_flow',
+  steps: [
+    { id: 'wait', jobName: 'progress_job', timeout: 60_000 },
+    { id: 'after', jobName: 'quick_job', dependsOn: ['wait'], input: { tag: 'after-the-gate' } },
+  ],
+})
+class GatedThenQuickFlow {}
+
 @App({
   id: 'durable',
   name: 'Durable',
-  workflows: [GatedFlow],
+  workflows: [GatedFlow, GatedThenQuickFlow],
   jobs: [
     HangJob,
     DefaultTimeoutJob,
@@ -486,20 +494,77 @@ describe('durable jobs', () => {
       expect((await store.getRun(started.runId))?.state).toBe('cancelled');
     });
 
-    it('refuses to cancel a workflow run', async () => {
+    it('cancels a workflow run: its running step is aborted, no later step starts, and it ends cancelled', async () => {
       closeGate();
       const response = await server.callTool(
         'execute_workflow',
-        { name: 'gated_flow', background: true },
+        { name: 'gated_then_quick_flow', background: true },
         { authContext: alice },
       );
       const { runId } = response.structuredContent as unknown as StartedRun;
+      await waitFor(async () => (await managerOf(server).getStatus(runId))?.state === 'running', 'the run to start');
 
-      await expect(server.callTool('cancel_job', { runId }, { authContext: alice })).rejects.toBeInstanceOf(
-        JobRunNotCancellableError,
-      );
+      const cancelled = await server.callTool('cancel_job', { runId }, { authContext: alice });
+      const run = await finished(server, runId);
       openGate();
-      await finished(server, runId);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(cancelled.structuredContent).toEqual({ runId, state: 'cancelled' });
+      expect(run).toEqual(
+        expect.objectContaining({ state: 'cancelled', error: expect.objectContaining({ name: 'JobCancelledError' }) }),
+      );
+      expect(entered).not.toContain('after-the-gate');
+      expect((await managerOf(server).getStatus(runId))?.state).toBe('cancelled');
+    });
+
+    it('never starts a detached workflow run cancelled before its runner took it over', async () => {
+      const store = new MemoryJobStateStore();
+      const scope = scopeOf(server);
+      const workflow = scope.workflows?.findByName('gated_then_quick_flow');
+      const jobs = scope.jobs;
+      if (!workflow || !jobs) throw new Error('the workflow is not registered');
+      const manager = new JobExecutionManager(store, scope.logger, undefined, scope, {
+        workflows: { find: (name) => scope.workflows?.findByName(name), jobs },
+      });
+      await store.createRun({
+        runId: 'early',
+        jobId: workflow.name,
+        jobName: workflow.name,
+        workflowName: workflow.name,
+        state: 'pending',
+        input: {},
+        startedAt: Date.now(),
+        attempt: 1,
+        maxAttempts: 1,
+        logs: [],
+        background: true,
+        stepResults: {},
+        runner: { kind: 'detached', id: 'runner-early', pid: process.pid },
+        scopeId: scope.id,
+      } as WorkflowRunRecord);
+      await manager.cancel('early');
+
+      await manager.runDetached('early');
+
+      expect((await store.getRun('early'))?.state).toBe('cancelled');
+      expect(entered).not.toContain('after-the-gate');
+    });
+
+    it('interrupts the workflow runs it runs when it shuts down', async () => {
+      closeGate();
+      const scope = scopeOf(server);
+      const store = new MemoryJobStateStore();
+      const manager = new JobExecutionManager(store, scope.logger, undefined, scope);
+      const workflow = scope.workflows?.findByName('gated_flow');
+      const jobs = scope.jobs;
+      if (!workflow || !jobs) throw new Error('the workflow is not registered');
+      const { runId } = await manager.executeWorkflow(workflow, jobs, { background: true });
+      await waitFor(async () => (await store.getRun(runId))?.state === 'running', 'the run to start');
+
+      await manager.dispose();
+      openGate();
+
+      expect((await store.getRun(runId))?.state).toBe('interrupted');
     });
   });
 

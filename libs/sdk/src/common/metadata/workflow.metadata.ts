@@ -68,6 +68,12 @@ export interface WorkflowStep {
 export type WorkflowTriggerType = 'manual' | 'webhook' | 'event' | 'schedule';
 
 /**
+ * Where a workflow's runs run: `'inline'` in the server's process, `'detached'` in a process of their own that outlives
+ * the server and keeps the run in the job store, as a detached job's do.
+ */
+export type WorkflowRunner = 'inline' | 'detached';
+
+/**
  * The HTTP route of a workflow with `trigger: 'webhook'`. Each request must be signed with `secret`: an
  * `X-FrontMCP-Timestamp` header with the time in Unix seconds, and an `X-FrontMCP-Signature` header with `v1=` and
  * the hex HMAC-SHA256 of `<timestamp>.<body>`, within 5 minutes of the server's clock and never sent before. A
@@ -159,6 +165,12 @@ export interface WorkflowMetadata extends ExtendFrontMcpWorkflowMetadata {
    * to start.
    */
   schedule?: WorkflowScheduleConfig;
+
+  /**
+   * Where the workflow's runs run (see {@link WorkflowRunner}). A detached run's steps run in its process, and
+   * `cancel_job` cancels it from any server on the store. `jobs.runner` does not apply to workflows. Default: 'inline'
+   */
+  runner?: WorkflowRunner;
 
   /**
    * Maximum total execution time in ms. Default: 600000 (10 min).
@@ -261,6 +273,7 @@ export const frontMcpWorkflowMetadataSchema = z
     webhook: workflowWebhookConfigSchema.optional(),
     event: z.string().min(1).optional(),
     schedule: workflowScheduleConfigSchema.optional(),
+    runner: z.enum(['inline', 'detached'], { message: "runner must be 'inline' or 'detached'" }).optional(),
     timeout: z.number().int().min(0).optional().default(600000),
     maxConcurrency: z.number().int().min(1).optional().default(5),
     tags: z.array(z.string().min(1)).optional(),

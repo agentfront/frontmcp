@@ -59,6 +59,48 @@ export function assertRunnersAvailable(
   }
 }
 
+interface RunnerWorkflow {
+  name: string;
+  metadata: { runner?: 'inline' | 'detached'; steps: ReadonlyArray<{ jobName: string }> };
+}
+
+const INLINE_WORKFLOW_REMEDY = "Set runner: 'inline' on the workflow, or run the server where it can start processes";
+
+/**
+ * Refuse, at boot, a detached workflow where its process cannot outlive the server, or whose step jobs check
+ * `execute` permissions on every attempt, which its process could not pass: it never receives the caller credentials.
+ * A step whose job is not registered yet is checked when it runs.
+ */
+export function assertWorkflowRunnersAvailable(
+  workflows: readonly RunnerWorkflow[],
+  findJob: (name: string) => RunnerJob | undefined,
+  runtime: { runtime: string; deployment: string } = getRuntimeContext(),
+): void {
+  for (const workflow of workflows) {
+    if (workflow.metadata.runner !== 'detached') continue;
+    const refuse = (why: string, remedy = INLINE_WORKFLOW_REMEDY) => {
+      throw new JobRunnerUnavailableError(workflow.name, why, remedy, 'Workflow');
+    };
+    if (runtime.runtime !== 'node') {
+      refuse(`a detached run needs a process of its own, which the ${runtime.runtime} runtime cannot start`);
+    }
+    if (runtime.deployment === 'serverless') {
+      refuse(
+        'a detached run must outlive the server, which a serverless deployment stops or replaces after each request',
+      );
+    }
+    for (const step of workflow.metadata.steps) {
+      const job = findJob(step.jobName);
+      if (!job?.metadata.permissions?.some((rule) => rule.action === 'execute')) continue;
+      refuse(
+        `the job "${job.name}" of its step checks execute permissions on every attempt, and a detached process never ` +
+          'receives the caller credentials',
+        "Set runner: 'inline' on the workflow, or drop the execute permissions of its step jobs",
+      );
+    }
+  }
+}
+
 /** The server's own command (node, its flags but the inspector's, its entry and arguments), which a runner runs again. */
 export function detachedRunnerCommand(): { command: string; args: string[] } {
   const [, entry, ...args] = process.argv;

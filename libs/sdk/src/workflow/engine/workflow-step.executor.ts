@@ -7,8 +7,14 @@ import { type WorkflowStep, type WorkflowStepResult } from '../../common/metadat
 import { type FrontMcpContext } from '../../context';
 import { InvalidEntityError } from '../../errors';
 import { WorkflowJobTimeoutError } from '../../errors/workflow.errors';
-import { type JobAdmission } from '../../job/job-admission';
-import { retryDelayMs, runJobAttemptFlow, toJobError, willRetryJobAttempt } from '../../job/job-attempt';
+import { type JobAdmissionGate } from '../../job/job-admission';
+import {
+  abortableDelay,
+  retryDelayMs,
+  runJobAttemptFlow,
+  toJobError,
+  willRetryJobAttempt,
+} from '../../job/job-attempt';
 import { type JobRegistryInterface } from '../../job/job.registry';
 
 export interface WorkflowStepExecutorExtra {
@@ -27,9 +33,14 @@ export interface WorkflowStepExecutorExtra {
   /** The workflow run the steps belong to, as hooks on `jobs:execute-job` see it in `state.workflow`. */
   workflowRunId?: string;
   /** The scope's admission (`jobs.admission`); each step attempt waits for a slot. */
-  admission?: JobAdmission;
+  admission?: JobAdmissionGate;
   /** The timeout of a step whose job sets none (`jobs.defaultTimeoutMs`); unset, 300000 ms. `0` sets no limit. */
   defaultTimeoutMs?: number;
+  /**
+   * The run's signal, aborted when the run is cancelled or interrupted: no step attempt starts after it, and the
+   * attempts running are aborted with its reason.
+   */
+  signal?: AbortSignal;
 }
 
 /**
@@ -64,7 +75,9 @@ export class WorkflowStepExecutor {
 
     let lastError: Error | undefined;
 
+    const { signal } = this.extra;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      signal?.throwIfAborted();
       try {
         const result = await this.executeWithTimeout(job, step, input, timeout, attempt);
         return {
@@ -74,9 +87,9 @@ export class WorkflowStepExecutor {
       } catch (err) {
         lastError = toJobError(err);
         this.logger.warn(`Step "${step.id}" attempt ${attempt}/${maxAttempts} failed: ${lastError.message}`);
-        // A result that failed outputSchema, or a denial of the step job, is not retried
-        if (!willRetryJobAttempt(lastError, attempt, maxAttempts)) break;
-        await new Promise((resolve) => setTimeout(resolve, retryDelayMs(retryConfig, attempt)));
+        // A result that failed outputSchema, a denial of the step job, or a stopped run is not retried
+        if (signal?.aborted || !willRetryJobAttempt(lastError, attempt, maxAttempts)) break;
+        await abortableDelay(retryDelayMs(retryConfig, attempt), signal);
       }
     }
 
@@ -98,16 +111,22 @@ export class WorkflowStepExecutor {
     const { context, contextProviders, authInfo, authoritiesContextBuilder, workflowName, workflowRunId, admission } =
       this.extra;
     const abandon = new AbortController();
+    const run = this.extra.signal;
 
     return new Promise<unknown>((resolve, reject) => {
+      const stop = (reason: unknown) => {
+        abandon.abort(reason);
+        reject(reason);
+      };
       const timer =
-        timeout > 0
-          ? setTimeout(() => {
-              const timedOut = new WorkflowJobTimeoutError(job.name, timeout);
-              abandon.abort(timedOut);
-              reject(timedOut);
-            }, timeout)
-          : undefined;
+        timeout > 0 ? setTimeout(() => stop(new WorkflowJobTimeoutError(job.name, timeout)), timeout) : undefined;
+      // The run stopped (cancelled or interrupted): its attempt is aborted with that reason
+      const stopped = () => stop(run?.reason);
+      run?.addEventListener('abort', stopped, { once: true });
+      const settle = () => {
+        clearTimeout(timer);
+        run?.removeEventListener('abort', stopped);
+      };
 
       runJobAttemptFlow({
         job,
@@ -122,11 +141,11 @@ export class WorkflowStepExecutor {
         admission,
       })
         .then(({ result }) => {
-          clearTimeout(timer);
+          settle();
           resolve(result);
         })
         .catch((err) => {
-          clearTimeout(timer);
+          settle();
           reject(err);
         });
     });
