@@ -160,7 +160,7 @@ export async function createContainer(options: CreateContainerOptions): Promise<
     apps: new Map([...appRegistries].map(([app, registry]) => [app, registry.getAllSingletons()])),
     lifecycles,
     owned,
-    readied: new WeakSet(),
+    readied: new WeakMap(),
     backgroundStarted: runBackground,
     get disposed() {
       return disposed;

@@ -16,8 +16,8 @@ export interface ContainerHandle {
   readonly lifecycles: WeakMap<object, SharedLifecycle>;
   /** The lifecycle hooks the container bootstrapped, its `@Duty` and `@Worker` lifecycles included. */
   readonly owned: WeakSet<object>;
-  /** Those whose `onReady()` a server on the container ran: each runs once, in the first server that serves. */
-  readonly readied: WeakSet<object>;
+  /** Each instance's `onReady()` run, by the first server on the container that serves; the others wait for it. */
+  readonly readied: WeakMap<object, Promise<unknown[]>>;
   /** Whether the container started its `@Duty` and `@Worker` providers itself (`runBackground`). */
   readonly backgroundStarted: boolean;
   /** Whether the container's `dispose()` was called. */
