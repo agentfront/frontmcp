@@ -101,6 +101,18 @@ describeCluster('StorageAuthorizationStore on a Redis Cluster', () => {
     expect((await stores[0].getAuthorizationCode(code.code))?.used).toBe(true);
   });
 
+  it('finds no refresh token by the name of its row, on either instance', async () => {
+    const refresh = refreshRecord();
+    await stores[0].storeRefreshToken(refresh);
+    const rowNames = (await instances[1].keys('oauth:refresh:*')).map((key) => key.slice('oauth:refresh:'.length));
+    expect(rowNames.length).toBeGreaterThan(0);
+
+    for (const rowName of rowNames) {
+      expect(await stores[1].getRefreshToken(rowName)).toBeNull();
+      await expect(stores[1].rotateRefreshToken(rowName, refreshRecord())).rejects.toThrow('already rotated');
+    }
+    expect(await stores[0].getRefreshToken(refresh.token)).toEqual(refresh);
+  });
   it('moves the rows stored under their old names with moveLegacyRows', async () => {
     const refresh = refreshRecord();
     const pending = stores[0].createPendingRecord({

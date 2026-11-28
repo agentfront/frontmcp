@@ -265,6 +265,63 @@ describe('StorageAuthorizationStore rows named up to 1.13', () => {
     });
   });
 
+  describe('a row name presented as a value', () => {
+    /** The name a store gave the one row of `type`: what a listing of the keys shows. */
+    async function rowName(type: string): Promise<string> {
+      const keys = await adapter.keys(`oauth:${type}:*`);
+      expect(keys).toHaveLength(1);
+      return keys[0].slice(`oauth:${type}:`.length);
+    }
+
+    it('finds, rotates and revokes no refresh token', async () => {
+      const refresh = refreshRecord();
+      await store.storeRefreshToken(refresh);
+      const name = await rowName('refresh');
+
+      expect(await store.getRefreshToken(name)).toBeNull();
+      await expect(store.rotateRefreshToken(name, refreshRecord())).rejects.toThrow('already rotated');
+      await store.revokeRefreshToken(name);
+
+      expect(await store.getRefreshToken(refresh.token)).toEqual(refresh);
+      expect(await adapter.keys('oauth:refresh:*')).toHaveLength(1);
+    });
+
+    it('finds, redeems and deletes no code', async () => {
+      const code = codeRecord();
+      await store.storeAuthorizationCode(code);
+      const name = await rowName('code');
+
+      expect(await store.getAuthorizationCode(name)).toBeNull();
+      await expect(store.markCodeUsed(name)).rejects.toThrow('already redeemed');
+      await store.markCodeUsed(name, 'issued-refresh-token');
+      await store.deleteAuthorizationCode(name);
+
+      expect(await store.getAuthorizationCode(code.code)).toEqual(code);
+    });
+
+    it('finds and deletes no pending authorization', async () => {
+      const pending = pendingRecord();
+      await store.storePendingAuthorization(pending);
+      const name = await rowName('pending');
+
+      expect(await store.getPendingAuthorization(name)).toBeNull();
+      await store.deletePendingAuthorization(name);
+
+      expect(await store.getPendingAuthorization(pending.id)).toEqual(pending);
+    });
+
+    it('reads no row under an old name that holds another record, or none', async () => {
+      const refresh = refreshRecord();
+      await writeLegacy(adapter, 'refresh:another-value', refresh);
+      await adapter.set('oauth:refresh:null-row', 'null');
+
+      expect(await store.getRefreshToken('another-value')).toBeNull();
+      await expect(store.rotateRefreshToken('another-value', refreshRecord())).rejects.toThrow('already rotated');
+      expect(await store.getRefreshToken('null-row')).toBeNull();
+      await expect(store.rotateRefreshToken('null-row', refreshRecord())).rejects.toThrow('already rotated');
+    });
+  });
+
   describe('moveLegacyRows', () => {
     it('moves every row named by its value, deletes expired ones, and leaves hashed and foreign rows', async () => {
       const code = codeRecord();

@@ -747,6 +747,17 @@ export class InMemoryAuthorizationStore implements AuthorizationStore {
   }
 }
 
+/** Whether `data`, a stored row, holds the record of `id`: the field each record type is named after equals `id`. */
+function holdsRecordOf(type: 'code' | 'pending' | 'refresh', data: string, id: string): boolean {
+  const field = type === 'code' ? 'code' : type === 'pending' ? 'id' : 'token';
+  try {
+    const record: unknown = JSON.parse(data);
+    return typeof record === 'object' && record !== null && (record as Record<string, unknown>)[field] === id;
+  } catch {
+    return false;
+  }
+}
+
 /** Options of {@link RedisAuthorizationStore}. */
 export interface RedisAuthorizationStoreOptions {
   /**
@@ -785,17 +796,20 @@ export class RedisAuthorizationStore implements AuthorizationStore {
     return `${this.namespace}${type}:${id}`;
   }
 
-  /** The stored JSON of `id` and the key it was read from: its hashed name first, else its name up to 1.13. */
+  /**
+   * The stored JSON of `id` and the key it was read from: its hashed name first, else its name up to 1.13. A row
+   * counts only when it holds the record of `id`, so a hashed name presented as a value does not find that row.
+   */
   private async read(
     type: 'code' | 'pending' | 'refresh',
     id: string,
   ): Promise<{ key: string; data: string; legacy: boolean } | null> {
     const key = this.key(type, id);
     const data: string | null = await this.redis.get(key);
-    if (data) return { key, data, legacy: false };
+    if (data) return holdsRecordOf(type, data, id) ? { key, data, legacy: false } : null;
     const legacyKey = this.legacyKey(type, id);
     const legacy: string | null = await this.redis.get(legacyKey);
-    return legacy ? { key: legacyKey, data: legacy, legacy: true } : null;
+    return legacy && holdsRecordOf(type, legacy, id) ? { key: legacyKey, data: legacy, legacy: true } : null;
   }
 
   /** Write `record` under the hashed name of `id`, and delete the row it was read from when that was the old name. */
@@ -810,9 +824,17 @@ export class RedisAuthorizationStore implements AuthorizationStore {
     if (found.legacy) await this.redis.del(found.key);
   }
 
-  /** Delete the rows of `id` under both names, one DEL each (a cluster may keep them on different nodes). */
+  /**
+   * Delete the rows of `id` under both names, one DEL each (a cluster may keep them on different nodes). The row
+   * under the old name is deleted only when it holds the record of `id`.
+   */
   private async deleteBoth(type: 'code' | 'pending' | 'refresh', id: string): Promise<void> {
-    await Promise.all([this.redis.del(this.key(type, id)), this.redis.del(this.legacyKey(type, id))]);
+    const legacyKey = this.legacyKey(type, id);
+    const deleteLegacy = async (): Promise<void> => {
+      const legacy: string | null = await this.redis.get(legacyKey);
+      if (legacy && holdsRecordOf(type, legacy, id)) await this.redis.del(legacyKey);
+    };
+    await Promise.all([this.redis.del(this.key(type, id)), deleteLegacy()]);
   }
 
   generateCode(): string {

@@ -172,6 +172,28 @@ describe('auth rows in the token storage (#1504)', () => {
     }
   });
 
+  it('refuses the name of a refresh token row as a refresh token, and of a code row as a code', async () => {
+    const server = await startServer(sqlite());
+    const code = await signIn(server);
+    const [codeRow] = (await storedKeys(sqlite())).filter((key) => key.startsWith('oauth:code:'));
+    expect((await exchange(server, codeRow.slice('oauth:code:'.length))).body).toMatchObject({
+      error: 'invalid_grant',
+    });
+    const issued = await exchange(server, code);
+    expect(issued.status).toBe(200);
+    const refreshToken = String(issued.body['refresh_token']);
+    const rowNames = (await storedKeys(sqlite()))
+      .filter((key) => key.startsWith('oauth:refresh:'))
+      .map((key) => key.slice('oauth:refresh:'.length));
+    expect(rowNames).toHaveLength(1);
+
+    expect(await refresh(server, rowNames[0])).toEqual({
+      status: 400,
+      body: expect.objectContaining({ error: 'invalid_grant' }),
+    });
+    expect((await refresh(server, refreshToken)).status).toBe(200);
+  });
+
   it('refreshes a refresh token a 1.13 server stored, and moves its row under the hashed name', async () => {
     const record = legacyRefreshRecord();
     await storeLegacyRow(sqlite(), `refresh:${record.token}`, record);
