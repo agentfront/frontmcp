@@ -2,11 +2,12 @@
  * Base Layout for Server-Rendered Pages
  *
  * Provides a consistent HTML shell, styled one of two ways:
- * - `inlineStyles: true` (the built-in auth pages): a pre-built stylesheet of
- *   the Tailwind classes those pages use, inline, with a system font stack.
- *   The page loads nothing from a third party.
- * - otherwise: the Tailwind CSS v4 Browser CDN (any class, `@theme` support)
- *   and Inter from Google Fonts, loaded at runtime.
+ * - by default (`inlineStyles: true`, since 1.14): a pre-built stylesheet of
+ *   the Tailwind classes the built-in auth pages use, inline, with a system
+ *   font stack. The page loads nothing from a third party.
+ * - `inlineStyles: false`: the Tailwind CSS v4 Browser CDN (any class,
+ *   `@theme` support) and Inter from Google Fonts, loaded at runtime, as up
+ *   to 1.13.
  *
  * @example
  * ```typescript
@@ -35,8 +36,8 @@ import { AUTH_PAGE_CSS } from './auth-page-styles';
 // ============================================
 
 /**
- * CDN URLs a {@link baseLayout} page without `inlineStyles` loads. The
- * built-in auth pages load none of them.
+ * CDN URLs a {@link baseLayout} page with `inlineStyles: false` loads. The
+ * built-in auth pages, and a page on the default layout, load none of them.
  */
 export const CDN = {
   /** Tailwind CSS v4 Browser CDN - generates styles on-the-fly with @theme support */
@@ -51,15 +52,15 @@ export const CDN = {
 
 /**
  * Content-Security-Policy for the built-in authorization pages (sign-in,
- * consent, provider selection, incremental authorization, errors), sent with
- * `builtInAuthPageHeaders({ csp: 'inline' })`.
+ * consent, provider selection, incremental authorization, errors), and the one
+ * `builtInAuthPageHeaders()` sends by default since 1.14.
  *
  * The pages inline their stylesheet and load no third-party script, style or
  * font. Their small inline handlers and stylesheet need `'unsafe-inline'`
  * (every interpolated value is HTML-escaped). Images may come from this
  * server, `data:` and https (a client's `logo_uri`), and the pages can't be
- * framed (clickjacking) or rebased. A {@link baseLayout} page built with
- * `inlineStyles: true` fits it.
+ * framed (clickjacking) or rebased. A page on the default {@link baseLayout}
+ * (`inlineStyles: true`) fits it.
  */
 export const INLINE_AUTH_PAGE_CSP = [
   "default-src 'self'",
@@ -73,10 +74,10 @@ export const INLINE_AUTH_PAGE_CSP = [
 ].join('; ');
 
 /**
- * The Content-Security-Policy {@link builtInAuthPageHeaders} sends by default, as up to 1.13.1: the
- * {@link INLINE_AUTH_PAGE_CSP} policy, plus the Tailwind CDN and Google Fonts a {@link baseLayout} page without
- * `inlineStyles` loads, so a page of your own that sends it keeps its styles. The built-in pages send
- * {@link INLINE_AUTH_PAGE_CSP} since 1.13.2.
+ * The Content-Security-Policy `builtInAuthPageHeaders({ csp: 'cdn' })` sends: the {@link INLINE_AUTH_PAGE_CSP}
+ * policy, plus the Tailwind CDN and Google Fonts a {@link baseLayout} page with `inlineStyles: false` loads. It was
+ * the default of {@link builtInAuthPageHeaders} up to 1.13; the built-in pages send {@link INLINE_AUTH_PAGE_CSP} since
+ * 1.13.2, and so does {@link builtInAuthPageHeaders} by default since 1.14.
  */
 export const BUILT_IN_AUTH_PAGE_CSP = [
   "default-src 'self'",
@@ -98,14 +99,15 @@ export const BUILT_IN_AUTH_PAGE_CSP = [
  * carries its `Origin`, which the callback checks; `no-referrer` would turn
  * that into `Origin: null` and every sign-in would be refused as cross-origin.
  *
- * @param options.csp - the Content-Security-Policy: by default {@link BUILT_IN_AUTH_PAGE_CSP}, which allows the CDN
- *   a {@link baseLayout} page without `inlineStyles` loads; `'inline'` for {@link INLINE_AUTH_PAGE_CSP}, what the
- *   built-in pages send, for a page that loads nothing from a third party (`inlineStyles: true`); `false` leaves it
- *   out, for markup the server didn't write (a `login.render` override may load its own scripts). The anti-framing,
- *   sniffing, referrer and caching headers apply either way.
+ * @param options.csp - the Content-Security-Policy: by default (or `true`, or `'inline'`) {@link INLINE_AUTH_PAGE_CSP},
+ *   what the built-in pages send, for a page that loads nothing from a third party, as the default
+ *   {@link baseLayout} does; `'cdn'` for {@link BUILT_IN_AUTH_PAGE_CSP}, which also allows the Tailwind CDN and
+ *   Google Fonts a {@link baseLayout} page with `inlineStyles: false` loads (the default up to 1.13); `false` leaves
+ *   it out, for markup the server didn't write (a `login.render` override may load its own scripts). The
+ *   anti-framing, sniffing, referrer and caching headers apply either way.
  */
-export function builtInAuthPageHeaders(options: { csp?: boolean | 'inline' } = {}): Record<string, string> {
-  const csp = options.csp === 'inline' ? INLINE_AUTH_PAGE_CSP : BUILT_IN_AUTH_PAGE_CSP;
+export function builtInAuthPageHeaders(options: { csp?: boolean | 'inline' | 'cdn' } = {}): Record<string, string> {
+  const csp = options.csp === 'cdn' ? BUILT_IN_AUTH_PAGE_CSP : INLINE_AUTH_PAGE_CSP;
   return {
     ...(options.csp === false ? {} : { 'Content-Security-Policy': csp }),
     'X-Frame-Options': 'DENY',
@@ -203,18 +205,21 @@ export interface BaseLayoutOptions {
   /** Optional description for meta tag */
   description?: string;
 
-  /** Include Tailwind CSS (default: true) */
+  /** With `inlineStyles: false`, include the Tailwind CDN script (default: true) */
   includeTailwind?: boolean;
 
-  /** Include Google Fonts (default: true) */
+  /** With `inlineStyles: false`, include Inter from Google Fonts (default: true) */
   includeFonts?: boolean;
 
   /**
    * Inline FrontMCP's pre-built stylesheet and a system font stack instead of
    * loading the Tailwind CDN script and Google Fonts, so the page loads
-   * nothing from a third party. Only the classes the built-in auth pages use
-   * are styled, and `theme.customCss` is plain CSS. The built-in pages set it.
-   * `includeTailwind` and `includeFonts` are ignored. (default: false)
+   * nothing from a third party and fits the default policy of
+   * `builtInAuthPageHeaders()`. Only the classes the built-in auth pages use
+   * are styled, and `theme.customCss` is plain CSS; `includeTailwind` and
+   * `includeFonts` are ignored. Set `false` for the Tailwind CDN (any class)
+   * and Inter, and send `builtInAuthPageHeaders({ csp: 'cdn' })`, which allows
+   * them. (default: true since 1.14; false up to 1.13)
    */
   inlineStyles?: boolean;
 
@@ -297,7 +302,7 @@ export function baseLayout(content: string, options: BaseLayoutOptions): string 
     description,
     includeTailwind = true,
     includeFonts = true,
-    inlineStyles = false,
+    inlineStyles = true,
     headExtra = '',
     bodyClass = 'bg-gray-50 min-h-screen font-sans antialiased',
     theme,
