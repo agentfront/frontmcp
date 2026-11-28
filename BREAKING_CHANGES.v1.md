@@ -1303,14 +1303,14 @@ new MockOAuthServer(factory, { autoApprove: true, testUser, pkce: 'lenient', res
 **Before:**
 
 ```typescript
-npm install @frontmcp/storage-sqlite // also builds better-sqlite3; the stores run on it
+npm install @frontmcp/storage-sqlite # also builds better-sqlite3; the stores run on it
 ```
 
 **After:**
 
 ```typescript
-npm install @frontmcp/storage-sqlite // no native build; the stores run on node:sqlite
-npm install @frontmcp/storage-sqlite better-sqlite3 // the stores run on better-sqlite3
+npm install @frontmcp/storage-sqlite # no native build; the stores run on node:sqlite
+npm install @frontmcp/storage-sqlite better-sqlite3 # the stores run on better-sqlite3
 ```
 
 **Codemod available:** no
