@@ -16,6 +16,7 @@ import { ClusterScopeNeedsRedisError, DutyNameConflictError, InvalidDutyCronErro
 import { FrontMcpConfig } from '../front-mcp/front-mcp.tokens';
 import type { BackgroundLifecycle } from '../provider/provider.lifecycle';
 import type ProviderRegistry from '../provider/provider.registry';
+import { withWorkSpan } from '../work/work-spans';
 import { loadCronSchedule, type CronSchedule } from './cron-schedule';
 import { DutyRunner } from './duty.runner';
 import { LazyLeaseStore } from './lazy-lease-store';
@@ -184,7 +185,8 @@ export class DutyLifecycle implements OnBootstrap, OnReady, OnShutdown, Backgrou
     const key = leaseKey(name, scope, serverName);
     this.claim(serverName);
     const storage = new LazyLeaseStore(dutyStorageConfig(config.redis, scope));
-    const run = (context: DutyRunContext) => this.duty.run(context);
+    // Each run is a work span, so a stall while it runs names the duty
+    const run = (context: DutyRunContext) => withWorkSpan('duty', name, () => this.duty.run(context));
     const common = { name, key, leaseMs, storage, logger, run };
     const runner = new DutyRunner(
       metadata.cron

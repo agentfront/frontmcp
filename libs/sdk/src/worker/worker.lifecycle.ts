@@ -6,6 +6,7 @@ import {
   type OnShutdown,
   type ResolvedWorkerMetadata,
   type WorkerInterface,
+  type WorkerRunContext,
 } from '../common';
 import { LazyLeaseStore } from '../duty/lazy-lease-store';
 import { LeaseHolder } from '../duty/lease-holder';
@@ -24,6 +25,7 @@ import { WorkerNameConflictError } from '../errors/worker.errors';
 import { FrontMcpConfig } from '../front-mcp/front-mcp.tokens';
 import type { BackgroundLifecycle } from '../provider/provider.lifecycle';
 import type ProviderRegistry from '../provider/provider.registry';
+import { withWorkSpan } from '../work/work-spans';
 import { WorkerSupervisor, type WorkerStatus } from './worker.supervisor';
 
 type WorkerInstance = WorkerInterface & Partial<OnBootstrap & OnReady & OnShutdown>;
@@ -172,7 +174,9 @@ export class WorkerLifecycle implements OnBootstrap, OnReady, OnShutdown, Backgr
     }
     const serverName = this.providers.get(FrontMcpConfig).info?.name ?? 'frontmcp';
     this.claim(serverName);
-    const supervisor = new WorkerSupervisor({ name, restart, logger, run: (context) => this.worker.run(context) });
+    // Each run is a work span, so a stall while it runs names the worker
+    const run = (context: WorkerRunContext) => withWorkSpan('worker', name, () => this.worker.run(context));
+    const supervisor = new WorkerSupervisor({ name, restart, logger, run });
     if (scope !== 'process') return this.contend(supervisor, scope, logger);
     logger.info(`Worker "${name}" runs in this process`);
     supervisor.start();
