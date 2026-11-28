@@ -75,7 +75,10 @@ export function dutyStorageConfig(redis: unknown, scope: DutyScope = 'machine'):
   return leaseStorageConfig(redis, 'duty', typeof scope === 'string' ? scope : 'machine');
 }
 
-/** The key the app names a duty's lease with: the string, or what the function answers, which must be one. */
+/** The longest key `scope: { key }` takes, once trimmed, as its metadata check bounds a literal one. */
+const MAX_DUTY_LEASE_KEY_LENGTH = 1_024;
+
+/** The key the app names a duty's lease with: the string, or what the function answers, trimmed and bounded alike. */
 async function appLeaseKey(name: string, scope: DutyKeyedScope): Promise<string> {
   let key: unknown;
   try {
@@ -83,8 +86,12 @@ async function appLeaseKey(name: string, scope: DutyKeyedScope): Promise<string>
   } catch (error) {
     throw new DutyLeaseKeyError(name, `failed (${error instanceof Error ? error.message : String(error)})`);
   }
-  if (typeof key !== 'string' || key.trim() === '') throw new DutyLeaseKeyError(name, 'answered no string');
-  return key;
+  const trimmed = typeof key === 'string' ? key.trim() : '';
+  if (trimmed === '') throw new DutyLeaseKeyError(name, 'answered no string');
+  if (trimmed.length > MAX_DUTY_LEASE_KEY_LENGTH) {
+    throw new DutyLeaseKeyError(name, `answered a key longer than ${MAX_DUTY_LEASE_KEY_LENGTH} characters`);
+  }
+  return trimmed;
 }
 
 /** Whether this process prefers to run the duty; undefined when the duty states no preference. */

@@ -276,9 +276,10 @@ export class WeekdayReportDuty implements DutyInterface {
 whatever folder each runs from: the processes whose key is the same share it. `'workspace'` keys the lease by the
 project root, so each git worktree of a project gets a lease of its own; a key the app names lets every worktree share
 one, such as the path of the main checkout whose data file they all use. A function is called each time the duty
-starts, in each process; one that throws or answers no string fails the duty's start with `DutyLeaseKeyError`
-(`DUTY_LEASE_KEY`): `Duty "<name>" could not name its lease: scope.key <reason>; it answers the key its processes
-share`.
+starts, in each process, and its answer is trimmed as a string key is, so `'main\n'` and `'main'` share a lease. One
+that throws, answers no string, or answers a key longer than 1024 characters fails the duty's start with
+`DutyLeaseKeyError` (`DUTY_LEASE_KEY`): `Duty "<name>" could not name its lease: scope.key <reason>; it answers the key
+its processes share`.
 
 ```typescript
 import { execFileSync } from 'node:child_process';

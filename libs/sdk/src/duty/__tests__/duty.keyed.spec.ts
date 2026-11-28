@@ -107,6 +107,26 @@ describe('duties with a lease the app names, and a preferred process', () => {
     expect(ran.some(({ duty }) => duty === second)).toBe(false);
   });
 
+  it('trims the key a function answers, as it does a literal one', async () => {
+    const first = await processWith(KeepFileDuty);
+    nextKey = () => ' main\n';
+    const second = await processWith(KeepFileDuty);
+
+    await until(() => ran.some(({ duty }) => duty === first));
+    await sleep(300);
+
+    expect(ran.some(({ duty }) => duty === second)).toBe(false);
+  });
+
+  it('fails to start a duty whose key function answers a key longer than 1024 characters', async () => {
+    nextKey = () => 'k'.repeat(1_025);
+    await expect(processWith(KeepFileDuty)).rejects.toThrow(
+      'Duty "keep-file" could not name its lease: scope.key answered a key longer than 1024 characters',
+    );
+    nextKey = () => ` ${'k'.repeat(1_024)} `;
+    await expect(processWith(KeepFileDuty)).resolves.toBeDefined();
+  });
+
   it('fails to start a duty whose key function throws or answers no string', async () => {
     nextKey = () => {
       throw new Error('no checkout');
