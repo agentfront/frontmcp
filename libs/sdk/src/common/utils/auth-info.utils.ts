@@ -1,4 +1,4 @@
-import { scopesFromClaims } from '@frontmcp/auth';
+import { detectPrincipal, scopesFromClaims, type AuthPrincipal } from '@frontmcp/auth';
 
 import type { Authorization } from '../types/auth/session.types';
 
@@ -20,6 +20,8 @@ export interface AuthorizationAuthInfo {
     sessionId: string | undefined;
     sessionPayload: NonNullable<Authorization['session']>['payload'];
     principalIssuer: Authorization['principalIssuer'];
+    /** Who the token speaks for (see `Authorization.principal`); read by `this.auth.principal` and the authorities. */
+    principal: AuthPrincipal;
   };
 }
 
@@ -64,7 +66,7 @@ export function authInfoFromAuthorization(
   authorization: Authorization,
   presentedSessionId?: string,
 ): AuthorizationAuthInfo {
-  const { token, user, session, principalIssuer } = authorization;
+  const { token, user, session, principalIssuer, principal } = authorization;
   const verifiedSession =
     session !== undefined && presentedSessionId !== undefined && session.id === presentedSessionId
       ? session
@@ -80,6 +82,7 @@ export function authInfoFromAuthorization(
       sessionId: verifiedSession?.id,
       sessionPayload: verifiedSession?.payload,
       principalIssuer,
+      principal: principal ?? detectPrincipal(user ?? {}),
     },
   };
 }

@@ -24,7 +24,12 @@ describe('authInfoFromAuthorization', () => {
       scopes: ['tickets:read', 'tickets:write'],
       expiresAt: 1_900_000_000,
       user,
-      extra: { user, sessionId: 'session-1', sessionPayload: undefined },
+      extra: {
+        user,
+        sessionId: 'session-1',
+        sessionPayload: undefined,
+        principal: { kind: 'person', sub: 'user-123' },
+      },
     });
   });
 
@@ -42,9 +47,22 @@ describe('authInfoFromAuthorization', () => {
       authInfoFromAuthorization(minted).extra,
       authInfoFromAuthorization(minted, 'another-session').extra,
     ]).toEqual([
-      { user, sessionId: undefined, sessionPayload: undefined },
-      { user, sessionId: undefined, sessionPayload: undefined },
+      { user, sessionId: undefined, sessionPayload: undefined, principal: { kind: 'person', sub: 'user-123' } },
+      { user, sessionId: undefined, sessionPayload: undefined, principal: { kind: 'person', sub: 'user-123' } },
     ]);
+  });
+
+  it('carries the principal session verification resolved, else the one the claims name', () => {
+    const resolved = { kind: 'machine' as const, sub: 'svc-sync', clientId: 'sync-client' };
+    const machine = { iss: 'issuer', sub: 'sync-client', client_id: 'sync-client', iat: 1_800_000_000 };
+
+    expect(authInfoFromAuthorization({ token: 't', user, principal: resolved }).extra.principal).toBe(resolved);
+    expect(authInfoFromAuthorization({ token: 't', user: machine }).extra.principal).toEqual({
+      kind: 'machine',
+      sub: 'sync-client',
+      clientId: 'sync-client',
+      authTime: 1_800_000_000,
+    });
   });
 
   it("carries the issuer of a token from another issuer than the server's own", () => {

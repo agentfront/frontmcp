@@ -424,7 +424,9 @@ the exact same `session:verify` flow the MCP endpoint uses:
 - **Unauthorized** → short-circuits with `401` + a `WWW-Authenticate` header.
 - **Forbidden** (valid token, insufficient scope) → `403` + `WWW-Authenticate`.
 - **Authorized** → the verified authorization is attached to `req.authSession`
-  before your handler runs.
+  before your handler runs: `user` holds the token's claims (`auth_time`, `azp`
+  and `client_id` typed among them) and, since 1.14, `principal` tells a person
+  from a machine (`req.authSession.principal.kind`; see `configure-auth-modes`).
 
 In **public auth mode** (or transparent with `allowAnonymous`), `auth: true`
 routes receive an anonymous session and the handler still runs. Under auth

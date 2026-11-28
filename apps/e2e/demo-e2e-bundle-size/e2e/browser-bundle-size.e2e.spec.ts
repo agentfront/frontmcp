@@ -29,15 +29,18 @@ const BUDGETS: Array<{ entry: string; label: string; maxBytes: number }> = [
   // +3,952: the redis option's cluster, cluster-seed-node and client forms and the client check they parse with (#1503),
   // then +665 and +668: the check names the FrontMcpRedisClient methods a client of your own lacks. Then +2,358 and
   // +2,357: the server's enabled map, onError and the surface hash a tools/call sends back (#1352), then +104 and +104:
-  // no widget tool name completes for a ui://widget/ resource that is off
-  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_355_457 },
-  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_362_691 },
+  // no widget tool name completes for a ui://widget/ resource that is off. Then +1,493 and +1,504: the principal a
+  // token speaks for, and the typed auth_time, azp and client_id (#1363), then +437 and +438: a principal's optional
+  // fields checked, and the principal told by the subject claimsMapping.userId resolves
+  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_357_387 },
+  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_364_633 },
 ];
 
 // +413 bytes, the 1.13.2 batch: producer-backed resource keys (#1354, +241), the client metadata a transparent server
 // publishes (#1360, +166) and the people session store option (#1355, +6). Then +3,991: the redis option's cluster,
-// cluster-seed-node and client forms (#1503), then +1,008: the client check names a custom client's missing methods
-const VITE_INITIAL_CHUNK_MAX_BYTES = 791_117;
+// cluster-seed-node and client forms (#1503), then +1,008: the client check names a custom client's missing methods.
+// Then +2,064: the principal a token speaks for (#1363), then +513: its review fixes
+const VITE_INITIAL_CHUNK_MAX_BYTES = 793_694;
 
 // What create() never needs: the parser behind @enclave-vm/ast (#885), the MCP client (#886) and server-only code
 const NEVER_BUNDLED: Record<string, RegExp> = {

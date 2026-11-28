@@ -13,6 +13,7 @@ import {
   type ClaimsResolverFn,
 } from '../authorities/authorities.context';
 import type { AuthoritiesClaimsMapping } from '../authorities/authorities.profiles';
+import { detectPrincipal, isAuthPrincipal, type AuthPrincipal } from '../session/utils/principal';
 import type { FrontMcpAuthContext, FrontMcpAuthUser } from './frontmcp-auth-context';
 
 /**
@@ -62,6 +63,24 @@ function toStringArray(value: unknown): readonly string[] {
 }
 
 /**
+ * The principal of a request with signed-in `subject` (undefined for an anonymous caller, who is always
+ * `'anonymous'`): the one session verification resolved (`extra.principal`), else the one the claims name, with
+ * `subject` as the subject when the claims carry no usable one.
+ */
+function principalOf(
+  source: AuthContextSourceInfo,
+  rawClaims: Record<string, unknown>,
+  subject: string | undefined,
+): AuthPrincipal {
+  const given = source.extra?.['principal'];
+  const found = isAuthPrincipal(given) ? given : detectPrincipal(rawClaims);
+  if (subject === undefined) {
+    return Object.freeze(found.kind === 'anonymous' ? found : { ...found, kind: 'anonymous' });
+  }
+  return Object.freeze(found.kind !== 'anonymous' ? found : detectPrincipal({ ...rawClaims, sub: subject }));
+}
+
+/**
  * Concrete implementation of {@link FrontMcpAuthContext}.
  *
  * Constructed via {@link buildAuthContext} factory — not intended for direct instantiation
@@ -70,6 +89,7 @@ function toStringArray(value: unknown): readonly string[] {
 export class FrontMcpAuthContextImpl implements FrontMcpAuthContext {
   readonly user: FrontMcpAuthUser;
   readonly isAnonymous: boolean;
+  readonly principal: AuthPrincipal;
   readonly mode: string;
   readonly sessionId: string;
   readonly scopes: readonly string[];
@@ -100,6 +120,9 @@ export class FrontMcpAuthContextImpl implements FrontMcpAuthContext {
 
     // -- Anonymous detection -------------------------------------------
     this.isAnonymous = signedInSub === undefined;
+
+    // -- Principal: the one the request was verified with, else the one the claims name ----------
+    this.principal = principalOf(source, this.buildRawClaims(source), signedInSub);
 
     // -- Mode ----------------------------------------------------------
     const extraAuth = source.extra?.['authorization'] as Record<string, unknown> | undefined;

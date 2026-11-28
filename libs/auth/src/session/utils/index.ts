@@ -12,6 +12,14 @@ export {
   type AnonymousCallerClaimsOptions,
 } from './auth-token.utils';
 export {
+  detectPrincipal,
+  isAuthPrincipal,
+  resolvePrincipal,
+  type AuthPrincipal,
+  type PrincipalKind,
+  type PrincipalResolver,
+} from './principal';
+export {
   getKey,
   encryptJson,
   decryptSessionJson,

@@ -237,6 +237,62 @@ describe('AuthoritiesContextBuilder', () => {
     });
   });
 
+  describe('the principal', () => {
+    const builder = new AuthoritiesContextBuilder();
+    const peopleOnly = { match: { 'user.principal': 'person' } };
+
+    it('is user.principal: a person, a machine or anonymous, as the claims name it', () => {
+      expect(
+        [
+          { user: { sub: 'user-1', azp: 'desk-app' } },
+          { user: { sub: 'billing-service', client_id: 'billing-service' } },
+          { user: { sub: 'svc@clients' }, extra: { authorization: { claims: { gty: 'client-credentials' } } } },
+          { user: { sub: 'anon:guest' } },
+          {},
+        ].map((authInfo) => builder.build(authInfo).user.principal),
+      ).toEqual(['person', 'machine', 'machine', 'anonymous', 'anonymous']);
+    });
+
+    it('is the kind session verification resolved, when the request carries one', () => {
+      const ctx = builder.build({
+        user: { sub: 'f81d4fae', azp: 'sync-service' },
+        extra: { principal: { kind: 'machine', sub: 'f81d4fae' } },
+      });
+
+      expect(ctx.user.principal).toBe('machine');
+    });
+
+    it('follows the subject claimsMapping.userId resolves, and keeps an anonymous subject anonymous', () => {
+      const mapped = new AuthoritiesContextBuilder({ claimsMapping: { userId: 'uid' } });
+      const person = mapped.build({ user: { uid: 'user-1' } });
+      const anonymous = mapped.build({ user: { sub: 'anon:guest', uid: 'user-1' } });
+
+      expect([person.user.sub, person.user.principal]).toEqual(['user-1', 'person']);
+      expect(evaluateAbac(peopleOnly, person).granted).toBe(true);
+      expect([anonymous.user.sub, anonymous.user.principal]).toEqual([undefined, 'anonymous']);
+      expect(mapped.build({ user: { uid: 'svc', client_id: 'svc' } }).user.principal).toBe('machine');
+    });
+
+    it('is set with a claimsResolver too', () => {
+      const resolving = new AuthoritiesContextBuilder({
+        claimsResolver: () => ({ roles: [], permissions: [], claims: {} }),
+      });
+
+      expect(resolving.build({ user: { sub: 'svc', client_id: 'svc' } }).user.principal).toBe('machine');
+    });
+
+    it("lets a rule allow people only with match: { 'user.principal': 'person' }", () => {
+      const person = evaluateAbac(peopleOnly, builder.build({ user: { sub: 'user-1' } }));
+      const machine = evaluateAbac(peopleOnly, builder.build({ user: { sub: 'svc', client_id: 'svc' } }));
+
+      expect(person.granted).toBe(true);
+      expect(machine).toMatchObject({
+        granted: false,
+        deniedBy: "attributes.match: 'user.principal' expected 'person' but got 'machine'",
+      });
+    });
+  });
+
   describe('with relationshipResolver', () => {
     it('should use provided resolver', () => {
       const mockResolver: RelationshipResolver = {

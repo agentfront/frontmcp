@@ -109,12 +109,12 @@ ABAC evaluates conditions against a context envelope containing `user`, `claims`
 
 The evaluation context has four top-level namespaces:
 
-| Prefix     | Content                                                                  | Example Path                              |
-| ---------- | ------------------------------------------------------------------------ | ----------------------------------------- |
-| `user.*`   | Resolved user info (`sub`, `roles`, `permissions`, `claims`, `tenantId`) | `user.sub`, `user.roles`, `user.tenantId` |
-| `claims.*` | Raw JWT claims                                                           | `claims.org_id`, `claims.email`           |
-| `input.*`  | Tool/prompt input arguments                                              | `input.tenantId`, `input.projectId`       |
-| `env.*`    | Runtime environment variables                                            | `env.NODE_ENV`, `env.REGION`              |
+| Prefix     | Content                                                                               | Example Path                               |
+| ---------- | ------------------------------------------------------------------------------------- | ------------------------------------------ |
+| `user.*`   | Resolved user info (`sub`, `roles`, `permissions`, `claims`, `tenantId`, `principal`) | `user.sub`, `user.roles`, `user.principal` |
+| `claims.*` | Raw JWT claims                                                                        | `claims.org_id`, `claims.email`            |
+| `input.*`  | Tool/prompt input arguments                                                           | `input.tenantId`, `input.projectId`        |
+| `env.*`    | Runtime environment variables                                                         | `env.NODE_ENV`, `env.REGION`               |
 
 ### Simple Match
 
@@ -130,6 +130,15 @@ authorities: {
   },
 }
 ```
+
+`user.principal` is `'person'`, `'machine'` (a client acting for itself, such as a client-credentials token) or `'anonymous'`, as the request's auth decided it (see `frontmcp-config` → `configure-auth-modes`, Person or machine). A tool for people only:
+
+```typescript
+authorities: { attributes: { match: { 'user.principal': 'person' } } }
+// a machine's token: attributes.match: 'user.principal' expected 'person' but got 'machine'
+```
+
+Detection alone does not mark every machine: a service account whose `sub` differs from its client id (a Keycloak service account, say) reads as a `'person'`, so `match: { 'user.principal': 'person' }` admits it. A people-only rule needs the auth options' `principal` resolver, or provider claims that mark every machine token (`gty`, `idtyp: 'app'`, or a `sub` equal to its client id).
 
 ### Advanced Conditions
 

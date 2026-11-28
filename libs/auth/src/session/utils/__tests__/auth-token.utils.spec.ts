@@ -89,6 +89,14 @@ describe('auth-token.utils', () => {
       expect(deriveTypedUser({}).sub).toBe('');
     });
 
+    it('types auth_time, azp and client_id, and drops a value of the wrong type', () => {
+      const user = deriveTypedUser({ sub: 'user-1', auth_time: 1_700_000_000, azp: 'desk-app', client_id: 'desk-app' });
+      const malformed = deriveTypedUser({ sub: 'user-1', auth_time: '1700000000', azp: 7, client_id: null });
+
+      expect([user.auth_time, user.azp, user.client_id]).toEqual([1_700_000_000, 'desk-app', 'desk-app']);
+      expect([malformed.auth_time, malformed.azp, malformed.client_id]).toEqual([undefined, undefined, undefined]);
+    });
+
     it('should extract standard JWT claims', () => {
       const claims = {
         iss: 'https://issuer.example.com',
