@@ -1,7 +1,7 @@
 import * as path from 'node:path';
 
 import { InvalidSharedServerOptionsError } from '../../errors';
-import { parseSharedServerOptions } from '../shared-server.options';
+import { parseSharedServerOptions, readSharedServerKey, validateSharedServerOptions } from '../shared-server.options';
 
 const KEY_FORMAT =
   'key: key must be 1 to 64 lowercase letters, digits, ".", "_" or "-", starting and ending with a letter or digit';
@@ -19,6 +19,7 @@ describe('parseSharedServerOptions', () => {
     idleTimeoutMs: 600_000,
     checkout: '/work/checkout/dist',
     spare: false,
+    entries: {},
   };
 
   it('serves on an owner-only Unix socket by default, and on loopback HTTP on Windows', () => {
@@ -118,5 +119,65 @@ describe('parseSharedServerOptions', () => {
       expect((error as InvalidSharedServerOptionsError).code).toBe('INVALID_SHARED_SERVER_OPTIONS');
       expect((error as Error).message).toMatch(/^runShared\(\) options are invalid: key: /);
     }
+  });
+});
+
+describe('a function key', () => {
+  const ENTRY = '/work/checkout/dist/main.js';
+
+  it('keeps the function, the file that re-reads it, and the entries of the keys it may move to', () => {
+    const key = () => 'checkout-a';
+    const validated = validateSharedServerOptions(
+      { key, rereadKey: { file: 'state/active-checkout' }, entries: { 'checkout-b': 'b/dist/main.js' } },
+      'linux',
+      ENTRY,
+    );
+
+    expect(validated).toMatchObject({
+      key,
+      rereadKey: { file: path.resolve('state/active-checkout'), intervalMs: 1_000 },
+      entries: { 'checkout-b': path.resolve('b/dist/main.js') },
+    });
+    expect(Object.isFrozen(validated.entries)).toBe(true);
+  });
+
+  it.each([
+    [
+      { key: 'notes', rereadKey: { file: 'f' } },
+      'rereadKey: rereadKey needs a function key, which the session reads again',
+    ],
+    [
+      { key: 'notes', entries: { two: 'two.js' } },
+      'entries: entries needs a function key, which the session reads again',
+    ],
+    [{ key: () => 'a', entries: { Two: 'two.js' } }, 'entries.Two: entries must map keys to the paths of entry files'],
+    [{ key: () => 'a', entries: { two: '' } }, 'entries.two: entries must map keys to the paths of entry files'],
+    [{ key: () => 'a', rereadKey: { file: '' } }, 'rereadKey.file: rereadKey must be { file, intervalMs? }'],
+    [{ key: () => 'a', rereadKey: { file: 'f', intervalMs: 0 } }, 'rereadKey.intervalMs: rereadKey must be'],
+    [{ key: 5 }, 'key: key is required: a string, or a function that answers one'],
+  ])('refuses %j', (input, message) => {
+    expect(() => validateSharedServerOptions(input, 'linux', ENTRY)).toThrow(InvalidSharedServerOptionsError);
+    expect(() => validateSharedServerOptions(input, 'linux', ENTRY)).toThrow(message);
+  });
+
+  it('is not resolved by parseSharedServerOptions, which takes a string key', () => {
+    expect(() => parseSharedServerOptions({ key: () => 'a' }, 'linux', ENTRY)).toThrow(
+      'key: a function key is read when the session starts',
+    );
+  });
+
+  it('answers a key, or why it gave none', async () => {
+    expect(await readSharedServerKey(async () => 'checkout-a')).toEqual({ key: 'checkout-a' });
+    expect(
+      await readSharedServerKey(() => {
+        throw new Error('no checkout');
+      }),
+    ).toEqual({ error: 'the key function failed (no checkout)' });
+    expect(await readSharedServerKey(() => 'con')).toEqual({
+      error: expect.stringContaining('the key function answered "con"'),
+    });
+    expect(await readSharedServerKey(() => 42 as unknown as string)).toEqual({
+      error: expect.stringContaining('the key function answered 42'),
+    });
   });
 });

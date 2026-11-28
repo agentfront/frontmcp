@@ -121,6 +121,7 @@ posixOnly('FrontMcpInstance.runShared', () => {
       idleTimeoutMs: 600_000,
       checkout: path.dirname(process.argv[1] ?? ''),
       spare: false,
+      entries: {},
       name: 'run-shared-spec',
       version: '1.0.0',
       input: process.stdin,
@@ -131,6 +132,50 @@ posixOnly('FrontMcpInstance.runShared', () => {
     expect(options).toMatchObject({ whenOrphaned: { stdin: process.stdin } });
     await shutdown('stdin-ended');
     expect(stop).toHaveBeenCalled();
+  });
+
+  it('reads a function key once to attach, and hands the session the function to read it again', async () => {
+    jest
+      .mocked(attachSharedSession)
+      .mockReturnValue({ attached: Promise.resolve(), stop: jest.fn(async () => undefined) });
+    const key = jest.fn(async () => 'checkout-a');
+
+    await FrontMcpInstance.runShared(config, { key, entries: { 'checkout-b': 'dist/b.js' } });
+
+    expect(key).toHaveBeenCalledTimes(1);
+    expect(attachSharedSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        key: 'checkout-a',
+        keySource: key,
+        entries: { 'checkout-b': path.resolve('dist/b.js') },
+      }),
+    );
+  });
+
+  it('refuses a function key that throws or answers no key when the session starts', async () => {
+    await expect(
+      FrontMcpInstance.runShared(config, {
+        key: () => {
+          throw new Error('no checkout');
+        },
+      }),
+    ).rejects.toThrow('key: the key function failed (no checkout)');
+    await expect(FrontMcpInstance.runShared(config, { key: () => 'Not A Key' })).rejects.toThrow(
+      'key: the key function answered "Not A Key"',
+    );
+    expect(attachSharedSession).not.toHaveBeenCalled();
+  });
+
+  it('serves the key a session started it for with a function key, which it does not read', async () => {
+    process.env[SHARED_SERVE_ENV] = 'checkout-b';
+    const key = jest.fn(() => 'checkout-a');
+    await FrontMcpInstance.runShared(config, { key, transport: 'http', idleTimeoutMs: false, checkout: false });
+
+    expect(key).not.toHaveBeenCalled();
+    expect(attachSharedSession).not.toHaveBeenCalled();
+    expect(fs.existsSync(sharedServerFiles('checkout-b').recordFile)).toBe(true);
+    const [[close]] = jest.mocked(exitOnShutdownSignals).mock.calls;
+    await close('signal');
   });
 
   it('fails when the session can not reach its server', async () => {

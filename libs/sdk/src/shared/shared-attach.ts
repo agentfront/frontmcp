@@ -5,6 +5,7 @@ import {
   createHttpUpstream,
   createStdioFramer,
   listChangedNotifications,
+  stat,
   type BridgeLogger,
   type HttpUpstreamClient,
   type JsonRpcFrame,
@@ -27,7 +28,7 @@ import {
   sharedServerFiles,
   type SharedServerRecord,
 } from './shared-files';
-import type { ResolvedSharedServerOptions } from './shared-server.options';
+import { readSharedServerKey, type ResolvedSharedServerOptions } from './shared-server.options';
 import { openStartLockStorage, SharedStartLock } from './start-lock';
 
 const BUFFER_SIZE = 16;
@@ -47,12 +48,15 @@ export interface AttachSharedSessionOptions extends ResolvedSharedServerOptions 
   name: string;
   /** The session's own version, `info.version`: it never attaches to an older server. */
   version: string;
-  /**
-   * Boot the server in this process, for when the session can't, or may not, attach to the key's server; with `spare`,
-   * while the session attaches. It serves nothing until it is started.
-   */
-  bootEmbedded(): Promise<BootedEmbeddedServer>;
-  spawnServer?: (startLockHolder: string) => SpawnedServer;
+  /** Boot the server of `key` in this process, serving nothing until started; with `spare`, while attaching. */
+  bootEmbedded(key: string): Promise<BootedEmbeddedServer>;
+  /** Start the server of `key`: one the session's own config names (see {@link mayStartServerOf}). */
+  spawnServer?: (startLockHolder: string, key: string) => SpawnedServer;
+}
+
+/** Whether a session may start the server of `key`: its first key's, with its own entry, or one its `entries` name. */
+export function mayStartServerOf(options: Pick<AttachSharedSessionOptions, 'key' | 'entries'>, key: string): boolean {
+  return key === options.key || Object.hasOwn(options.entries, key);
 }
 
 export interface SharedSession {
@@ -120,13 +124,25 @@ export function towardsServer(send: typeof fetch): typeof fetch {
   };
 }
 
-async function connect(options: AttachSharedSessionOptions, logger: BridgeLogger): Promise<SharedServerAttachment> {
-  const files = sharedServerFiles(options.key);
+/** Start the server of `key` with the entry the session's config names for it: its own for its first key. */
+function spawnerOf(options: AttachSharedSessionOptions, key: string): (startLockHolder: string) => SpawnedServer {
+  if (options.spawnServer) return (startLockHolder) => options.spawnServer?.(startLockHolder, key) as SpawnedServer;
+  const entry = key === options.key ? undefined : options.entries[key];
+  return (startLockHolder) => spawnSharedServer(key, startLockHolder, entry);
+}
+
+/** Reach the server of `key`, starting or replacing it only when the session's config lets it start that key's. */
+async function connect(
+  options: AttachSharedSessionOptions,
+  key: string,
+  logger: BridgeLogger,
+): Promise<SharedServerAttachment> {
+  const files = sharedServerFiles(key);
   if (options.transport === 'unix') assertSocketPathFits(files);
   await prepareSharedDirectory(files);
   try {
     return await ensureSharedServer({
-      key: options.key,
+      key,
       transport: options.transport,
       files,
       logger,
@@ -134,10 +150,11 @@ async function connect(options: AttachSharedSessionOptions, logger: BridgeLogger
       version: options.version,
       replaceOlder: options.replaceOlder,
       budgetMs: options.attachBudgetMs,
-      spawnServer: options.spawnServer ?? ((startLockHolder) => spawnSharedServer(options.key, startLockHolder)),
+      mayStart: mayStartServerOf(options, key),
+      spawnServer: spawnerOf(options, key),
       openLock: async () => {
         const storage = await openStartLockStorage(files);
-        return { lock: new SharedStartLock(storage, options.key), close: () => storage.disconnect() };
+        return { lock: new SharedStartLock(storage, key), close: () => storage.disconnect() };
       },
     });
   } catch (error) {
@@ -155,6 +172,12 @@ async function connect(options: AttachSharedSessionOptions, logger: BridgeLogger
  */
 export function attachSharedSession(options: AttachSharedSessionOptions): SharedSession {
   const log = stderrLogger();
+  /** The key whose server the session reaches: its first, until a function `key` answers another. */
+  let currentKey = options.key;
+  /** The requests each server has in flight, which a server the session moves from finishes. */
+  const sending = new Map<HttpUpstreamClient, Set<Promise<void>>>();
+  let reaching: Promise<void> | undefined;
+  let keyWatch: NodeJS.Timeout | undefined;
   let upstream: HttpUpstreamClient | undefined;
   let embedded: EmbeddedSharedServer | undefined;
   /** The server booting in this process while the session first attaches, with `spare`. */
@@ -190,7 +213,7 @@ export function attachSharedSession(options: AttachSharedSessionOptions): Shared
     const current = upstream;
     if (!current) throw new Error('the session has not reached its shared server');
     try {
-      await current.send(frame);
+      await sendTracked(current, frame);
     } catch (error) {
       if (!(error instanceof SharedServerLostError)) throw error;
       lose(current, error);
@@ -202,6 +225,19 @@ export function attachSharedSession(options: AttachSharedSessionOptions): Shared
     }
   }
 
+  /** Send `frame` to `server`, counted among its requests in flight until it is answered. */
+  async function sendTracked(server: HttpUpstreamClient, frame: JsonRpcFrame): Promise<void> {
+    const sent = server.send(frame);
+    let inFlight = sending.get(server);
+    if (!inFlight) sending.set(server, (inFlight = new Set()));
+    inFlight.add(sent);
+    try {
+      await sent;
+    } finally {
+      inFlight.delete(sent);
+    }
+  }
+
   /** Leave a server that went away, and reach the next one; its answers to the requests in flight are still relayed. */
   function lose(lost: HttpUpstreamClient, error: SharedServerLostError): void {
     if (upstream !== lost || stopping) return;
@@ -210,7 +246,106 @@ export function attachSharedSession(options: AttachSharedSessionOptions): Shared
     lost.leaveSession();
     log.warn('reaching the next shared server', { reason: error.message });
     fsm.onUpstreamLost(error.message);
-    reach().catch(fail);
+    reaching = reach().catch(fail);
+  }
+
+  /** Watch `rereadKey.file`: each change (it appears, goes, or its size or time changes) reads the key again. */
+  async function watchKey(): Promise<void> {
+    const { rereadKey, keySource } = options;
+    if (!rereadKey || !keySource) return;
+    const signatureOf = async (): Promise<string> => {
+      try {
+        const { size, mtimeMs } = await stat(rereadKey.file);
+        return `${size}:${mtimeMs}`;
+      } catch {
+        return 'missing';
+      }
+    };
+    let last = await signatureOf();
+    let checking = false;
+    let again = false;
+    keyWatch = setInterval(async () => {
+      if (stopping) return;
+      const now = await signatureOf();
+      if (now === last) return;
+      last = now;
+      if (checking) {
+        again = true;
+        return;
+      }
+      checking = true;
+      try {
+        do {
+          again = false;
+          await checkKey();
+        } while (again && !stopping);
+      } finally {
+        checking = false;
+      }
+    }, rereadKey.intervalMs);
+    keyWatch.unref();
+  }
+
+  /** Read the key again; a new one moves the session, and one that can't be read keeps the current key. */
+  async function checkKey(): Promise<void> {
+    if (!options.keySource) return;
+    const read = await readSharedServerKey(options.keySource);
+    if ('error' in read) {
+      log.warn(`keeping the shared server key "${currentKey}": ${read.error}`);
+      return;
+    }
+    if (read.key !== currentKey) await moveTo(read.key);
+  }
+
+  /** Move to the server of `key`, attaching as at the start; the old one finishes its requests, else stay. */
+  async function moveTo(key: string): Promise<void> {
+    await attached.catch(() => undefined);
+    await reaching;
+    const from = upstream;
+    if (stopping || !from) return;
+    const stay = (reason: string) => log.warn(`staying on the shared server "${currentKey}": ${reason}`);
+    let attachment: SharedServerAttachment;
+    try {
+      attachment = await connect(options, key, log);
+    } catch (error) {
+      stay(`the server of key "${key}" can't be reached (${messageOf(error)})`);
+      return;
+    }
+    if ('embedded' in attachment) {
+      stay(`the server of key "${key}" can't be reached (${attachment.embedded})`);
+      return;
+    }
+    const { url, token, fetch: send, pid } = attachment.server;
+    const server: ServerToReach = { url, headers: { authorization: `Bearer ${token}` }, fetch: send, pid };
+    const left = embedded;
+    let moved = false;
+    // The new server is taken only while the session is still on the server it moves from
+    const adopt = (next: HttpUpstreamClient): boolean => {
+      if (upstream !== from || stopping) return false;
+      moved = true;
+      upstream = next;
+      embedded = undefined;
+      currentKey = key;
+      endSuccessorWatch();
+      log.warn(`moved to the shared server "${key}"`);
+      return true;
+    };
+    try {
+      await reach(async () => server, adopt);
+    } catch (error) {
+      stay(`the server of key "${key}" did not take the session (${messageOf(error)})`);
+      return;
+    }
+    if (moved) void leave(from, left);
+  }
+
+  /** Let a server the session moved from finish its requests in flight, then end the session there. */
+  async function leave(server: HttpUpstreamClient, ownServer: EmbeddedSharedServer | undefined): Promise<void> {
+    await Promise.allSettled([...(sending.get(server) ?? [])]);
+    sending.delete(server);
+    await server.endSession();
+    await server.close();
+    await ownServer?.close();
   }
 
   /** Stop reading the key's record for a server that took the key over. */
@@ -237,7 +372,7 @@ export function attachSharedSession(options: AttachSharedSessionOptions): Shared
   async function moveToSuccessor(lost: HttpUpstreamClient, lostPid: number): Promise<void> {
     let record: SharedServerRecord | undefined;
     try {
-      record = await readServerRecord(sharedServerFiles(options.key));
+      record = await readServerRecord(sharedServerFiles(currentKey));
     } catch (error) {
       if (upstream !== lost || stopping) return;
       endSuccessorWatch();
@@ -259,7 +394,7 @@ export function attachSharedSession(options: AttachSharedSessionOptions): Shared
     if (embedded) return embedded;
     let attachment: SharedServerAttachment;
     try {
-      attachment = await connect(options, log);
+      attachment = await connect(options, currentKey, log);
     } catch (error) {
       dropSpare();
       throw error;
@@ -273,9 +408,9 @@ export function attachSharedSession(options: AttachSharedSessionOptions): Shared
       const { url, token, fetch: send, pid } = attachment.server;
       return { url, headers: { authorization: `Bearer ${token}` }, fetch: send, pid };
     }
-    log.warn(`running the shared server "${options.key}" in this process: ${attachment.embedded}`);
+    log.warn(`running the shared server "${currentKey}" in this process: ${attachment.embedded}`);
     // Kept as the spare until it booted, so a stop meanwhile shuts it down instead of starting it
-    spare ??= options.bootEmbedded();
+    spare ??= options.bootEmbedded(currentKey);
     const booted = await spare;
     if (stopping) return undefined;
     spare = undefined;
@@ -297,10 +432,19 @@ export function attachSharedSession(options: AttachSharedSessionOptions): Shared
     );
   }
 
+  /** Take `next` as the server to send the requests to. */
+  function useUpstream(next: HttpUpstreamClient): boolean {
+    upstream = next;
+    return true;
+  }
+
   /** Reach a server and replay the client's `initialize` on it; one that goes away during the replay is replaced. */
-  async function reach(): Promise<void> {
+  async function reach(
+    serverOf: () => Promise<ServerToReach | undefined> = serverToReach,
+    adopt: (next: HttpUpstreamClient) => boolean = useUpstream,
+  ): Promise<void> {
     for (let replays = 0; ; replays++) {
-      const server = await serverToReach();
+      const server = await serverOf();
       if (!server || stopping) {
         await embedded?.close();
         return;
@@ -314,17 +458,21 @@ export function attachSharedSession(options: AttachSharedSessionOptions): Shared
         claudeCodeChannels: true,
         onNotificationStreamLost: () => watchForSuccessor(next, server.pid),
       });
+      let result: Record<string, unknown> | undefined;
       try {
-        if (clientInitialize) {
-          const result = await next.reinitialize(clientInitialize, clientInitialized);
-          for (const notification of listChangedNotifications(result)) await framer.write(notification);
-        }
+        if (clientInitialize) result = await next.reinitialize(clientInitialize, clientInitialized);
       } catch (error) {
         await next.close();
         if (error instanceof SharedServerLostError && replays < MAX_RESENDS) continue;
         throw error;
       }
-      upstream = next;
+      if (!adopt(next)) {
+        await next.close();
+        return;
+      }
+      if (clientInitialize) {
+        for (const notification of listChangedNotifications(result)) await framer.write(notification);
+      }
       fsm.onChildReady();
       return;
     }
@@ -334,7 +482,7 @@ export function attachSharedSession(options: AttachSharedSessionOptions): Shared
   fsm.onBootStart();
   if (options.spare) {
     // Booted while the session first attaches; a boot that fails is told when the session falls back to it
-    spare = options.bootEmbedded();
+    spare = options.bootEmbedded(currentKey);
     spare.catch(() => undefined);
   }
   const attached = reach().catch((error: unknown) => {
@@ -342,8 +490,10 @@ export function attachSharedSession(options: AttachSharedSessionOptions): Shared
     throw error;
   });
   attached.catch(() => undefined);
+  void watchKey();
 
   async function shutdown(): Promise<void> {
+    clearInterval(keyWatch);
     endSuccessorWatch();
     dropSpare();
     await fsm.stop();

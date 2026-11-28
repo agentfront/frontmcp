@@ -97,6 +97,34 @@ posixOnly('ensureSharedServer', () => {
     expect(openLock).not.toHaveBeenCalled();
   });
 
+  describe('when it may not start a server', () => {
+    it('waits for one to prove itself, and takes no start lock', async () => {
+      const secret = createSharedServerSecret();
+      const openLock = jest.fn();
+      const attaching = ensureSharedServer(options({ mayStart: false, openLock }));
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      await startRecordedServer(secret, 4321);
+
+      expect(await attaching).toMatchObject({ server: { pid: 4321 } });
+      expect(openLock).not.toHaveBeenCalled();
+    });
+
+    it('says why once its budget is spent, and neither replaces an older server nor starts one', async () => {
+      const openLock = jest.fn();
+      expect(await ensureSharedServer(options({ mayStart: false, openLock, budgetMs: 200 }))).toEqual({
+        embedded: 'no server proved its identity within 200 ms, and the session may not start one',
+      });
+
+      const secret = createSharedServerSecret();
+      const older = await startRecordedServer(secret, 99, { version: '0.9.0' });
+      expect(await ensureSharedServer(options({ mayStart: false, openLock, budgetMs: 200 }))).toEqual({
+        embedded: "the shared server runs version 0.9.0, older than this session's 1.0.0, and replaceOlder is off",
+      });
+      expect(older.requests.map(({ path: at }) => at)).not.toContain(SHARED_DRAIN_PATH);
+      expect(openLock).not.toHaveBeenCalled();
+    });
+  });
+
   it('starts one server when several launchers find none', async () => {
     const secret = createSharedServerSecret();
     let spawned = 0;

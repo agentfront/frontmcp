@@ -1,3 +1,5 @@
+import * as path from 'node:path';
+
 import { deriveSharedServerKeys } from '@frontmcp/auth';
 import { getSpawnFn, randomBytes, type BridgeLogger } from '@frontmcp/utils';
 
@@ -58,6 +60,8 @@ export interface EnsureSharedServerOptions {
   replaceOlder: boolean;
   /** How long it may take, including starting or replacing a server. */
   budgetMs: number;
+  /** Whether it may start, or replace, a server; without it, it only attaches to one that runs. @default true */
+  mayStart?: boolean;
   openLock(): Promise<StartLockHandle>;
   spawnServer(startLockHolder: string): SpawnedServer;
   pollMs?: number;
@@ -127,7 +131,7 @@ function skewOf(found: FoundServer, options: EnsureSharedServerOptions): { embed
  * the start lock's holder starts one; an older one it first asks to drain, and waits for it to go.
  */
 export async function ensureSharedServer(options: EnsureSharedServerOptions): Promise<SharedServerAttachment> {
-  const { key, budgetMs, pollMs = POLL_MS } = options;
+  const { key, budgetMs, pollMs = POLL_MS, mayStart = true } = options;
   const deadline = Date.now() + budgetMs;
   const remaining = (): number => Math.max(deadline - Date.now(), 1);
   const refused = new Set<string>();
@@ -138,9 +142,16 @@ export async function ensureSharedServer(options: EnsureSharedServerOptions): Pr
   try {
     for (;;) {
       const found = await findRunning(options, refused, remaining());
-      const skew = found && skewOf(found, options);
+      const skew = found && skewOf(found, { ...options, replaceOlder: options.replaceOlder && mayStart });
       if (found && skew === 'attach') return { server: found.server };
       if (typeof skew === 'object') return skew;
+      if (!mayStart) {
+        if (Date.now() >= deadline) {
+          return { embedded: `no server proved its identity within ${budgetMs} ms, and the session may not start one` };
+        }
+        await new Promise((resolve) => setTimeout(resolve, Math.min(pollMs, remaining())));
+        continue;
+      }
       handle ??= await options.openLock();
       holding = holding ? await handle.lock.renew() : await handle.lock.acquire();
       if (holding && found) {
@@ -183,11 +194,12 @@ async function endpointHeld(
   return outcome === 'exiting';
 }
 
-/** Run this process's entry again, detached, as the key's server: it outlives the session that started it. */
-export function spawnSharedServer(key: string, startLockHolder: string): SpawnedServer {
+/** Run this process's entry again detached as the key's server, or `entry`, from its own folder, when named. */
+export function spawnSharedServer(key: string, startLockHolder: string, entry?: string): SpawnedServer {
   const spawned: { exitReason: string | undefined } = { exitReason: undefined };
-  const child = getSpawnFn()(process.execPath, [...process.execArgv, ...process.argv.slice(1)], {
-    cwd: process.cwd(),
+  const args = entry ? [...process.execArgv, entry] : [...process.execArgv, ...process.argv.slice(1)];
+  const child = getSpawnFn()(process.execPath, args, {
+    cwd: entry ? path.dirname(entry) : process.cwd(),
     detached: true,
     stdio: 'ignore',
     windowsHide: true,
