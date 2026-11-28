@@ -138,6 +138,8 @@ authorities: { attributes: { match: { 'user.principal': 'person' } } }
 // a machine's token: attributes.match: 'user.principal' expected 'person' but got 'machine'
 ```
 
+Detection alone does not mark every machine: a service account whose `sub` differs from its client id (a Keycloak service account, say) reads as a `'person'`, so `match: { 'user.principal': 'person' }` admits it. A people-only rule needs the auth options' `principal` resolver, or provider claims that mark every machine token (`gty`, `idtyp: 'app'`, or a `sub` equal to its client id).
+
 ### Advanced Conditions
 
 The `conditions` array supports operators. All conditions must pass (AND semantics).

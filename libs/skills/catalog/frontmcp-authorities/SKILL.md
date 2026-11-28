@@ -115,7 +115,7 @@ If no `claimsMapping` is provided, the engine falls back to (in order):
 
 `tenantId` has no fallback: with the mapping, a non-empty string claim becomes `user.tenantId`, which rules match on (`match: { 'user.tenantId': 'acme' }`) and guards read as `ctx.user.tenantId`; without it, `user.tenantId` is `undefined`.
 
-`user.principal` is `'person'`, `'machine'` (a client acting for itself, such as a client-credentials token) or `'anonymous'`, as the request's auth decided it (the auth options' `principal` resolver, where one is set; see `frontmcp-config` → `configure-auth-modes`). Since 1.14, a rule for people only is `match: { 'user.principal': 'person' }`.
+`user.principal` is `'person'`, `'machine'` (a client acting for itself, such as a client-credentials token) or `'anonymous'`, as the request's auth decided it (the auth options' `principal` resolver, where one is set; see `frontmcp-config` → `configure-auth-modes`). Since 1.14, a rule for people only is `match: { 'user.principal': 'person' }`. Detection alone does not mark every machine: a service account whose `sub` differs from its client id (a Keycloak service account, say) reads as a `'person'`, so `match: { 'user.principal': 'person' }` admits it. A people-only rule needs the auth options' `principal` resolver, or provider claims that mark every machine token (`gty`, `idtyp: 'app'`, or a `sub` equal to its client id).
 
 The OAuth-scopes-as-roles fallback means a token with no `roles` claim but with `scope: "admin read"` will be treated as having `roles: ['admin', 'read']`. Configure explicit `claimsMapping.roles` to opt out. For non-standard token shapes, use `claimsResolver` instead (see Common Patterns below).
 
@@ -136,6 +136,7 @@ authorities: {
         conditions: [{ path: 'user.sub', op: 'exists', value: true }],
       },
     },
+    // admits a machine the principal detection misses: set auth.principal (see above)
     people: {
       attributes: { match: { 'user.principal': 'person' } },
     },
