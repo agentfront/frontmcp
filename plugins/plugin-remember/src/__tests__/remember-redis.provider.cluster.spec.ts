@@ -5,6 +5,21 @@
 import 'reflect-metadata';
 
 import RememberRedisProvider from '../providers/remember-redis.provider';
+import RememberPlugin from '../remember.plugin';
+
+const mockClusterInstance = { on: jest.fn(), once: jest.fn() };
+const MockCluster = jest.fn((..._args: unknown[]) => mockClusterInstance);
+
+jest.mock('ioredis', () => {
+  class Redis {
+    static Cluster = class {
+      constructor(...args: unknown[]) {
+        return MockCluster(...args);
+      }
+    };
+  }
+  return { __esModule: true, default: Redis };
+});
 
 function master(keys: string[]) {
   return { scan: jest.fn().mockResolvedValue(['0', keys]) };
@@ -90,5 +105,30 @@ describe('RememberRedisProvider on a cluster', () => {
 
     await provider.close();
     expect(client.quit).not.toHaveBeenCalled();
+  });
+});
+
+describe('RememberPlugin global-store on a cluster named by rediss:// seeds', () => {
+  it('keeps the TLS the seeds ask for when the server redis says tls: false', () => {
+    const provider = (RememberPlugin.dynamicProviders({ type: 'global-store' }) as unknown[]).find(
+      (entry) => (entry as { name?: string }).name === 'remember:store:global',
+    ) as { useFactory: (config: unknown) => unknown };
+    provider.useFactory({
+      redis: {
+        provider: 'redis',
+        host: 'seed.example',
+        port: 6379,
+        db: 0,
+        tls: false,
+        keyPrefix: 'mcp:',
+        defaultTtlMs: 3_600_000,
+        cluster: { nodes: ['rediss://:secret@seed.example:6379'] },
+      },
+    });
+
+    expect(MockCluster).toHaveBeenCalledWith(
+      [{ host: 'seed.example', port: 6379 }],
+      expect.objectContaining({ redisOptions: expect.objectContaining({ password: 'secret', tls: {} }) }),
+    );
   });
 });

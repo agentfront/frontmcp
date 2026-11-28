@@ -1,6 +1,8 @@
 /**
  * The `redis` option's cluster and client forms (#1503), and how every feature reads them.
  */
+import { REQUIRED_REDIS_CLIENT_METHODS } from '@frontmcp/utils';
+
 import {
   isRedisConnection,
   isRedisConnectionOptions,
@@ -83,6 +85,11 @@ describe('redis: cluster', () => {
     expect(parse({ cluster: { nodes: [{ host: 'seed' }] } })).toMatchObject({ host: 'seed', port: 6379 });
   });
 
+  it('says TLS when the seeds are rediss://', () => {
+    expect(parse({ cluster: { nodes: ['rediss://:pw@seed:6379'] } })).toMatchObject({ tls: true });
+    expect(parse({ cluster: { nodes: ['seed:6379'] } })).toMatchObject({ tls: false });
+  });
+
   it('refuses a database other than 0', () => {
     expect(messagesOf({ host: 'cfg', db: 2, cluster: true })).toEqual([
       'redis.db is 2, but a Redis Cluster has database 0 only',
@@ -117,8 +124,14 @@ describe('redis: client', () => {
   it('takes a node-redis client and a FrontMcpRedisClient', () => {
     const nodeRedis = { isOpen: false, sendCommand() {}, connect() {}, duplicate() {} };
     expect(parse({ client: nodeRedis })).toMatchObject({ client: nodeRedis });
-    const custom = { get() {}, set() {}, del() {} };
+    const custom = Object.fromEntries(REQUIRED_REDIS_CLIENT_METHODS.map((name) => [name, () => undefined]));
     expect(parse({ provider: 'redis', client: custom })).toMatchObject({ client: custom });
+  });
+
+  it('refuses a client of its own that lacks required methods, naming them', () => {
+    expect(messagesOf({ client: { get() {}, set() {}, del() {} } })).toEqual([
+      expect.stringContaining('redis.client is missing FrontMcpRedisClient methods: exists, expire'),
+    ]);
   });
 
   it('refuses connection fields beside a client', () => {

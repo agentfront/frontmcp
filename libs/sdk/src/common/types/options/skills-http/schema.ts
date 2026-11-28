@@ -2,7 +2,12 @@
 // Zod schema for skills HTTP configuration
 
 import { internalZ as z } from '@frontmcp/lazy-zod';
-import { isRedisClientInput, UNSUPPORTED_REDIS_CLIENT_MESSAGE, type RedisClientInput } from '@frontmcp/utils';
+import {
+  isRedisClientInput,
+  redisClientProblem,
+  UNSUPPORTED_REDIS_CLIENT_MESSAGE,
+  type RedisClientInput,
+} from '@frontmcp/utils';
 
 import type { SkillDecider, SkillDecisionOptions } from '../../../../skill/decision/skill-decision.types';
 import type { ExternalSkillProviderBase } from '../../../../skill/providers/external-skill.provider';
@@ -66,7 +71,7 @@ export const skillsConfigCacheOptionsSchema = z.object({
       /** A Redis client you made (ioredis, node-redis, or a FrontMcpRedisClient); never closed by FrontMCP. */
       client: z
         .custom<RedisClientInput>((value) => value === undefined || isRedisClientInput(value), {
-          error: UNSUPPORTED_REDIS_CLIENT_MESSAGE,
+          error: (issue) => redisClientProblem(issue.input) ?? UNSUPPORTED_REDIS_CLIENT_MESSAGE,
         })
         .optional(),
       url: z.string().optional(),

@@ -1,3 +1,5 @@
+import { REQUIRED_REDIS_CLIENT_METHODS } from '@frontmcp/utils';
+
 import { RedisEventStore } from '../redis.event-store';
 
 const constructed: Array<Record<string, unknown>> = [];
@@ -67,7 +69,10 @@ describe('the Redis connection of RedisEventStore', () => {
   });
 
   it("uses the app's own client without connecting or closing it (#1503)", async () => {
-    const client = { ...fakeClient(), get: jest.fn(), set: jest.fn(), del: jest.fn() };
+    const client = {
+      ...Object.fromEntries(REQUIRED_REDIS_CLIENT_METHODS.map((name) => [name, jest.fn()])),
+      ...fakeClient(),
+    };
     const store = new RedisEventStore({ redis: { client } });
 
     await store.storeEvent('stream-1', message);
