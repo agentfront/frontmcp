@@ -2,8 +2,9 @@
  * openDatabase
  *
  * Shared helper to open a SQLite database: with the driver set by `useSqliteDriver()`, or else with
- * better-sqlite3 (node:sqlite when it is not installed, or with `FRONTMCP_SQLITE_DRIVER=node:sqlite`),
- * which needs two things done for every file-backed store:
+ * better-sqlite3 when it is installed (an optional peer dependency since 1.14), and with Node's built-in
+ * node:sqlite when it is not or with `FRONTMCP_SQLITE_DRIVER=node:sqlite`, which needs two things done for every
+ * file-backed store:
  *
  * 1. **Parent-directory creation.** better-sqlite3 will NOT create missing
  *    parent directories — opening `~/.frontmcp/data/auth.sqlite` when
@@ -74,15 +75,37 @@ export function withBusyRetry<T>(operation: () => T, options: BusyRetryOptions =
   }
 }
 
-/** Whether `error` is better-sqlite3 itself missing, not a broken install of it. */
+/** Yarn PnP's codes for a package the requiring one can't see: a peer nobody provides, or one it doesn't declare. */
+const PNP_NOT_PROVIDED = new Set(['MISSING_PEER_DEPENDENCY', 'UNDECLARED_DEPENDENCY']);
+
+/** Whether `error` is better-sqlite3 itself missing (Node's quoted name, or Yarn PnP's fields), not a broken install of it. */
 function isBetterSqlite3Missing(error: unknown): boolean {
-  return (
-    (error as { code?: unknown } | null)?.code === 'MODULE_NOT_FOUND' &&
-    String((error as Error).message).includes("'better-sqlite3'")
+  const { code, message, pnpCode, data } = (error ?? {}) as {
+    code?: unknown;
+    message?: unknown;
+    pnpCode?: unknown;
+    data?: { dependencyName?: unknown } | null;
+  };
+  if (code !== 'MODULE_NOT_FOUND') return false;
+  if (typeof pnpCode === 'string' && PNP_NOT_PROVIDED.has(pnpCode) && data?.dependencyName === 'better-sqlite3') {
+    return true;
+  }
+  return String(message).includes("'better-sqlite3'");
+}
+
+/** Why better-sqlite3 had to be installed here, with how to install it, keeping the module error as the cause. */
+function betterSqlite3Required(storeName: string, reason: string, error: unknown): Error {
+  return new Error(
+    `${storeName}: ${reason}, but better-sqlite3 is not installed. It is an optional peer dependency of ` +
+      `@frontmcp/storage-sqlite: install it next to the package (npm install better-sqlite3). ${(error as Error).message}`,
+    { cause: error },
   );
 }
 
-/** better-sqlite3, or node:sqlite when `FRONTMCP_SQLITE_DRIVER` asks for it or better-sqlite3 is not installed. */
+/**
+ * better-sqlite3 when it is installed, else node:sqlite; `FRONTMCP_SQLITE_DRIVER` picks one of them. Since 1.14
+ * better-sqlite3 is an optional peer dependency, so node:sqlite is what an install without it runs on.
+ */
 function defaultDriver(storeName: string): SqliteDriver {
   const choice = getEnv(SQLITE_DRIVER_ENV);
   if (choice === 'node:sqlite') return openNodeSqlite;
@@ -93,7 +116,9 @@ function defaultDriver(storeName: string): SqliteDriver {
     const BetterSqlite3 = loadBetterSqlite3();
     return (databasePath) => new BetterSqlite3(databasePath);
   } catch (error: unknown) {
-    if (choice || !isBetterSqlite3Missing(error) || !hasNodeSqlite()) throw error;
+    if (!isBetterSqlite3Missing(error)) throw error;
+    if (choice) throw betterSqlite3Required(storeName, `${SQLITE_DRIVER_ENV}=better-sqlite3 asks for it`, error);
+    if (!hasNodeSqlite()) throw betterSqlite3Required(storeName, 'this runtime has no node:sqlite', error);
     return openNodeSqlite;
   }
 }
@@ -117,7 +142,7 @@ function ensureDatabaseDirectory(path: string, storeName: string): void {
 
 /**
  * Open (or create) the database at `path`: with the driver set by `useSqliteDriver()`, or else with
- * better-sqlite3 (node:sqlite when it is not installed, or with `FRONTMCP_SQLITE_DRIVER=node:sqlite`),
+ * better-sqlite3 when it is installed (node:sqlite when it is not, or with `FRONTMCP_SQLITE_DRIVER=node:sqlite`),
  * creating the parent directory if necessary; `nodeSqlite()` creates it too.
  *
  * @param path - Filesystem path to the `.sqlite` file, or `:memory:`.

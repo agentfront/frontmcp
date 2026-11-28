@@ -2905,11 +2905,11 @@ __metadata:
   dependencies:
     "@frontmcp/utils": "npm:1.13.2"
     "@types/better-sqlite3": "npm:^7.6.13"
-    better-sqlite3: "npm:^12.6.2"
     typescript: "npm:^5.9.3"
   peerDependencies:
     "@frontmcp/lazy-zod": 1.13.2
-  dependenciesMeta:
+    better-sqlite3: ^12.6.2
+  peerDependenciesMeta:
     better-sqlite3:
       optional: true
   languageName: unknown
@@ -9561,17 +9561,6 @@ __metadata:
     node-gyp: "npm:latest"
     prebuild-install: "npm:^7.1.1"
   checksum: 10c0/38c0958ea252ba61e948358a143146aa59c8fb381b286a3064b9756ab4e2f91dfc9261cc5bb12c1afcc79519628543cfb6d62bc5a566eab2b9822403b0aad955
-  languageName: node
-  linkType: hard
-
-"better-sqlite3@npm:^12.6.2":
-  version: 12.6.2
-  resolution: "better-sqlite3@npm:12.6.2"
-  dependencies:
-    bindings: "npm:^1.5.0"
-    node-gyp: "npm:latest"
-    prebuild-install: "npm:^7.1.1"
-  checksum: 10c0/a58fb3f7a7f5469ba0b8de0855aa67396ff34f951a6975746e4b21987f530be6a34427d1d4bd5958cf48c67ed7ba1df038ae163d2ee9d944237f6b8112f6640d
   languageName: node
   linkType: hard
 

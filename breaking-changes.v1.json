@@ -625,5 +625,16 @@
     "new": "new MockOAuthServer(factory, { autoApprove: true, testUser });\n// /oauth/authorize without code_challenge -> error=invalid_request; aud = the request's resource\n// keep 1.13's behaviour:\nnew MockOAuthServer(factory, { autoApprove: true, testUser, pkce: 'lenient', resourceIndicators: false });",
     "migration": "`MockOAuthServer` (from `@frontmcp/auth/testing` and `@frontmcp/testing`) uses `pkce: 'strict'` and `resourceIndicators: true` by default, so tests exercise what a real authorization server requires. An authorization request (or the manual sign-in form) without an S256 `code_challenge`, or with `plain`, is redirected back with `error=invalid_request`, a code needs a valid `code_verifier`, and the metadata lists `code_challenge_methods_supported: ['S256']`. A `resource` or `audience` on the authorization or token request becomes the access token's `aud`, and a token request naming a value the authorization didn't grant gets `invalid_target`. Up to 1.13 the mock accepted such a request and ignored `resource` and `audience` (1.13.2 warned once for each). Send S256 PKCE (`generatePkcePair()` from `@frontmcp/utils`), or opt out with `pkce: 'lenient'` and `resourceIndicators: false`. Neither default warns any more.",
     "codemod": "no"
+  },
+  {
+    "id": "BC-060",
+    "title": "1.14: better-sqlite3 is an optional peer of @frontmcp/storage-sqlite, and node:sqlite the default",
+    "package": "@frontmcp/storage-sqlite",
+    "category": "change",
+    "severity": "medium",
+    "old": "npm install @frontmcp/storage-sqlite # also builds better-sqlite3; the stores run on it",
+    "new": "npm install @frontmcp/storage-sqlite # no native build; the stores run on node:sqlite\nnpm install @frontmcp/storage-sqlite better-sqlite3 # the stores run on better-sqlite3",
+    "migration": "`better-sqlite3` moved from the `optionalDependencies` of `@frontmcp/storage-sqlite` to its `peerDependencies`, marked optional in `peerDependenciesMeta`. Installing the package no longer builds the native module, and the stores open their files with Node's built-in `node:sqlite` by default. An installed `better-sqlite3` is still selected, and `FRONTMCP_SQLITE_DRIVER` (`node:sqlite` or `better-sqlite3`) still chooses; with `better-sqlite3` asked for but missing, opening a store fails with an error that says to install it. Both libraries write the same file, so no data moves. To keep `better-sqlite3`, add it to your own dependencies; code that calls `better-sqlite3`-only methods (`pluck()`, `iterate()`, `backup()`) on `getDatabase()` or `openDatabase()` needs it. `frontmcp install` installs it next to an installed app when the project lists it in `dependencies` or `optionalDependencies` (as optional there), or the build lists it in `build.dependencies.nativeAddons`, so such an app keeps running on it; otherwise the installed app runs on `node:sqlite`.",
+    "codemod": "no"
   }
 ]

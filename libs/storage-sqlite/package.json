@@ -48,11 +48,14 @@
   "dependencies": {
     "@frontmcp/utils": "1.13.2"
   },
-  "optionalDependencies": {
+  "peerDependencies": {
+    "@frontmcp/lazy-zod": "1.13.2",
     "better-sqlite3": "^12.6.2"
   },
-  "peerDependencies": {
-    "@frontmcp/lazy-zod": "1.13.2"
+  "peerDependenciesMeta": {
+    "better-sqlite3": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

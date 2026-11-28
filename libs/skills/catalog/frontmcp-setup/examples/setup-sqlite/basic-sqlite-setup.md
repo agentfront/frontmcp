@@ -5,7 +5,7 @@ level: basic
 description: 'Configure a FrontMCP server with SQLite for local session storage with WAL mode enabled.'
 tags: [setup, sqlite, session, database, local]
 features:
-  - '`@frontmcp/storage-sqlite`, which brings `better-sqlite3` as an optional dependency and runs on `node:sqlite` without it'
+  - '`@frontmcp/storage-sqlite`, which runs on `node:sqlite`, or on `better-sqlite3` (an optional peer) when it is installed'
   - '`sqlite` config in `@FrontMcp` with `path` and `walMode`'
   - 'WAL mode creates three files (`.sqlite`, `.sqlite-wal`, `.sqlite-shm`)'
   - 'Tilde-prefixed paths for stable storage across working directories'
@@ -18,11 +18,12 @@ Configure a FrontMCP server with SQLite for local session storage with WAL mode 
 ## Code
 
 ```bash
-# Install the package; better-sqlite3 comes as an optional dependency
+# Install the package; the stores run on Node's built-in node:sqlite
 yarn add @frontmcp/storage-sqlite
 
-# Verify the native module loads (without it, the stores use Node's node:sqlite)
-node -e "require('better-sqlite3')"
+# Optional: add better-sqlite3 (a native module) to run them on it instead, and verify it loads
+yarn add better-sqlite3
+node -e "new (require('better-sqlite3'))(':memory:').close()"
 ```
 
 ```typescript
@@ -65,7 +66,7 @@ sqlite3 ~/.frontmcp/data/sessions.sqlite "SELECT key FROM kv LIMIT 5;"
 
 ## What This Demonstrates
 
-- `@frontmcp/storage-sqlite`, which brings `better-sqlite3` as an optional dependency and runs on `node:sqlite` without it
+- `@frontmcp/storage-sqlite`, which runs on `node:sqlite`, or on `better-sqlite3` (an optional peer) when it is installed
 - `sqlite` config in `@FrontMcp` with `path` and `walMode`
 - WAL mode creates three files (`.sqlite`, `.sqlite-wal`, `.sqlite-shm`)
 - Tilde-prefixed paths for stable storage across working directories

@@ -24,6 +24,17 @@ function missing(module: string): Error {
   });
 }
 
+/** The error Yarn PnP throws when a package requires a peer that nobody provides, or one it doesn't declare. */
+function pnpNotProvided(dependencyName: string, pnpCode = 'MISSING_PEER_DEPENDENCY'): Error {
+  return Object.assign(
+    new Error(
+      `@frontmcp/storage-sqlite tried to access ${dependencyName} (a peer dependency) but it isn't provided by your ` +
+        'application; this makes the require call ambiguous and unsound.',
+    ),
+    { code: 'MODULE_NOT_FOUND', pnpCode, data: { request: dependencyName, dependencyName } },
+  );
+}
+
 function withoutBetterSqlite3(): void {
   jest.mocked(loadBetterSqlite3).mockImplementation(() => {
     throw missing('better-sqlite3');
@@ -73,6 +84,40 @@ describe('the default SQLite driver', () => {
     expect(fs.readFileSync(dbPath).subarray(0, 15).toString()).toBe('SQLite format 3');
   });
 
+  it.each(['MISSING_PEER_DEPENDENCY', 'UNDECLARED_DEPENDENCY'])(
+    'is node:sqlite when Yarn PnP reports better-sqlite3 not provided (%s), whose message does not quote it',
+    (pnpCode) => {
+      jest.mocked(loadBetterSqlite3).mockImplementation(() => {
+        throw pnpNotProvided('better-sqlite3', pnpCode);
+      });
+
+      const db = openDatabase(dbPath, 'TestStore');
+
+      expect(db).not.toBeInstanceOf(BetterSqlite3);
+      db.close();
+    },
+  );
+
+  it('says how to install better-sqlite3 when Yarn PnP reports it missing and FRONTMCP_SQLITE_DRIVER asks for it', () => {
+    process.env['FRONTMCP_SQLITE_DRIVER'] = 'better-sqlite3';
+    jest.mocked(loadBetterSqlite3).mockImplementation(() => {
+      throw pnpNotProvided('better-sqlite3');
+    });
+
+    expect(() => openDatabase(dbPath, 'TestStore')).toThrow(
+      'TestStore: FRONTMCP_SQLITE_DRIVER=better-sqlite3 asks for it, but better-sqlite3 is not installed.',
+    );
+  });
+
+  it('reports a package better-sqlite3 needs that Yarn PnP does not provide, instead of switching to node:sqlite', () => {
+    const missingBindings = pnpNotProvided('bindings', 'UNDECLARED_DEPENDENCY');
+    jest.mocked(loadBetterSqlite3).mockImplementation(() => {
+      throw missingBindings;
+    });
+
+    expect(() => openDatabase(dbPath, 'TestStore')).toThrow(missingBindings);
+  });
+
   it('reports a broken better-sqlite3 install instead of switching to node:sqlite', () => {
     jest.mocked(loadBetterSqlite3).mockImplementation(() => {
       throw missing('bindings');
@@ -81,11 +126,15 @@ describe('the default SQLite driver', () => {
     expect(() => openDatabase(dbPath, 'TestStore')).toThrow("Cannot find module 'bindings'");
   });
 
-  it('reports the missing better-sqlite3 on a runtime without node:sqlite', () => {
+  it('reports the missing better-sqlite3 on a runtime without node:sqlite, and how to install it', () => {
     withoutBetterSqlite3();
     jest.spyOn(process, 'getBuiltinModule').mockReturnValue(undefined as never);
 
-    expect(() => openDatabase(dbPath, 'TestStore')).toThrow("Cannot find module 'better-sqlite3'");
+    expect(() => openDatabase(dbPath, 'TestStore')).toThrow(
+      'TestStore: this runtime has no node:sqlite, but better-sqlite3 is not installed. It is an optional peer ' +
+        'dependency of @frontmcp/storage-sqlite: install it next to the package (npm install better-sqlite3). ' +
+        "Cannot find module 'better-sqlite3'",
+    );
   });
 
   it('is node:sqlite with FRONTMCP_SQLITE_DRIVER=node:sqlite, without loading better-sqlite3', () => {
@@ -100,11 +149,33 @@ describe('the default SQLite driver', () => {
     store.close();
   });
 
-  it('does not fall back with FRONTMCP_SQLITE_DRIVER=better-sqlite3', () => {
+  it('does not fall back with FRONTMCP_SQLITE_DRIVER=better-sqlite3, and says how to install it (#1512)', () => {
     process.env['FRONTMCP_SQLITE_DRIVER'] = 'better-sqlite3';
     withoutBetterSqlite3();
 
-    expect(() => openDatabase(dbPath, 'TestStore')).toThrow("Cannot find module 'better-sqlite3'");
+    let thrown: unknown;
+    try {
+      openDatabase(dbPath, 'TestStore');
+    } catch (error: unknown) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(Error);
+    expect((thrown as Error).message).toBe(
+      'TestStore: FRONTMCP_SQLITE_DRIVER=better-sqlite3 asks for it, but better-sqlite3 is not installed. It is an ' +
+        'optional peer dependency of @frontmcp/storage-sqlite: install it next to the package ' +
+        "(npm install better-sqlite3). Cannot find module 'better-sqlite3'\nRequire stack:\n- /app/server.js",
+    );
+    expect((thrown as Error).cause).toMatchObject({ code: 'MODULE_NOT_FOUND' });
+  });
+
+  it('is better-sqlite3 with FRONTMCP_SQLITE_DRIVER=better-sqlite3 when it is installed', () => {
+    process.env['FRONTMCP_SQLITE_DRIVER'] = 'better-sqlite3';
+
+    const db = openDatabase(dbPath, 'TestStore');
+
+    expect(db).toBeInstanceOf(BetterSqlite3);
+    db.close();
   });
 
   it('refuses another FRONTMCP_SQLITE_DRIVER value, naming the ones it takes', () => {

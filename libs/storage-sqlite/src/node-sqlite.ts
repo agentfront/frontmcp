@@ -88,8 +88,8 @@ export function isBuiltInNodeSqlite(driver: SqliteDriver): boolean {
 
 /**
  * A driver that opens every database with Node's built-in `node:sqlite` instead of better-sqlite3, creating the
- * folder as better-sqlite3's does: `useSqliteDriver(nodeSqlite())`. Without better-sqlite3 installed, or with
- * `FRONTMCP_SQLITE_DRIVER=node:sqlite`, the stores use it without one being set.
+ * folder as better-sqlite3's does: `useSqliteDriver(nodeSqlite())`. Without better-sqlite3 installed (an optional
+ * peer dependency since 1.14), or with `FRONTMCP_SQLITE_DRIVER=node:sqlite`, the stores use it without one being set.
  */
 export function nodeSqlite(): SqliteDriver {
   return openNodeSqlite;

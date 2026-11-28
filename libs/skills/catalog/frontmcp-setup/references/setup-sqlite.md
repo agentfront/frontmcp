@@ -34,9 +34,15 @@ description: Configure SQLite for local deployments, shared by the processes on 
 yarn add @frontmcp/storage-sqlite
 ```
 
-`@frontmcp/storage-sqlite` installs `better-sqlite3` as an optional dependency: a native module that downloads or compiles its binary during installation. When it can't be built, the install goes on without it, and the stores use Node's built-in `node:sqlite` (see [The SQLite library](#the-sqlite-library)). Up to 1.13.1 it was a regular dependency, and a failed build failed the install. Add `@types/better-sqlite3` to `devDependencies` only if your code calls `better-sqlite3` itself.
+The stores run on Node's built-in `node:sqlite` (Node 24), so the install builds no native module. `better-sqlite3` is an optional peer dependency of `@frontmcp/storage-sqlite`: add it to run the stores on it instead (see [The SQLite library](#the-sqlite-library)):
 
-If you want `better-sqlite3` and its build fails:
+```bash
+yarn add @frontmcp/storage-sqlite better-sqlite3
+```
+
+It is a native module that downloads or compiles its binary during installation. Up to 1.13 it came with `@frontmcp/storage-sqlite` (an optional dependency in 1.13.2, a regular one before), so every install built it; see [Upgrading to 1.14](#upgrading-to-114). Add `@types/better-sqlite3` to `devDependencies` only if your code calls `better-sqlite3` itself.
+
+If you add `better-sqlite3` and its build fails:
 
 - **macOS**: Install Xcode Command Line Tools: `xcode-select --install`
 - **Linux (Debian/Ubuntu)**: `sudo apt-get install build-essential python3`
@@ -49,7 +55,7 @@ Verify the native module opens a database, if you want it (loading the package a
 node -e "new (require('better-sqlite3'))(':memory:').close()"
 ```
 
-No output means success. `Cannot find module 'better-sqlite3'` means it is not installed, and the stores use `node:sqlite`. Any other error means `better-sqlite3` is installed but its native binary is missing or broken (built for another Node version, for example): the stores do not fall back then, and opening the database fails. Repair the install (`npm rebuild better-sqlite3`), or set `FRONTMCP_SQLITE_DRIVER=node:sqlite`, which opens every file with `node:sqlite` without loading `better-sqlite3`.
+No output means success. `Cannot find module 'better-sqlite3'` means it is not installed, and the stores use `node:sqlite`, the default. Any other error means `better-sqlite3` is installed but its native binary is missing or broken (built for another Node version, for example): the stores do not fall back then, and opening the database fails. Repair the install (`npm rebuild better-sqlite3`), or set `FRONTMCP_SQLITE_DRIVER=node:sqlite`, which opens every file with `node:sqlite` without loading `better-sqlite3`.
 
 ## Step 2 -- Configure the FrontMCP Server
 
@@ -435,9 +441,9 @@ sqlite3 ~/.frontmcp/data/sessions.sqlite "SELECT key FROM kv LIMIT 5;"
 
 ## The SQLite library
 
-The stores open their files with `better-sqlite3` when it is installed, and with Node's built-in `node:sqlite` when it is not. Both write the same SQLite file, so nothing in it is lost when the library changes. Every SQLite store uses the library this picks: the sessions, tasks, elicitations and events of `sqlite`, `jobs.store.sqlite`, the duty and worker leases in `~/.frontmcp/duties.sqlite`, and the start lock of `runShared()`.
+The stores open their files with Node's built-in `node:sqlite`, unless `better-sqlite3` is installed: then they open them with it. Both write the same SQLite file, so nothing in it is lost when the library changes. Every SQLite store uses the library this picks: the sessions, tasks, elicitations and events of `sqlite`, `jobs.store.sqlite`, the duty and worker leases in `~/.frontmcp/duties.sqlite`, and the start lock of `runShared()`.
 
-- **`FRONTMCP_SQLITE_DRIVER=node:sqlite`** opens every file with `node:sqlite`, even with `better-sqlite3` installed; job and task workers inherit it. `FRONTMCP_SQLITE_DRIVER=better-sqlite3` requires `better-sqlite3`, with no fallback. Any other value fails with an error naming both.
+- **`FRONTMCP_SQLITE_DRIVER=node:sqlite`** opens every file with `node:sqlite`, even with `better-sqlite3` installed; job and task workers inherit it. `FRONTMCP_SQLITE_DRIVER=better-sqlite3` requires `better-sqlite3`, with no fallback: without it, opening a store fails with an error that says to install it. Any other value fails with an error naming both.
 - **`useSqliteDriver(nodeSqlite())`** from `@frontmcp/storage-sqlite`, before the server is created, does the same in code. It creates missing folders as `better-sqlite3` does.
 
 ```typescript
@@ -446,7 +452,7 @@ import { nodeSqlite, useSqliteDriver } from '@frontmcp/storage-sqlite';
 useSqliteDriver(nodeSqlite());
 ```
 
-- **A CLI published to npm** runs where `better-sqlite3` can't be built: the install skips it (or `npm install --omit=optional` does), and the stores use `node:sqlite`.
+- **A CLI published to npm** installs and runs without a native build: it depends on `@frontmcp/storage-sqlite` alone, and its stores use `node:sqlite`. `frontmcp install` installs `better-sqlite3` next to an app's bundle when the project lists it in `dependencies` (or `optionalDependencies`, as optional) or the build lists it in `build.dependencies.nativeAddons`; otherwise the installed app runs on `node:sqlite`.
 - **Processes on different libraries share a file safely**, a server on `better-sqlite3` and a CLI on `node:sqlite` wait for each other's locks. In one process, open a file with one library only: two SQLite libraries in one process don't see each other's locks.
 - **On `node:sqlite`, a store's `getDatabase()` and `openDatabase()` return a database with the members of `SqliteDatabase` only**, not `better-sqlite3`'s `Database`. Its errors carry `code: 'ERR_SQLITE_ERROR'` and an `errcode` (5 for `SQLITE_BUSY`); `isBusyError()` reads both forms.
 
@@ -489,7 +495,7 @@ export class HelpDeskServer extends DurableObject {
 - **Which stores.** Every store that takes a `sqlite` option: sessions, `auth.tokenStorage`, `events.store`, tasks, elicitation, and your own `createStorage({ type: 'sqlite' })`. On an edge runtime the task and elicitation stores open `sqlite` only when a driver is set, and refuse it otherwise. Persistent questions (`elicitation.persistent`) need their own `persistent.storage` of type `sqlite` there: one that would inherit the server's top-level `sqlite` is still refused.
 - **`frontmcp build --target cloudflare`** generates a stateless Worker without a Durable Object, so it sets none of this up: write the Worker entry and the Durable Object class yourself.
 
-`useSqliteDriver()` takes any function from a path to a database with the part of `better-sqlite3`'s `Database` the stores call (the `SqliteDriver` and `SqliteDatabase` types), and `useSqliteDriver(undefined)` goes back to the default: `better-sqlite3`, or `node:sqlite` without it.
+`useSqliteDriver()` takes any function from a path to a database with the part of `better-sqlite3`'s `Database` the stores call (the `SqliteDriver` and `SqliteDatabase` types), and `useSqliteDriver(undefined)` goes back to the default: `node:sqlite`, or `better-sqlite3` when it is installed.
 
 ## Migrating from SQLite to Redis
 
@@ -533,7 +539,7 @@ The change in `src/main.ts`:
 | Database path            | `path: '~/.frontmcp/data/sessions.sqlite'`         | `path: './sessions.sqlite'`                | Tilde-prefixed or absolute paths are stable across working directories; relative paths break when CWD changes                          |
 | Encryption secret source | `secret: process.env['SQLITE_ENCRYPTION_SECRET']!` | `secret: 'hardcoded-secret-value'`         | Secrets must come from environment variables, never committed to source code                                                           |
 | WAL mode default         | `walMode: true` (or omit, defaults to `true`)      | `walMode: false` without a specific reason | WAL provides better read concurrency with no downside on local filesystems                                                             |
-| Package installation     | `yarn add @frontmcp/storage-sqlite`                | `yarn add better-sqlite3` alone            | The storage package holds the FrontMCP stores; it brings `better-sqlite3` as an optional dependency, and uses `node:sqlite` without it |
+| Package installation     | `yarn add @frontmcp/storage-sqlite`                | `yarn add better-sqlite3` alone            | The storage package holds the FrontMCP stores and runs them on `node:sqlite`; `better-sqlite3` is an optional peer you add next to it |
 | TTL cleanup interval     | `ttlCleanupIntervalMs: 60000` (default)            | `ttlCleanupIntervalMs: 500`                | Overly aggressive cleanup wastes CPU; the default 60s is appropriate for most workloads                                                |
 
 ## Verification Checklist
@@ -541,7 +547,7 @@ The change in `src/main.ts`:
 ### Dependencies
 
 - [ ] `@frontmcp/storage-sqlite` is in `dependencies`
-- [ ] Either `node -e "new (require('better-sqlite3'))(':memory:').close()"` runs without errors, or `better-sqlite3` is not installed (or `FRONTMCP_SQLITE_DRIVER=node:sqlite` is set) and the server runs on `node:sqlite` (Node 24)
+- [ ] Either `better-sqlite3` is not installed (or `FRONTMCP_SQLITE_DRIVER=node:sqlite` is set) and the server runs on `node:sqlite` (Node 24), or it is installed and `node -e "new (require('better-sqlite3'))(':memory:').close()"` runs without errors
 
 ### Configuration
 
@@ -586,6 +592,7 @@ The change in `src/main.ts`:
 
 ## Upgrading to 1.14
 
+- **`better-sqlite3` is an optional peer dependency** of `@frontmcp/storage-sqlite`, no longer an optional dependency, so installing the package builds no native module, and the stores run on `node:sqlite` by default. Up to 1.13 every install tried to build `better-sqlite3` and the stores used it. To keep it, add it to your own dependencies (`yarn add better-sqlite3`): an installed `better-sqlite3` is selected, as before, and `FRONTMCP_SQLITE_DRIVER` still picks either. Both libraries write the same file, so nothing moves. A store opened with `node:sqlite` returns a database with the members of `SqliteDatabase` only from `getDatabase()` and `openDatabase()`, so code that calls `better-sqlite3`-only methods there (`pluck()`, `iterate()`, `backup()`) needs `better-sqlite3` installed. `frontmcp install` installs `better-sqlite3` next to an installed app when the project lists it in `dependencies` or `optionalDependencies`, or the build lists it in `build.dependencies.nativeAddons`, so such an app keeps running on it; up to 1.13 it came with `@frontmcp/storage-sqlite`.
 - `auth.tokenStorage: { sqlite }` names the rows of authorization codes, pending authorizations and refresh tokens by a keyed hash of the value (`oauth:refresh:<HMAC-SHA256(k, token)>`), with `k` derived from `encryption.secret`, else `JWT_SECRET`. Up to 1.13 the rows were named by the code or token itself. Rows written before are still read, move under their new names when used, and the rest expire on their own TTL (at most 30 days, for a refresh token), so nobody is signed out; see `configure-auth` for the details.
 
 ## Reference
